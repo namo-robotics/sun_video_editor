@@ -4,6 +4,8 @@ A native Sun application for converting, compressing, and trimming local videos,
 built on [sun_ui](https://github.com/namo-robotics/sun_ui) and
 [sun_gobject](https://github.com/namo-robotics/sun_gobject).
 
+![Sun Video Editor showing video preview, trim controls, and export settings](assets/sun_video_editor.png)
+
 ## Development environment
 
 Open this repository in its VS Code dev container. The Ubuntu 26.04 image includes
