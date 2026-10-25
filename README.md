@@ -210,14 +210,14 @@ release. It builds GTK bindings natively, runs media and native acceptance tests
 and tests installation through Homebrew before publishing a commit-specific archive
 to the `dev` release. Intel Macs are not covered by this workflow.
 
-Once a tested formula has been published to the tap:
+Install the tested release on Apple Silicon with macOS 26 (Tahoe) or newer:
 
 ```sh
 brew install namo-robotics/sun/sun-video-editor
 sun_video_editor
 ```
 
-This is a command-line-launched GTK application, with Homebrew-managed GTK, FFmpeg
+This is a command-line-launched GTK application, with Homebrew-managed media-enabled `sun-gtk4`, FFmpeg
 8+, GStreamer, and GNU coreutils. The binary is ad-hoc signed; it is not a notarized,
 self-contained Finder `.app`.
 
@@ -230,3 +230,7 @@ Automatic tap updates require an Actions secret named `TAP_TOKEN` with Contents
 write access to `namo-robotics/homebrew-sun`, as used by the compiler repository.
 Without it, CI publishes the tested archive and formula to the GitHub dev release
 and reports that the tap update was skipped.
+
+The hosted macOS display cannot fit the resize acceptance test's large window,
+so that assertion remains covered by Linux CI. macOS CI runs the media tests,
+preview, trim, export, cancellation, and Homebrew installation checks.
