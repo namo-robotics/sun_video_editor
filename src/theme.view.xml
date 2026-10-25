@@ -1,0 +1,33 @@
+<Views module="editor_theme">
+  <Resources name="resources">
+    <Color name="panelBackground" value="0x152135" />
+    <Color name="mutedText" value="0x91a3bc" />
+    <Color name="titleText" value="0xf4f8ff" />
+    <Color name="accent" value="0x73e2cb" />
+    <Color name="fieldText" value="0xeaf2ff" />
+    <Color name="fieldBackground" value="0x23334b" />
+    <Color name="disabledText" value="0x6c8098" />
+    <Color name="primaryText" value="0x082b2a" />
+    <Color name="primaryDisabled" value="0x476b70" />
+    <Color name="secondaryBackground" value="0x293d55" />
+    <Color name="canvas" value="0x0b1220" />
+    <Color name="text" value="0xdce6f4" />
+    <Font name="bodyFont" value="Sans" />
+    <Spacing name="bodySize" value="14" />
+    <Spacing name="fieldPadding" value="8" />
+    <Style name="base"><Normal fontResource="bodyFont" fontSizeResource="bodySize" foregroundResource="text" borderWidth="0" radius="0" /></Style>
+    <Style name="control"><Normal borderWidth="0" radius="0" paddingResource="fieldPadding" /><Disabled foregroundResource="disabledText" /></Style>
+    <Style name="panel"><Normal backgroundResource="panelBackground" radius="0" padding="18" /></Style>
+    <Style name="muted"><Normal foregroundResource="mutedText" fontSize="12" /></Style>
+    <Style name="title"><Normal foregroundResource="titleText" fontSize="28" /></Style>
+    <Style name="section"><Normal foregroundResource="accent" fontSize="12" /></Style>
+    <Style name="field" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="fieldBackground" /><Disabled foregroundResource="disabledText" /></Style>
+    <Style name="primary" basedOn="control"><Normal foregroundResource="primaryText" backgroundResource="accent" fontSize="15" borderWidth="0" radius="0" padding="10" /><Disabled foregroundResource="primaryDisabled" /></Style>
+    <Style name="secondary" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="secondaryBackground" /><Disabled foregroundResource="disabledText" /></Style>
+    <Theme name="studio" basedOn="base">
+      <Default kind="TextInput" styleResource="field" />
+      <Default kind="Select" styleResource="field" />
+      <Default kind="Button" styleResource="secondary" />
+    </Theme>
+  </Resources>
+</Views>

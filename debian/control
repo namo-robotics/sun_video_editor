@@ -1,0 +1,16 @@
+Source: sun-video-editor
+Section: video
+Priority: optional
+Maintainer: David Brown <davidwbrwn@gmail.com>
+Build-Depends: debhelper-compat (= 13), sun, pkg-config, libgtk-4-dev, librsvg2-2, ffmpeg (>= 7:8.0), gstreamer1.0-libav, gstreamer1.0-plugins-good, xvfb, xauth, dbus-x11
+Standards-Version: 4.7.0
+Homepage: https://github.com/namo-robotics/sun_video_editor
+Rules-Requires-Root: no
+
+Package: sun-video-editor
+Architecture: amd64
+Depends: ${shlibs:Depends}, ${misc:Depends}, ffmpeg (>= 7:8.0), coreutils, gstreamer1.0-libav, gstreamer1.0-plugins-good
+Description: convert, compress, and trim local videos
+ Native GTK video converter with preview, trim controls, and configurable
+ export quality, resolution, container format, and audio retention.
+ Requires FFmpeg and ffprobe version 8 or newer.

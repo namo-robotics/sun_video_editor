@@ -1,0 +1,29 @@
+{
+  "git.autoRepositoryDetection": true,
+  "git.repositoryScanMaxDepth": 3,
+  "git.scanRepositories": [
+    "src/sun_ui",
+    "src/sun_gobject"
+  ],
+  "sun.sun_path": [
+    "/usr/lib/sun",
+    "build",
+    "src/sun_ui/build",
+    "src/sun_gobject/build"
+  ],
+  "files.watcherExclude": {
+    "**/.toolchain/**": true,
+    "**/build/**": true
+  },
+  "sun.lsp_path": "/usr/bin/sun-lsp",
+  "sun.compiler_path": "/usr/bin/sun",
+  "sun.sun_configs": [
+    "sun-config.json"
+  ],
+  "sun.syntaxOnly": false,
+  "[sun]": {
+    "editor.defaultFormatter": "namo-robotics.sun-language",
+    "editor.formatOnSave": true
+  },
+  "cmake.sourceDirectory": "${workspaceFolder}/src/sun_gobject/native"
+}

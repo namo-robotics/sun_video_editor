@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Sun Video Editor
+Comment=Convert, compress, and trim local videos
+Exec=sun_video_editor %f
+Icon=sun-video-editor
+Terminal=false
+Categories=AudioVideo;Video;
+MimeType=video/mp4;video/quicktime;video/webm;video/x-matroska;video/x-msvideo;
+StartupNotify=true

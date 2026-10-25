@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+# Use dependency bundles prepared before the package build.
+%:
+	dh $@
+
+override_dh_auto_build:
+	sun src/tools/build.sun -- build
+
+override_dh_auto_test:
+	sun src/tools/build.sun -- test
+
+override_dh_auto_install:
+	sun src/tools/package.sun -- stage debian/sun-video-editor
+
+override_dh_auto_clean:
+	# Dependency bundles are managed separately.

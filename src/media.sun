@@ -1,0 +1,351 @@
+using std;
+
+/** Describes local video inputs and constructs validated FFmpeg operations. */
+module video {
+
+  /** Accepts released FFmpeg and ffprobe version banners with the required major version. */
+  public function supported_tool_version(banner: const ref String) bool {
+    var a = make_heap_allocator();
+    var fields = banner.split_whitespace(a);
+    if (fields.size() < 3) {
+      return false;
+    }
+    if (not fields[0].equals_literal("ffmpeg") and not fields[0].equals_literal("ffprobe")) {
+      return false;
+    }
+    if (not fields[1].equals_literal("version")) {
+      return false;
+    }
+    var major = String("");
+    for (var i: i64 = 0; i < fields[2].length(); i += 1) {
+      var c = match fields[2].at(i) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => 0
+      };
+      if (c == 46 or c == 45) {
+        break;
+      }
+      if (c < 48 or c > 57) {
+        return false;
+      }
+      major.append_char(c);
+    }
+    return match major.parse_i64() {
+      Option.Some(value) => value >= 8,
+      Option.None => false
+    };
+  }
+
+  /** Stores the supported input stream and container properties. */
+  public class Media {
+    public var duration: f64 = 0.0;
+    public var size: i64 = 0;
+    public var width: i64 = 0;
+    public var height: i64 = 0;
+    public var codec: String = String("");
+    public var audio: String = String("none");
+    public var hdr: bool = false;
+  }
+
+  /** Owns editable export settings, independent of platform widgets and processes. */
+  public class Settings {
+    public var input: String = String("");
+    public var output: String = String("");
+    public var start: String = String("0");
+    public var end: String = String("");
+    public var format: i64 = 0;
+    public var quality: i64 = 2;
+    public var resolution: i64 = 0;
+    public var audio: bool = true;
+    public var overwrite: bool = false;
+  }
+
+  /** Returns the filename suffix for a validated format index. */
+  public function extension(format: i64) static_ptr<u8> {
+    if (format == 1) {
+      return ".mov";
+    }
+    if (format == 2) {
+      return ".webm";
+    }
+    if (format == 3) {
+      return ".mkv";
+    }
+    if (format == 4) {
+      return ".avi";
+    }
+    return ".mp4";
+  }
+
+  /** Updates a known video suffix, preserving the directory and filename stem. */
+  public function output_path(path: const ref String, format: i64) String {
+    var a = make_heap_allocator();
+    if (path.is_empty()) {
+      return String("");
+    }
+    var length = path.length();
+    for (var i: i64 = 0; i < 5; i += 1) {
+      if (path.ends_with(extension(i))) {
+        length -= i == 2 ? 5 : 4;
+        break;
+      }
+    }
+    var result = match path.substr(a, 0, length) {
+      AccessResult.Ok(value) => value,
+      AccessResult.OutOfBounds(_) => path.clone(a)
+    };
+    result.append(extension(format));
+    return result;
+  }
+
+  /** Describes the compatible codecs chosen automatically for the container. */
+  public function encoding_label(format: i64, audio: bool) String {
+    if (format == 2) {
+      return String(audio ? "VP9 video · Opus audio" : "VP9 video · no audio");
+    }
+    if (format == 4) {
+      return String(audio ? "MPEG-4 video · MP3 audio" : "MPEG-4 video · no audio");
+    }
+    return String(audio ? "H.264 video · AAC audio" : "H.264 video · no audio");
+  }
+
+  /** Reads an optional string field without retaining a reference into JSON storage. */
+  function field(object: ref Json, key: static_ptr<u8>) String {
+    var a = make_heap_allocator();
+    match object.get(key) {
+      JsonResult.Ok(value) => {
+        match value.as_string() {
+          JsonResult.Ok(text) => {
+            return text.clone(a);
+          },
+          JsonResult.Error(_) => {}
+        };
+      },
+      JsonResult.Error(_) => {}
+    };
+    return String("");
+  }
+
+  /** Reads an optional integer field from ffprobe output. */
+  function integer(object: ref Json, key: static_ptr<u8>) i64 {
+    match object.get(key) {
+      JsonResult.Ok(value) => {
+        match value.as_i64() {
+          JsonResult.Ok(number) => {
+            return number;
+          },
+          JsonResult.Error(_) => {}
+        };
+      },
+      JsonResult.Error(_) => {}
+    };
+    return 0;
+  }
+
+  /** Parses finite, nonnegative seconds or a colon-separated time with optional fractional seconds. */
+  public function seconds(text: const ref String) SystemResult<f64> {
+    var parts = text.split(make_heap_allocator(), b':');
+    if (parts.size() < 1 or parts.size() > 3 or text.is_empty()) {
+      return SystemResult.Error(Error(1, "Enter seconds or HH:MM:SS"));
+    }
+    var total: f64 = 0.0;
+    for (var i: i64 = 0; i < parts.size(); i += 1) {
+      var part = parts[i].clone(make_heap_allocator());
+      if (part.is_empty()) {
+        return SystemResult.Error(Error(1, "Time contains an empty field"));
+      }
+      for (var j: i64 = 0; j < part.length(); j += 1) {
+        var ch = match part.at(j) {
+          AccessResult.Ok(value) => value,
+          AccessResult.OutOfBounds(_) => b' '
+        };
+        if ((ch < b'0' or ch > b'9') and not (ch == b'.' and i == parts.size() - 1)) {
+          return SystemResult.Error(Error(1, "Time must contain nonnegative numbers"));
+        }
+      }
+      var number = match part.parse_f64() {
+        Option.Some(value) => value,
+        Option.None => -1.0
+      };
+      if (number < 0.0 or number != number or number > 1000000000.0 or (i > 0 and number >= 60.0)) {
+        return SystemResult.Error(Error(1, "Invalid time value"));
+      }
+      total = total * 60.0 + number;
+    }
+    return SystemResult.Ok(total);
+  }
+
+  /** Converts bounded probe JSON into a supported video description. */
+  function decode(document: ref Json) JsonResult<Media> {
+    var result = Media();
+    var format = try document.get("format");
+    var duration = field(format, "duration");
+    result.duration = match duration.parse_f64() {
+      Option.Some(value) => value,
+      Option.None => 0.0
+    };
+    var size = field(format, "size");
+    result.size = match size.parse_i64() {
+      Option.Some(value) => value,
+      Option.None => 0
+    };
+    var streams = try document.get("streams");
+    for (var i: i64 = 0; i < streams.len(); i += 1) {
+      var stream = try streams.at(i);
+      var kind = field(stream, "codec_type");
+      if (kind.equals_literal("video") and result.width == 0) {
+        result.width = integer(stream, "width");
+        result.height = integer(stream, "height");
+        result.codec = field(stream, "codec_name");
+        var transfer = field(stream, "color_transfer");
+        var primaries = field(stream, "color_primaries");
+        result.hdr = transfer.equals_literal("smpte2084") or transfer.equals_literal("arib-std-b67") or primaries.equals_literal("bt2020");
+      } else if (kind.equals_literal("audio") and result.audio.equals_literal("none")) {
+        result.audio = field(stream, "codec_name");
+      }
+    }
+    return JsonResult.Ok(result);
+  }
+
+  /** Rejects malformed or unbounded input metadata before it reaches export logic. */
+  public function parse_probe(text: const ref String) SystemResult<Media> {
+    var a = make_heap_allocator();
+    var document = match parse_json(a, text) {
+      JsonResult.Ok(value) => value,
+      JsonResult.Error(_) => {
+        return SystemResult.Error(Error(1, "ffprobe returned invalid metadata"));
+      }
+    };
+    var media = match decode(document) {
+      JsonResult.Ok(value) => value,
+      JsonResult.Error(_) => {
+        return SystemResult.Error(Error(1, "Input has no readable video metadata"));
+      }
+    };
+    if (media.width < 2 or media.height < 2 or media.duration <= 0.0 or media.duration != media.duration or media.duration > 1000000000.0) {
+      return SystemResult.Error(Error(1, "Input must contain a video with a finite duration"));
+    }
+    if (media.hdr) {
+      return SystemResult.Error(Error(1, "HDR / BT.2020 conversion is not supported yet; use an SDR source"));
+    }
+    return SystemResult.Ok(media);
+  }
+
+  /** Makes a local path absolute and resolves symlinks without interpreting shell syntax. */
+  public function absolute(path: ref String) SystemResult<String> {
+    if (path.is_empty() or path.contains("\0")) {
+      return SystemResult.Error(Error(1, "Choose a local file path"));
+    }
+    var command = std.process.Command(make_heap_allocator(), "realpath");
+    command.add_arg("-m");
+    command.add_arg("--");
+    command.add_arg(path);
+    return capture(command);
+  }
+
+  /** Builds a probe command restricted to the metadata used by this example. */
+  public function probe_command(input: const ref String) std.process.Command {
+    var command = std.process.Command(make_heap_allocator(), "ffprobe");
+    command.add_arg("-v");
+    command.add_arg("error");
+    command.add_arg("-show_entries");
+    command.add_arg("format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries");
+    command.add_arg("-of");
+    command.add_arg("json");
+    command.add_arg(input);
+    return command;
+  }
+
+  /** Validates trim bounds and all preset indices before starting an export. */
+  public function trim_length(settings: const ref Settings, media: const ref Media) SystemResult<f64> {
+    var start = try seconds(settings.start);
+    var end = settings.end.is_empty() ? media.duration : try seconds(settings.end);
+    if (start >= end or end > media.duration + 0.001) {
+      return SystemResult.Error(Error(1, "Trim must satisfy 0 <= start < end <= video duration"));
+    }
+    if (settings.format < 0 or settings.format > 4 or settings.quality < 0 or settings.quality > 4 or settings.resolution < 0 or settings.resolution > 4) {
+      return SystemResult.Error(Error(1, "Invalid export preset"));
+    }
+    return SystemResult.Ok(end - start);
+  }
+
+  /** Constructs a container-compatible export with frame-accurate transcoding and bounded CPU use. */
+  public function export_command(settings: const ref Settings, media: const ref Media, temporary: const ref String) SystemResult<std.process.Command> {
+    var duration = try trim_length(settings, media);
+    var start = try seconds(settings.start);
+    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
+    command.add_arg("-hide_banner");
+    command.add_arg("-loglevel");
+    command.add_arg("error");
+    command.add_arg("-nostdin");
+    command.add_arg("-nostats");
+    command.add_arg("-n");
+    command.add_arg("-progress");
+    command.add_arg("pipe:1");
+    command.add_arg("-ss");
+    command.add_arg(`${start}`);
+    command.add_arg("-i");
+    command.add_arg(settings.input);
+    command.add_arg("-t");
+    command.add_arg(`${duration}`);
+    command.add_arg("-map");
+    command.add_arg("0:v:0");
+    if (settings.audio) {
+      command.add_arg("-map");
+      command.add_arg("0:a:0?");
+    }
+    command.add_arg("-c:v");
+    command.add_arg(settings.format == 2 ? "libvpx-vp9" : (settings.format == 4 ? "mpeg4" : "libx264"));
+    command.add_arg("-threads");
+    command.add_arg("2");
+    command.add_arg("-filter_threads");
+    command.add_arg("1");
+    if (settings.format == 2) {
+      command.add_arg("-deadline");
+      command.add_arg("good");
+      command.add_arg("-cpu-used");
+      command.add_arg("3");
+      command.add_arg("-b:v");
+      command.add_arg("0");
+      command.add_arg("-crf");
+      command.add_arg(`${24 + settings.quality * 4}`);
+    } else if (settings.format == 4) {
+      command.add_arg("-q:v");
+      var quality = settings.quality == 0 ? 2 : (settings.quality == 1 ? 3 : (settings.quality == 2 ? 5 : (settings.quality == 3 ? 8 : 12)));
+      command.add_arg(`${quality}`);
+    } else {
+      command.add_arg("-preset");
+      command.add_arg("medium");
+      command.add_arg("-crf");
+      var quality = settings.quality == 0 ? 18 : (settings.quality == 1 ? 21 : (settings.quality == 2 ? 23 : (settings.quality == 3 ? 26 : 30)));
+      command.add_arg(`${quality}`);
+    }
+    command.add_arg("-pix_fmt");
+    command.add_arg("yuv420p");
+    command.add_arg("-vf");
+    if (settings.resolution == 0) {
+      command.add_arg("scale=w=-2:h=trunc(ih/2)*2:reset_sar=1");
+    } else {
+      var limit = settings.resolution == 1 ? 2160 : (settings.resolution == 2 ? 1080 : (settings.resolution == 3 ? 720 : 480));
+      command.add_arg(`scale=w='min(iw,${limit})':h='min(ih,${limit})':force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1`);
+    }
+    if (settings.audio) {
+      command.add_arg("-c:a");
+      command.add_arg(settings.format == 2 ? "libopus" : (settings.format == 4 ? "libmp3lame" : "aac"));
+      command.add_arg("-b:a");
+      command.add_arg("128k");
+    } else {
+      command.add_arg("-an");
+    }
+    command.add_arg("-map_metadata");
+    command.add_arg("-1");
+    if (settings.format == 0 or settings.format == 1) {
+      command.add_arg("-movflags");
+      command.add_arg("+faststart");
+    }
+    command.add_arg("-f");
+    command.add_arg(settings.format == 0 ? "mp4" : (settings.format == 1 ? "mov" : (settings.format == 2 ? "webm" : (settings.format == 3 ? "matroska" : "avi"))));
+    command.add_arg(temporary);
+    return SystemResult.Ok(command);
+  }
+}

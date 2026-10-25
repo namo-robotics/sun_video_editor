@@ -1,0 +1,85 @@
+<Views module="sun_video_editor">
+  <Include source="theme.view.xml" />
+  <View name="view" state="State" resources="{editor_theme.resources()}" themeResource="studio">
+    <Scroll expandX="true" expandY="true" backgroundResource="canvas">
+      <Column margin="24" spacing="20" expandY="true">
+        <Row spacing="16">
+          <Column spacing="4" expandX="true">
+            <Label text="Sun Video Editor" styleResource="title" horizontal="Start" />
+            <Label text="A lighter file. Just the part you want." styleResource="muted" horizontal="Start" />
+          </Column>
+          <Button text="Open video…" action="13" enabled="{state.job.mode == 0}" styleResource="primary" width="145" />
+        </Row>
+        <Grid spacing="24" expandX="true" expandY="true">
+          <Grid.Columns><Track kind="Weight" value="3" /><Track kind="Fixed" value="300" /></Grid.Columns>
+          <Grid.Rows><Track kind="Weight" value="1" /></Grid.Rows>
+          <Panel key="source" column="{0}" expandX="{true}">
+            <Panel.header>
+              <Section text="01   SOURCE &amp; PREVIEW" expandX="{false}" />
+            </Panel.header>
+            <Panel.body>
+              <Label text="{source_name(state)}" horizontal="Start" />
+              <Label text="{metadata(state)}" styleResource="muted" horizontal="Start" />
+              <Video text="{preview_source(state)}" duration="{duration_us(state)}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
+              <Row spacing="12">
+                <Section text="02   TRIM YOUR CLIP" expandX="{true}" />
+                <Button text="Reset trim" action="16" enabled="{state.job.ready and state.job.mode == 0}" />
+              </Row>
+              <Label text="Drag the mint handles to keep a section. Click the track to seek." styleResource="muted" horizontal="Start" />
+              <Grid spacing="8" expandX="true">
+                <Grid.Columns><Track kind="Weight" value="1" /><Track kind="Weight" value="1" /></Grid.Columns>
+                <Grid.Rows><Track kind="Auto" /><Track kind="Auto" /></Grid.Rows>
+                <Label text="Start time" horizontal="Start" styleResource="muted" />
+                <Label column="1" text="End time" horizontal="Start" styleResource="muted" />
+                <TextInput row="1" value="{state.settings.start.clone(a)}" changeAction="3" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+                <TextInput row="1" column="1" value="{state.settings.end.clone(a)}" changeAction="4" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+              </Grid>
+              <Label text="{selection_summary(state)}" foregroundResource="accent" horizontal="Start" />
+            </Panel.body>
+          </Panel>
+          <Panel key="export" column="{1}" expandX="{false}">
+            <Panel.header>
+              <Section text="03   EXPORT SETTINGS" expandX="{false}" />
+            </Panel.header>
+            <Panel.body>
+              <LabeledField text="Format">
+                <LabeledField.body>
+                  <Select selected="{state.settings.format}" changeAction="5" enabled="{state.job.mode == 0}">
+                    <Select.Options><Option key="{0}" text="MP4 · widely compatible" /><Option key="{1}" text="MOV · QuickTime" /><Option key="{2}" text="WebM · web video" /><Option key="{3}" text="MKV · flexible container" /><Option key="{4}" text="AVI · legacy devices" /></Select.Options>
+                  </Select>
+                </LabeledField.body>
+              </LabeledField>
+              <LabeledField text="Quality &amp; compression">
+                <LabeledField.body>
+                  <Select selected="{state.settings.quality}" changeAction="6" enabled="{state.job.mode == 0}">
+                    <Select.Options><Option key="{0}" text="Best quality · largest file" /><Option key="{1}" text="High quality" /><Option key="{2}" text="Balanced · recommended" /><Option key="{3}" text="Smaller file" /><Option key="{4}" text="Smallest file · lower detail" /></Select.Options>
+                  </Select>
+                </LabeledField.body>
+              </LabeledField>
+              <LabeledField text="Maximum resolution">
+                <LabeledField.body>
+                  <Select selected="{state.settings.resolution}" changeAction="7" enabled="{state.job.mode == 0}">
+                    <Select.Options><Option key="{0}" text="Keep original" /><Option key="{1}" text="Fit within 2160 px" /><Option key="{2}" text="Fit within 1080 px" /><Option key="{3}" text="Fit within 720 px" /><Option key="{4}" text="Fit within 480 px" /></Select.Options>
+                  </Select>
+                </LabeledField.body>
+              </LabeledField>
+              <Checkbox text="Keep audio" checked="{state.settings.audio}" changeAction="8" enabled="{state.job.mode == 0}" />
+              <LabeledField text="Save as">
+                <LabeledField.body>
+                  <TextInput value="{state.settings.output.clone(a)}" changeAction="2" enabled="{state.job.mode == 0}" />
+                </LabeledField.body>
+              </LabeledField>
+              <Button text="Choose destination…" action="14" enabled="{state.job.mode == 0}" />
+              <Checkbox text="Replace existing output" checked="{state.settings.overwrite}" changeAction="9" enabled="{state.job.mode == 0}" />
+              <Button text="Export video" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
+              <Button text="Cancel export" action="12" visible="{state.job.mode != 0}" enabled="{state.job.mode != 0}" />
+              <Label text="{progress_label(state)}" foregroundResource="accent" horizontal="Start" />
+              <Label text="Your original stays untouched." styleResource="muted" horizontal="Start" />
+            </Panel.body>
+          </Panel>
+        </Grid>
+        <Label text="{status_text(state)}" styleResource="muted" horizontal="Start" />
+      </Column>
+    </Scroll>
+  </View>
+</Views>

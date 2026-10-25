@@ -1,0 +1,40 @@
+name: sun-video-editor
+base: core26
+version: '0.1.0'
+summary: Convert, compress, and trim local videos
+description: |
+  A native video converter with preview and trim controls. Export local videos
+  as MP4, MOV, WebM, MKV, or AVI with configurable quality and resolution.
+  FFmpeg 8 or newer is included. Files are processed locally.
+grade: stable
+confinement: strict
+license: MIT
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+apps:
+  sun-video-editor:
+    command: usr/bin/sun_video_editor
+    desktop: usr/share/applications/sun-video-editor.desktop
+    extensions: [gnome]
+    plugs: [home, removable-media, audio-playback]
+    slots: [ui-application]
+parts:
+  converter:
+    # Prepare this tested Ubuntu 26.04 payload with the package task first.
+    plugin: dump
+    source: build/editor-package/root
+    stage-packages:
+      - ffmpeg
+      - coreutils
+      - gstreamer1.0-libav
+      - gstreamer1.0-plugins-good
+    stage:
+      - '-DEBIAN'
+      - '-DEBIAN/**'
+slots:
+  ui-application:
+    interface: dbus
+    bus: session
+    name: org.sunlang.UIPrototype

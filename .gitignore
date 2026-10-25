@@ -1,0 +1,14 @@
+/build*/
+/.toolchain/
+/dist/
+/tmp/
+/src/sun_ui/
+/src/sun_gobject/
+__pycache__/
+*.pyc
+/debian/.debhelper/
+/debian/sun-video-editor/
+/debian/files
+/debian/*.substvars
+/debian/debhelper-build-stamp
+/*.snap

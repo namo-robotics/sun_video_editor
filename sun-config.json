@@ -1,0 +1,35 @@
+{
+  "root": true,
+  "sun_path": [
+    "build",
+    "src/sun_ui/build",
+    "src/sun_gobject/build"
+  ],
+  "entrypoints": [
+    {
+      "name": "sun_video_editor",
+      "path": "src/main.sun",
+      "type": "binary",
+      "output_name": "build/sun_video_editor"
+    },
+    {
+      "name": "tests",
+      "path": "tests/main.sun",
+      "type": "binary",
+      "output_name": "build/editor-tests",
+      "test_binary_name": "build/editor-tests_test"
+    },
+    {
+      "name": "build-tool",
+      "path": "src/tools/build.sun",
+      "type": "binary",
+      "output_name": "build/editor-build"
+    },
+    {
+      "name": "package-tool",
+      "path": "src/tools/package.sun",
+      "type": "binary",
+      "output_name": "build/editor-package-tool"
+    }
+  ]
+}

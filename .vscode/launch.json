@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Sun Video Editor",
+      "type": "lldb-dap",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/sun_video_editor",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

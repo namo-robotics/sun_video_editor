@@ -1,0 +1,69 @@
+using std;
+
+/** Reads this project's named build products from sun-config.json. */
+module build_targets {
+
+  /** Owns the source, artifact paths, and kind of one configured build product. */
+  public class Target {
+    public var source: String;
+    public var output: String;
+    public var tests: String;
+    public var library: bool;
+
+    /** Takes ownership of the configured paths used by compilation and execution. */
+    init(source: String, output: String, tests: String, library: bool) {
+      this.source = source;
+      this.output = output;
+      this.tests = tests;
+      this.library = library;
+    }
+  }
+
+  /** Selects a named local entry with explicit paths and a binary or library type. */
+  function select(document: ref Json, name: static_ptr<u8>) JsonResult<Target> {
+    var a = make_heap_allocator();
+    var entries = try document.get("entrypoints");
+    for (var i: i64 = 0; i < entries.len(); i += 1) {
+      var entry = try entries.at(i);
+      var entry_name = try (try entry.get("name")).as_string();
+      if (entry_name.equals_literal(name)) {
+        var source = try (try entry.get("path")).as_string();
+        var output = try (try entry.get("output_name")).as_string();
+        var kind = try (try entry.get("type")).as_string();
+        if (kind.equals_literal("library") == false and kind.equals_literal("binary") == false) {
+          return JsonResult.Error(JsonError("Expected a binary or library entrypoint", -1));
+        }
+        var tests = output.clone(a);
+        tests.append("_test");
+        tests = match entry.get("test_binary_name") {
+          JsonResult.Ok(value) => (try value.as_string()).clone(a),
+          JsonResult.Error(_) => tests.clone(a)
+        };
+        return JsonResult.Ok(Target(source.clone(a), output.clone(a), tests, kind.equals_literal("library")));
+      }
+    }
+    return JsonResult.Error(JsonError("Unknown build target", -1));
+  }
+
+  /** Loads one target, reporting malformed configuration or missing targets as build errors. */
+  public function load(name: static_ptr<u8>) SystemResult<Target> {
+    var a = make_heap_allocator();
+    var path = String("sun-config.json");
+    var text = try std.io.read_to_string(a, path);
+    var document = match parse_json(a, text) {
+      JsonResult.Ok(value) => value,
+      JsonResult.Error(error) => {
+        eprintln(error.message());
+        return SystemResult.Error(Error(1, "Cannot parse sun-config.json"));
+      }
+    };
+    return match select(document, name) {
+      JsonResult.Ok(value) => SystemResult.Ok(value),
+      JsonResult.Error(error) => {
+        eprintln(name);
+        eprintln(error.message());
+        return SystemResult.Error(Error(1, "Cannot load configured build target"));
+      }
+    };
+  }
+}

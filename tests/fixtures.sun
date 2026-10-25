@@ -1,0 +1,81 @@
+using std;
+
+/** Generates disposable media locally so tests require no downloaded or personal videos. */
+module video_fixtures {
+
+  /** Owns an exclusive workspace test directory and a small MOV with video and audio. */
+  public class Fixture {
+    public var directory: String;
+    public var input: String;
+
+    /** Creates a test pattern with audio using bounded encoder threads. */
+    init() SystemResult<void> {
+      var a = make_heap_allocator();
+      var temporary = std.process.Command(a, "mktemp");
+      temporary.add_arg("-d");
+      temporary.add_arg("tmp/video-test.XXXXXX");
+      this.directory = try video.capture(temporary);
+      this.input = this.path("input $sample; clip.mov");
+      var command = std.process.Command(a, "ffmpeg");
+      command.add_arg("-hide_banner");
+      command.add_arg("-loglevel");
+      command.add_arg("error");
+      command.add_arg("-nostdin");
+      command.add_arg("-f");
+      command.add_arg("lavfi");
+      command.add_arg("-i");
+      command.add_arg("testsrc2=size=320x240:rate=24");
+      command.add_arg("-f");
+      command.add_arg("lavfi");
+      command.add_arg("-i");
+      command.add_arg("sine=frequency=440:sample_rate=48000");
+      command.add_arg("-t");
+      command.add_arg("4");
+      command.add_arg("-c:v");
+      command.add_arg("libx264");
+      command.add_arg("-crf");
+      command.add_arg("12");
+      command.add_arg("-threads");
+      command.add_arg("2");
+      command.add_arg("-c:a");
+      command.add_arg("aac");
+      command.add_arg(this.input);
+      try video.capture(command);
+      return SystemResult.Ok;
+    }
+
+    /** Deletes only this fixture's exclusive directory and its generated outputs. */
+    deinit() {
+      if (not this.directory.is_empty()) {
+        var command = std.process.Command(make_heap_allocator(), "rm");
+        command.add_arg("-rf");
+        command.add_arg("--");
+        command.add_arg(this.directory);
+        ignore_error(command.status());
+      }
+    }
+
+    /** Builds a child path without interpreting its characters. */
+    public const method path(name: static_ptr<u8>) String {
+      var result = this.directory.clone(make_heap_allocator());
+      result.append("/");
+      result.append(name);
+      return result;
+    }
+  }
+
+  /** Polls a workflow with a deadline, terminating it if completion fails. */
+  public function finish(job: ref video.Job) SystemResult<void> {
+    var start = std.time.now();
+    var delay = std.time.create_duration_millis(10);
+    while (job.mode != 0) {
+      try job.tick();
+      if (start.elapsed().as_secs() > 20) {
+        job.process.stop();
+        return SystemResult.Error(Error(1, "Media test timed out"));
+      }
+      std.time.sleep(delay);
+    }
+    return SystemResult.Ok;
+  }
+}

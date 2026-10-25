@@ -1,0 +1,23 @@
+<Views module="editor_parts">
+  <Component name="Panel">
+    <Param name="column" type="i32" />
+    <Param name="expandX" type="bool" />
+    <Content name="header" />
+    <Content name="body" />
+    <Column column="{column}" spacing="12" expandX="{expandX}" expandY="true" styleResource="panel">
+      <Slot name="header" />
+      <Slot name="body" />
+    </Column>
+  </Component>
+  <Component name="Section">
+    <Param name="text" type="String" />
+    <Param name="expandX" type="bool" />
+    <Label text="{text}" styleResource="section" horizontal="Start" expandX="{expandX}" />
+  </Component>
+  <Component name="LabeledField">
+    <Param name="text" type="String" />
+    <Content name="body" />
+    <Label text="{text}" horizontal="Start" />
+    <Slot name="body" />
+  </Component>
+</Views>

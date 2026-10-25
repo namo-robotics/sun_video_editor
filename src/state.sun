@@ -1,0 +1,108 @@
+using std;
+
+/** Routes typed form events into the platform-independent media workflow. */
+module sun_video_editor {
+
+  /** Owns form values, asynchronous work, and requests for platform dialogs. */
+  class State {
+    var settings: video.Settings = video.Settings();
+    var job: video.Job = video.Job();
+    var open_requested: bool = false;
+    var save_requested: bool = false;
+    var position: i64 = 0;
+  }
+
+  /** Accepts an operation failure without closing the application or abandoning a child. */
+  function report(state: ref State, result: SystemResult<void>) void {
+    match result {
+      SystemResult.Ok => {},
+      SystemResult.Error(error) => {
+        eprintln(error.message());
+        state.job.fail(error);
+      }
+    };
+  }
+
+  /** Selects a source and immediately starts reading its media information. */
+  function open_source(state: ref State, path: const ref String) SystemResult<void> {
+    state.settings.input = path.clone(make_heap_allocator());
+    state.position = 0;
+    return state.job.probe(state.settings.input);
+  }
+
+  /** Applies captured events while rejecting edits during probing or conversion. */
+  function handle(state: ref State, event: const ref ui.Event, queue: ref ui.EventQueue) SystemResult<void> {
+    var a = make_heap_allocator();
+    if (event.action == 12) {
+      state.job.cancel();
+      return SystemResult.Ok;
+    }
+    if (state.job.mode != 0) {
+      return SystemResult.Ok;
+    }
+    if (event.value.kind == ui.ValueKind.Range and event.action == 15 and state.job.ready) {
+      var duration = duration_us(state);
+      if (event.value.range_start >= 0 and event.value.range_end > event.value.range_start and event.value.range_end <= duration and event.value.position >= 0 and event.value.position <= duration) {
+        state.settings.start = timestamp(event.value.range_start);
+        state.settings.end = timestamp(event.value.range_end);
+        state.position = event.value.position;
+      }
+    } else if (event.value.kind == ui.ValueKind.Text) {
+      if (event.action == 2) {
+        state.settings.output = event.value.text.clone(a);
+        state.settings.overwrite = false;
+      }
+      if (event.action == 3) {
+        state.settings.start = event.value.text.clone(a);
+      }
+      if (event.action == 4) {
+        state.settings.end = event.value.text.clone(a);
+      }
+    } else if (event.value.kind == ui.ValueKind.Selection) {
+      var value: i64 = -1;
+      for (var i: i64 = 0; i < 5; i += 1) {
+        var key = ui.Key(i);
+        if (event.value.selection.equals(key)) {
+          value = i;
+        }
+      }
+      if (value < 0) {
+        return SystemResult.Ok;
+      }
+      if (event.action == 5) {
+        state.settings.format = value;
+        state.settings.output = video.output_path(state.settings.output, value);
+        state.settings.overwrite = false;
+      }
+      if (event.action == 6) {
+        state.settings.quality = value;
+      }
+      if (event.action == 7) {
+        state.settings.resolution = value;
+      }
+    } else if (event.value.kind == ui.ValueKind.Boolean) {
+      if (event.action == 8) {
+        state.settings.audio = event.value.boolean;
+      }
+      if (event.action == 9) {
+        state.settings.overwrite = event.value.boolean;
+      }
+    } else {
+      if (event.action == 11) {
+        report(state, state.job.convert(state.settings));
+      }
+      if (event.action == 13) {
+        state.open_requested = true;
+      }
+      if (event.action == 16) {
+        state.settings.start = String("0");
+        state.settings.end = String("");
+        state.position = 0;
+      }
+      if (event.action == 14) {
+        state.save_requested = true;
+      }
+    }
+    return SystemResult.Ok;
+  }
+}

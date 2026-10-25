@@ -1,0 +1,35 @@
+{
+  "name": "Sun Video Editor",
+  "build": {
+    "context": "..",
+    "dockerfile": "../Dockerfile"
+  },
+  "containerUser": "ubuntu",
+  "remoteUser": "ubuntu",
+  "updateRemoteUserUID": true,
+  "mounts": [
+    "source=vscode-user-data,target=/home/ubuntu/.vscode-server/data/User,type=volume",
+    "source=sun-video-editor-ccache,target=/home/ubuntu/.cache/ccache,type=volume",
+    "source=${localEnv:HOME}/.codex,target=/home/ubuntu/.codex,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude,target=/home/ubuntu/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/ubuntu/.ssh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "CTEST_PARALLEL_LEVEL": "4",
+    "CCACHE_MAXSIZE": "10G"
+  },
+  "postCreateCommand": "sudo chown ubuntu:ubuntu /home/ubuntu/.cache/ccache && ./scripts/bootstrap-sun.sh --update",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "namo-robotics.sun-language",
+        "llvm-vs-code-extensions.vscode-clangd",
+        "llvm-vs-code-extensions.lldb-dap",
+        "ms-vscode.cmake-tools",
+        "Anthropic.claude-code",
+        "openai.chatgpt"
+      ]
+    }
+  }
+}

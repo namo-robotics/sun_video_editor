@@ -1,0 +1,177 @@
+using std;
+
+/** Hosts the video workflow on the GTK thread while polling subprocesses between event turns. */
+module sun_video_editor {
+
+  /** Services chooser requests without allowing native objects into application state. */
+  function dialogs(renderer: ref ui_gtk.Renderer, state: ref State) SystemResult<bool> {
+    var changed = false;
+    if (state.open_requested) {
+      state.open_requested = false;
+      try renderer.choose_input();
+    }
+    if (state.save_requested) {
+      state.save_requested = false;
+      var filename = String("converted");
+      filename.append(video.extension(state.settings.format));
+      try renderer.choose_output(filename);
+    }
+    match try renderer.take_input_path() {
+      Option.Some(path) => {
+        if (state.job.mode == 0) {
+          try open_source(state, path);
+          changed = true;
+        }
+      },
+      Option.None => {}
+    };
+    match try renderer.take_output_path() {
+      Option.Some(path) => {
+        if (state.job.mode == 0) {
+          state.settings.output = path;
+          state.settings.overwrite = false;
+          changed = true;
+        }
+      },
+      Option.None => {}
+    };
+    return SystemResult.Ok(changed);
+  }
+
+  /** Checks external tools and the selected encoder before the first conversion. */
+  function dependencies() SystemResult<void> {
+    var a = make_heap_allocator();
+    var tools = String("ffmpeg ffprobe").split_whitespace(a);
+    for (var tool: ref String in tools) {
+      var version = std.process.Command(a, tool);
+      version.add_arg("-version");
+      var banner = try video.capture(version);
+      if (not video.supported_tool_version(banner)) {
+        return SystemResult.Error(Error(1, "Install FFmpeg and ffprobe version 8 or newer"));
+      }
+    }
+    var command = std.process.Command(a, "ffmpeg");
+    command.add_arg("-hide_banner");
+    command.add_arg("-encoders");
+    var encoders = match video.capture(command) {
+      SystemResult.Ok(value) => value,
+      SystemResult.Error(_) => {
+        return SystemResult.Error(Error(1, "Install FFmpeg (including ffprobe) before running this example"));
+      }
+    };
+    if (not encoders.contains("libx264") or not encoders.contains(" aac ")) {
+      return SystemResult.Error(Error(1, "Install FFmpeg with libx264 and AAC encoders"));
+    }
+    var probe = std.process.Command(a, "ffprobe");
+    probe.add_arg("-version");
+    match video.capture(probe) {
+      SystemResult.Ok(_) => {},
+      SystemResult.Error(_) => {
+        return SystemResult.Error(Error(1, "Install ffprobe alongside FFmpeg"));
+      }
+    };
+    var scale = std.process.Command(a, "ffmpeg");
+    scale.add_arg("-hide_banner");
+    scale.add_arg("-h");
+    scale.add_arg("filter=scale");
+    var capabilities = try video.capture(scale);
+    if (not capabilities.contains("reset_sar")) {
+      return SystemResult.Error(Error(1, "This example requires FFmpeg with scale reset_sar support (use FFmpeg 8 or newer)"));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Runs a bounded nonblocking turn and redraws only when asynchronous state changes. */
+  function turn(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) SystemResult<void> {
+    renderer.poll(session.tree, session.queue, false);
+    if (not renderer.running()) {
+      session.state.job.process.stop();
+      return SystemResult.Ok;
+    }
+    try session.dispatch(renderer);
+    var percent = session.state.job.percent;
+    var mode = session.state.job.mode;
+    var changed = false;
+    match dialogs(renderer, session.state) {
+      SystemResult.Ok(value) => {
+        changed = value;
+      },
+      SystemResult.Error(error) => {
+        session.state.job.fail(error);
+        changed = true;
+      }
+    };
+    match session.state.job.tick() {
+      SystemResult.Ok => {},
+      SystemResult.Error(error) => {
+        session.state.job.fail(error);
+        changed = true;
+      }
+    };
+    if (mode == 1 and session.state.job.mode == 0 and session.state.job.ready) {
+      session.state.settings.start = String("0");
+      session.state.settings.end = timestamp(duration_us(session.state));
+      session.state.position = 0;
+      if (session.state.settings.output.is_empty()) {
+        session.state.settings.output = session.state.job.loaded.clone(make_heap_allocator());
+        session.state.settings.output.append(".converted");
+        session.state.settings.output.append(video.extension(session.state.settings.format));
+      }
+    }
+    if (changed or percent != session.state.job.percent or mode != session.state.job.mode) {
+      try session.render(renderer);
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Runs the interactive application or the headless acceptance scenario. */
+  public function run(automated: bool, initial: const ref String) SystemResult<void> {
+    try dependencies();
+    var title = String("Sun Video Editor");
+    var renderer = try ui_gtk.Renderer(title);
+    try renderer.set_default_size(1160, 860);
+    var state = State();
+    if (not initial.is_empty()) {
+      report(state, open_source(state, initial));
+    }
+    var session = ui.Session<State>(state, view, handle);
+    try session.render(renderer);
+    if (automated) {
+      return acceptance(renderer, session);
+    }
+    while (renderer.running()) {
+      try renderer.wait_events(session.tree, session.queue, session.state.job.mode == 0 ? 0 : 20);
+      try turn(renderer, session);
+    }
+    session.state.job.process.stop();
+    session.tree.shutdown(renderer);
+    return SystemResult.Ok;
+  }
+}
+
+/** Reports startup failures and selects the native acceptance test when requested. */
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+  var a = make_heap_allocator();
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  var automated = args.size() == 2 and args[1].equals_literal("--self-test");
+  var initial = String("");
+  if (args.size() == 2 and not automated) {
+    initial = args[1].clone(a);
+  }
+  if (args.size() > 2) {
+    eprintln("Usage: sun_video_editor [VIDEO|--self-test]");
+    return 1;
+  }
+  return match sun_video_editor.run(automated, initial) {
+    SystemResult.Ok => 0,
+    SystemResult.Error(error) => {
+      eprintln(error.message());
+      return 1;
+    }
+  };
+}
+manifest {
+  libraries: ["stdlib.moon", "sun_ui.moon", "sun_gobject.moon", "sun_gtk.moon", "sun_ui_gtk.moon"]
+  source_files: ["process.sun", "media.sun", "job.sun", "state.sun", "view.sun", "../build/generated/sun_video_editor.view.sun", "../tests/fixtures.sun", "../tests/acceptance.sun"]
+}

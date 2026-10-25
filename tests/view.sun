@@ -1,0 +1,59 @@
+using std;
+
+/** Checks the converter's reusable view without creating native widgets or media jobs. */
+module sun_video_editor {
+
+  /** Combines appearance validation and assertion failures. */
+  enum ViewResult { Ok, Assertion(std.test.AssertionError), System(Error) }
+
+  /** Preserves action availability and the shared palette across the export lifecycle. */
+  test_function reusable_converter_states() ViewResult {
+    for (var stage: i32 = 0; stage < 4; stage += 1) {
+      var state = State();
+      state.job.ready = stage > 0;
+      state.job.media.duration = 10.0;
+      state.job.loaded = String("clip.mp4");
+      state.job.mode = stage == 2 ? 2 : 0;
+      state.job.percent = stage == 3 ? 100 : 0;
+      var description = view(state);
+      try std.test.assert(description.construction_error.is_empty());
+      try description.resources.validate();
+      try std.test.assert_eq(description.theme.normal.foreground, 0xdce6f4);
+      try std.test.assert_eq(description.theme.normal.font_size, 14);
+      var field = try description.resources.style(1, String("field"));
+      try std.test.assert_eq(field.normal.background, 0x23334b);
+      try std.test.assert_eq(field.normal.padding, 8);
+      try std.test.assert_eq(field.disabled.foreground, 0x6c8098);
+      var primary = try description.resources.style(1, String("primary"));
+      try std.test.assert_eq(primary.normal.background, 0x73e2cb);
+      try std.test.assert_eq(primary.normal.padding, 10);
+      var controls: i64 = 0;
+      for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+        var node = description.elements[i];
+        try std.test.assert(node.parent < i);
+        if (node.action == 0) {
+          continue;
+        }
+        controls += 1;
+        var enabled = state.job.mode == 0;
+        if (node.action == 3 or node.action == 4 or node.action == 11 or node.action == 16) {
+          enabled = enabled and state.job.ready;
+        }
+        if (node.action == 12) {
+          enabled = state.job.mode != 0;
+          try std.test.assert(node.visible == enabled);
+        }
+        try std.test.assert(node.enabled == enabled);
+        for (var previous: i64 = 0; previous < i; previous += 1) {
+          try std.test.assert(description.elements[previous].action != node.action);
+        }
+      }
+      try std.test.assert_eq(controls, 14);
+      var again = view(state);
+      try std.test.assert_eq(description.elements.size(), again.elements.size());
+      for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+        try std.test.assert(description.elements[i].key.equals(again.elements[i].key));
+      }
+    }
+  }
+}

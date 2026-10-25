@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build development image
+        run: docker build -t sun-video-editor-dev .
+      - name: Build dependencies, test, and package
+        run: >-
+          docker run --rm --user "$(id -u):$(id -g)"
+          -v /etc/passwd:/etc/passwd:ro
+          -v /etc/group:/etc/group:ro
+          -e GIT_CONFIG_COUNT=1
+          -e GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf
+          -e GIT_CONFIG_VALUE_0=git@github.com:
+          -v "$PWD:/workspaces/sun_video_editor" sun-video-editor-dev
+          bash -o pipefail -c 'vcs import --input deps.repos . && ./scripts/build-dependencies.sh && mkdir -p build && ./build.sh --package 2>&1 | tee build/package-tests.log'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sun-video-editor-amd64
+          path: |
+            build/*.deb
+            build/sun-version.txt
+            build/package-tests.log

@@ -1,0 +1,145 @@
+using std;
+
+/** Runs bounded, polled child processes without blocking the application event loop. */
+module video {
+
+  /** Owns a child and its output pipes, terminating and reaping it before destruction. */
+  public class Process {
+    var child: std.process.Child = std.process.Child(0, 0, 0, 0);
+    var output: std.io.File = std.io.File();
+    var errors: std.io.File = std.io.File();
+    public var text: String = String("");
+    public var diagnostics: String = String("");
+    public var running: bool = false;
+    public var status: i32 = -1;
+    var exited: bool = false;
+    var cancelling: bool = false;
+    var cancelled_at: std.time.Instant = std.time.now();
+
+    /** Kills and reaps an unfinished process; pipes close through their owners. */
+    deinit() {
+      this.stop();
+    }
+
+    /** Starts an argument-vector command with independent output and error pipes. */
+    public method start(command: ref std.process.Command) SystemResult<void> {
+      if (this.running) {
+        return SystemResult.Error(Error(1, "A process is already running"));
+      }
+      command.set_stdin(std.process.Stdio.Null);
+      command.set_stdout(std.process.Stdio.Piped);
+      command.set_stderr(std.process.Stdio.Piped);
+      this.child = try command.start();
+      this.output.adopt(this.child.take_stdout());
+      this.errors.adopt(this.child.take_stderr());
+      this.text = String("");
+      this.diagnostics = String("");
+      this.running = true;
+      this.exited = false;
+      this.cancelling = false;
+      this.status = -1;
+      return SystemResult.Ok;
+    }
+
+    /** Requests termination, allowing the child a short grace period before forced termination. */
+    public method cancel() void {
+      if (this.running and not this.cancelling) {
+        this.cancelling = true;
+        this.cancelled_at = std.time.now();
+        ignore_error(this.child.kill(15));
+      }
+    }
+
+    /** Releases a running process during shutdown, including error paths. */
+    public method stop() void {
+      if (this.running and not this.exited) {
+        ignore_error(this.child.kill(9));
+        ignore_error(this.child.wait());
+      }
+      this.output.close();
+      this.errors.close();
+      this.running = false;
+    }
+
+    /** Reads bounded amounts from both ready pipes and observes process completion. */
+    public method tick() SystemResult<void> {
+      if (not this.running) {
+        return SystemResult.Ok;
+      }
+      if (this.cancelling and this.cancelled_at.elapsed().as_millis() > 1500) {
+        ignore_error(this.child.kill(9));
+      }
+      try drain(this.output, this.text, 1048576);
+      try drain(this.errors, this.diagnostics, 16384);
+      if (not this.exited) {
+        match try this.child.try_wait() {
+          Option.Some(code) => {
+            this.exited = true;
+            this.status = code;
+          },
+          Option.None => {}
+        };
+      }
+      if (this.exited and not this.output.is_open() and not this.errors.is_open()) {
+        this.running = false;
+      }
+      return SystemResult.Ok;
+    }
+  }
+
+  /** Drains only ready bytes, bounding both memory and work per UI turn. */
+  function drain(file: ref std.io.File, text: ref String, limit: i64) SystemResult<void> {
+    var a = make_heap_allocator();
+    var buffer = ContiguousBuffer<u8>(a, 4096);
+    for (var round: i64 = 0; round < 8 and file.is_open(); round += 1) {
+      var poll = std.io.Poller(a);
+      poll.add_read(file.get_fd());
+      if (try poll.wait(0) == 0) {
+        break;
+      }
+      if (not poll.is_readable(0) and not poll.is_hup(0)) {
+        return SystemResult.Error(Error(1, "Cannot read child process output"));
+      }
+      var bytes = MutableByteSlice(buffer);
+      match file.read(bytes) {
+        std.io.ReadResult.Data(count) => {
+          for (var i: i64 = 0; i < count; i += 1) {
+            text.append_char(buffer[i]);
+          }
+          if (text.length() > limit) {
+            text = match text.substr(a, text.length() - limit, limit) {
+              AccessResult.Ok(value) => value,
+              AccessResult.OutOfBounds(_) => String("")
+            };
+          }
+        },
+        std.io.ReadResult.Eof => {
+          file.close();
+        },
+        std.io.ReadResult.WouldBlock => {
+          break;
+        },
+        std.io.ReadResult.Error(error) => {
+          return SystemResult.Error(error);
+        }
+      };
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Runs a small filesystem utility with checked status and no shell expansion. */
+  public function capture(command: ref std.process.Command) SystemResult<String> {
+    var result = try command.output();
+    if (result.status() != 0) {
+      return SystemResult.Error(Error(result.status(), result.stderr().clone(make_heap_allocator())));
+    }
+    var text = result.stdout().clone(make_heap_allocator());
+    if (text.ends_with("\n")) {
+      text = match text.substr(make_heap_allocator(), 0, text.length() - 1) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => String("")
+      };
+    }
+    return SystemResult.Ok(text);
+  }
+}
