@@ -17,11 +17,11 @@ sun_video_editor
 
 ### Ubuntu
 
-Ubuntu 26.04, x86_64. Download the `.deb` from the
-[dev release](https://github.com/namo-robotics/sun_video_editor/releases/tag/dev), then run:
+Ubuntu 26.04, x86_64:
 
 ```sh
-sudo apt install ./sun-video-editor_0.1.0_amd64.deb
+curl -fLO https://github.com/namo-robotics/sun_video_editor/releases/download/dev/sun-video-editor_0.1.0_amd64.deb &&
+  sudo apt install ./sun-video-editor_0.1.0_amd64.deb
 sun_video_editor
 ```
 
