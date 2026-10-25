@@ -22,12 +22,13 @@ module editor_build {
     };
   }
 
-  /** Compiles a configured product with explicit dependency search paths. */
+  /** Rebuilds a configured product so editor freshness checks see the current sources. */
   function compile(name: static_ptr<u8>, gtk: bool) SystemResult<void> {
     var a = make_heap_allocator();
     var target = try build_targets.load(name);
     var command = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
     command.add_arg("--dynamic");
+    command.add_arg("--force-rebuild");
     command.add_arg("-c");
     command.add_arg("-o");
     command.add_arg(target.output);
@@ -60,7 +61,6 @@ module editor_build {
       if (not darwin) {
         command.add_arg("-l:librsvg-2.so.2");
       }
-      command.add_arg("--force-rebuild");
     }
     command.add_arg(target.source);
     return run(command);
