@@ -94,19 +94,42 @@ access. Native acceptance tests do not replace confinement testing. The D-Bus sl
 matches the GTK adapter's application ID. Update `debian/changelog` and
 `snap/snapcraft.yaml` together when changing the release version.
 
-After validating the installed packages, publish the `.deb` as a release download
-or through a signed APT repository. Register an available Snap Store name and
-publish a tested revision to `edge` before promoting it to `stable`:
+Successful pushes and merges to `main` update the
+[dev prerelease](https://github.com/namo-robotics/sun_video_editor/releases/tag/dev)
+with the tested amd64 Debian package and compiler version. Pull requests build
+and test without publishing. CI also builds a Snap from the same tested install
+payload and saves it as a workflow artifact.
+
+To enable automatic Snap Store publication to `edge`, register the package and
+export credentials restricted to this snap and channel:
 
 ```sh
 snapcraft login
 snapcraft register sun-video-editor
-snapcraft upload ./sun-video-editor_0.1.0_amd64.snap --release=edge
-snapcraft release sun-video-editor REVISION stable
+mkdir -p tmp
+snapcraft export-login --snaps=sun-video-editor --channels=edge \
+  --acls=package_access,package_push,package_update,package_release \
+  tmp/snap-store-credentials
 ```
 
-No publishing credentials or automatic Store publication are configured. CI builds,
-tests, and uploads the Debian package as a workflow artifact.
+Add the exported file's contents as the repository Actions secret
+`SNAPCRAFT_STORE_CREDENTIALS` in
+[repository settings](https://github.com/namo-robotics/sun_video_editor/settings/secrets/actions).
+Delete the local credentials file after saving the secret. Never commit it or paste
+it into an issue or chat. See [Canonical's authentication guide](https://snapcraft.io/docs/snapcraft-authentication/).
+Without this secret, CI still builds the Snap and explicitly reports that Store
+publication was skipped. With it, successful `main` builds upload to `edge`.
+Registration and any required Store review must complete before publication succeeds.
+
+Install the edge channel on a desktop and verify confined preview and export before
+promoting a revision. Stable promotion uses your interactive account, because the
+CI credential is limited to edge:
+
+```sh
+sudo snap install sun-video-editor --edge
+snapcraft login
+snapcraft release sun-video-editor REVISION stable
+```
 
 ## Workflow
 
