@@ -9,6 +9,12 @@ if command -v sun >/dev/null && [[ ${1:-} != --update ]]; then
   sun --version
   exit 0
 fi
+if [[ $(uname -s) == Darwin ]]; then
+  brew install namo-robotics/sun/sun
+  if [[ ${1:-} == --update ]]; then brew upgrade namo-robotics/sun/sun; fi
+  sun --version
+  exit 0
+fi
 if [[ $(dpkg --print-architecture) != amd64 ]]; then
   echo 'The Sun dev Debian release currently supports amd64 only.' >&2
   exit 1

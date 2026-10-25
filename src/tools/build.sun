@@ -38,10 +38,17 @@ module editor_build {
     command.add_arg(dependency);
     if (gtk) {
       command.add_arg(`-L${dependency}/native`);
-      command.add_arg("-l:libsun_gobject_native.a");
+      command.add_arg("-lsun_gobject_native");
       var pkg = std.process.Command(a, "pkg-config");
       pkg.add_arg("--libs");
       pkg.add_arg("gtk4");
+      var platform = std.process.Command(a, "uname");
+      platform.add_arg("-s");
+      var platform_output = try platform.output();
+      var darwin = platform_output.stdout().starts_with("Darwin");
+      if (darwin) {
+        pkg.add_arg("librsvg-2.0");
+      }
       var output = try pkg.output();
       if (output.status() != 0) {
         return SystemResult.Error(Error(1, "Install GTK development packages"));
@@ -50,7 +57,9 @@ module editor_build {
       for (var flag: ref String in flags) {
         command.add_arg(flag);
       }
-      command.add_arg("-l:librsvg-2.so.2");
+      if (not darwin) {
+        command.add_arg("-l:librsvg-2.so.2");
+      }
       command.add_arg("--force-rebuild");
     }
     command.add_arg(target.source);
@@ -99,7 +108,14 @@ module editor_build {
     var acceptance = std.process.Command(a, "sh");
     acceptance.add_arg("-eu");
     acceptance.add_arg("-c");
-    acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test");
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var platform_output = try platform.output();
+    if (platform_output.stdout().starts_with("Darwin")) {
+      acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; gtimeout 60s \"$1\" --self-test");
+    } else {
+      acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test");
+    }
     acceptance.add_arg("editor-acceptance");
     acceptance.add_arg(app.output);
     return run(acceptance);

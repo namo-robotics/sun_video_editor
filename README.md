@@ -202,3 +202,31 @@ inputs and failed encodes.
 Application state and export logic are written in Sun. Native playback, pointer
 gestures, drawing, and chooser ownership remain in `sun_gobject`; the renderer exposes operations without leaking platform handles
 into the application state.
+
+## macOS and Homebrew
+
+The macOS workflow targets Apple Silicon, matching the Sun compiler's Homebrew
+release. It builds GTK bindings natively, runs media and native acceptance tests,
+and tests installation through Homebrew before publishing a commit-specific archive
+to the `dev` release. Intel Macs are not covered by this workflow.
+
+Once a tested formula has been published to the tap:
+
+```sh
+brew install namo-robotics/sun/sun-video-editor
+sun_video_editor
+```
+
+This is a command-line-launched GTK application, with Homebrew-managed GTK, FFmpeg
+8+, GStreamer, and GNU coreutils. The binary is ad-hoc signed; it is not a notarized,
+self-contained Finder `.app`.
+
+For local development on an Apple Silicon Mac, install the dependencies listed in
+`.github/workflows/macos.yml`, import `deps.repos`, then run
+`./scripts/build-macos-dependencies.sh` and `./scripts/package-macos.sh`.
+The package script runs the tests before archiving.
+
+Automatic tap updates require an Actions secret named `TAP_TOKEN` with Contents
+write access to `namo-robotics/homebrew-sun`, as used by the compiler repository.
+Without it, CI publishes the tested archive and formula to the GitHub dev release
+and reports that the tap update was skipped.

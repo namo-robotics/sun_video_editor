@@ -39,7 +39,7 @@ module sun_video_editor {
   }
 
   /** Checks external tools and the selected encoder before the first conversion. */
-  function dependencies() SystemResult<void> {
+  public function dependencies() SystemResult<void> {
     var a = make_heap_allocator();
     var tools = String("ffmpeg ffprobe").split_whitespace(a);
     for (var tool: ref String in tools) {
@@ -154,6 +154,18 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   var a = make_heap_allocator();
   var env = std.env.Env(a);
   var args = env.args(argc, argv);
+  if (args.size() == 2 and args[1].equals_literal("--check-dependencies")) {
+    return match sun_video_editor.dependencies() {
+      SystemResult.Ok => {
+        println("FFmpeg 8+ ready");
+        return 0;
+      },
+      SystemResult.Error(error) => {
+        eprintln(error.message());
+        return 1;
+      }
+    };
+  }
   var automated = args.size() == 2 and args[1].equals_literal("--self-test");
   var initial = String("");
   if (args.size() == 2 and not automated) {
