@@ -9,7 +9,7 @@ class SunVideoEditor < Formula
 
   depends_on :macos
   depends_on arch: :arm64
-  depends_on "gtk4"
+  depends_on "namo-robotics/sun/sun-gtk4"
   depends_on "librsvg"
   depends_on "ffmpeg"
   depends_on "gstreamer"

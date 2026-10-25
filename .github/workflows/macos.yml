@@ -16,9 +16,13 @@ jobs:
       - name: Install Apple Silicon toolchain and media dependencies
         run: |
           test "$(uname -m)" = arm64
-          brew install namo-robotics/sun/sun gtk4 librsvg gstreamer ffmpeg coreutils cmake ninja pkgconf gobject-introspection
+          brew install namo-robotics/sun/sun namo-robotics/sun/sun-gtk4 librsvg gstreamer ffmpeg coreutils cmake ninja pkgconf gobject-introspection
           python3 -m venv .toolchain/vcs
           .toolchain/vcs/bin/pip install vcs2l==1.1.7
+      - name: Select GTK with media playback
+        run: |
+          echo "PKG_CONFIG_PATH=$(brew --prefix sun-gtk4)/lib/pkgconfig:$(brew --prefix libffi)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "SUN_GTK_PREFIX=$(brew --prefix sun-gtk4)" >> "$GITHUB_ENV"
       - name: Import dependencies
         env:
           GIT_CONFIG_COUNT: 1
