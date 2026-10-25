@@ -89,44 +89,54 @@ module sun_video_editor {
     if (renderer.media_status(preview) != 1) {
       return SystemResult.Error(Error(1, "Video preview did not decode"));
     }
-    // Decoding can queue a layout change after the media status becomes ready.
-    var original_height = renderer.extent(preview, false);
-    var stable_since = std.time.now();
-    deadline = std.time.now();
-    while (deadline.elapsed().as_millis() < 5000) {
-      try turn(renderer, session);
-      var height = renderer.extent(preview, false);
-      if (height != original_height or height <= 0) {
-        original_height = height;
-        stable_since = std.time.now();
-      } else if (stable_since.elapsed().as_millis() >= 300) {
-        break;
+    var environment = std.env.Env(make_heap_allocator());
+    var resize = match environment.get("SUN_EDITOR_TEST_RESIZE") {
+      Option.Some(value) => not value.equals_literal("0"),
+      Option.None => true
+    };
+    // Hosted Mac displays cannot fit the large window; Linux CI covers resizing.
+    if (resize) {
+      // Decoding can queue a layout change after the media status becomes ready.
+      var original_height = renderer.extent(preview, false);
+      var stable_since = std.time.now();
+      deadline = std.time.now();
+      while (deadline.elapsed().as_millis() < 5000) {
+        try turn(renderer, session);
+        var height = renderer.extent(preview, false);
+        if (height != original_height or height <= 0) {
+          original_height = height;
+          stable_since = std.time.now();
+        } else if (stable_since.elapsed().as_millis() >= 300) {
+          break;
+        }
+        std.time.sleep(delay);
       }
-      std.time.sleep(delay);
-    }
-    if (original_height <= 0 or stable_since.elapsed().as_millis() < 300) {
-      return SystemResult.Error(Error(1, "Preview layout did not settle before resizing"));
-    }
-    try renderer.set_default_size(1160, 1200);
-    deadline = std.time.now();
-    while (renderer.extent(preview, false) <= original_height + 100 and deadline.elapsed().as_millis() < 5000) {
-      try turn(renderer, session);
-      std.time.sleep(delay);
-    }
-    if (renderer.extent(preview, false) <= original_height + 100) {
-      return SystemResult.Error(Error(1, "Preview did not grow with the window height"));
-    }
-    if (renderer.extent(control(session, 15, true), false) != renderer.extent(control(session, 11, true), false)) {
-      return SystemResult.Error(Error(1, "Panels did not fill the same grid row height"));
-    }
-    try renderer.set_default_size(1160, 860);
-    deadline = std.time.now();
-    while (renderer.extent(preview, false) > original_height + 10 and deadline.elapsed().as_millis() < 5000) {
-      try turn(renderer, session);
-      std.time.sleep(delay);
-    }
-    if (renderer.extent(preview, false) > original_height + 10) {
-      return SystemResult.Error(Error(1, "Preview did not shrink with the window height"));
+      if (original_height <= 0 or stable_since.elapsed().as_millis() < 300) {
+        return SystemResult.Error(Error(1, "Preview layout did not settle before resizing"));
+      }
+      try renderer.set_default_size(1160, 1200);
+      deadline = std.time.now();
+      while (renderer.extent(preview, false) <= original_height + 100 and deadline.elapsed().as_millis() < 5000) {
+        try turn(renderer, session);
+        std.time.sleep(delay);
+      }
+      if (renderer.extent(preview, false) <= original_height + 100) {
+        return SystemResult.Error(Error(1, "Preview did not grow with the window height"));
+      }
+      if (renderer.extent(control(session, 15, true), false) != renderer.extent(control(session, 11, true), false)) {
+        return SystemResult.Error(Error(1, "Panels did not fill the same grid row height"));
+      }
+      try renderer.set_default_size(1160, 860);
+      deadline = std.time.now();
+      while (renderer.extent(preview, false) > original_height + 10 and deadline.elapsed().as_millis() < 5000) {
+        try turn(renderer, session);
+        std.time.sleep(delay);
+      }
+      if (renderer.extent(preview, false) > original_height + 10) {
+        return SystemResult.Error(Error(1, "Preview did not shrink with the window height"));
+      }
+    } else {
+      println("Resize assertions skipped: fixed CI display cannot fit the large window");
     }
     try renderer.drag_media(preview, 0.0, 0.125);
     try turn(renderer, session);

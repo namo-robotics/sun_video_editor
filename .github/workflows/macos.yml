@@ -32,6 +32,9 @@ jobs:
       - name: Build native dependency bundles
         run: ./scripts/build-macos-dependencies.sh
       - name: Build, test, and package the editor
+        env:
+          # The hosted display cannot accommodate the 1200px resize target.
+          SUN_EDITOR_TEST_RESIZE: '0'
         run: ./scripts/package-macos.sh
       - name: Render and test the Homebrew formula
         shell: bash
