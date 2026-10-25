@@ -9,6 +9,7 @@ description: |
 grade: stable
 confinement: strict
 license: MIT
+icon: packaging/sun-video-editor.png
 platforms:
   amd64:
     build-on: [amd64]

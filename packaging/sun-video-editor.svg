@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <title>Sun Video Editor</title>
-  <rect width="128" height="128" rx="24" fill="#152135"/>
-  <rect x="20" y="30" width="88" height="68" rx="6" fill="#73e2cb"/>
-  <path d="M54 46v36l28-18z" fill="#082b2a"/>
-  <path d="M28 35h10v8H28zm24 0h10v8H52zm24 0h10v8H76zm24 0h4v8h-4zM28 85h10v8H28zm24 0h10v8H52zm24 0h10v8H76zm24 0h4v8h-4z" fill="#152135"/>
-</svg>

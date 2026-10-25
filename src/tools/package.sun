@@ -52,7 +52,7 @@ module editor_package {
     var cleared = try capture(clear);
     try install_file(target.output.clone(a), `${destination}/usr/bin/sun_video_editor`, true);
     try install_file(String("packaging/sun-video-editor.desktop"), `${destination}/usr/share/applications/sun-video-editor.desktop`, false);
-    try install_file(String("packaging/sun-video-editor.svg"), `${destination}/usr/share/icons/hicolor/scalable/apps/sun-video-editor.svg`, false);
+    try install_file(String("packaging/sun-video-editor.png"), `${destination}/usr/share/pixmaps/sun-video-editor.png`, false);
     try install_file(String("debian/copyright"), `${destination}/usr/share/doc/sun-video-editor/copyright`, false);
     var env = std.env.Env(a);
     var gtk_source = match env.get("SUN_GOBJECT_SOURCE") {
