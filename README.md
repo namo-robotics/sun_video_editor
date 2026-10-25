@@ -17,14 +17,11 @@ sun_video_editor
 
 ### Ubuntu
 
-Ubuntu 26.04, x86_64. The repository is currently private; sign in with a GitHub account that has access.
+Ubuntu 26.04, x86_64:
 
 ```sh
-sudo apt install gh &&
-  gh auth login &&
-  gh release download dev --repo namo-robotics/sun_video_editor \
-    --pattern 'sun-video-editor_*_amd64.deb' \
-    --output sun-video-editor-dev.deb --clobber &&
+curl -fL --output sun-video-editor-dev.deb \
+  https://github.com/namo-robotics/sun_video_editor/releases/download/dev/sun-video-editor_0.1.0_amd64.deb &&
   sudo apt install ./sun-video-editor-dev.deb &&
   sun_video_editor
 ```
