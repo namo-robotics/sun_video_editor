@@ -99,7 +99,7 @@ module editor_build {
     var acceptance = std.process.Command(a, "sh");
     acceptance.add_arg("-eu");
     acceptance.add_arg("-c");
-    acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a \"$1\" --self-test");
+    acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test");
     acceptance.add_arg("editor-acceptance");
     acceptance.add_arg(app.output);
     return run(acceptance);

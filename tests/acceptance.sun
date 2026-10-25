@@ -89,10 +89,27 @@ module sun_video_editor {
     if (renderer.media_status(preview) != 1) {
       return SystemResult.Error(Error(1, "Video preview did not decode"));
     }
+    // Decoding can queue a layout change after the media status becomes ready.
     var original_height = renderer.extent(preview, false);
+    var stable_since = std.time.now();
+    deadline = std.time.now();
+    while (deadline.elapsed().as_millis() < 5000) {
+      try turn(renderer, session);
+      var height = renderer.extent(preview, false);
+      if (height != original_height or height <= 0) {
+        original_height = height;
+        stable_since = std.time.now();
+      } else if (stable_since.elapsed().as_millis() >= 300) {
+        break;
+      }
+      std.time.sleep(delay);
+    }
+    if (original_height <= 0 or stable_since.elapsed().as_millis() < 300) {
+      return SystemResult.Error(Error(1, "Preview layout did not settle before resizing"));
+    }
     try renderer.set_default_size(1160, 1200);
     deadline = std.time.now();
-    while (deadline.elapsed().as_millis() < 1500) {
+    while (renderer.extent(preview, false) <= original_height + 100 and deadline.elapsed().as_millis() < 5000) {
       try turn(renderer, session);
       std.time.sleep(delay);
     }
@@ -104,7 +121,7 @@ module sun_video_editor {
     }
     try renderer.set_default_size(1160, 860);
     deadline = std.time.now();
-    while (deadline.elapsed().as_millis() < 1500) {
+    while (renderer.extent(preview, false) > original_height + 10 and deadline.elapsed().as_millis() < 5000) {
       try turn(renderer, session);
       std.time.sleep(delay);
     }
