@@ -226,7 +226,7 @@ This is a command-line-launched GTK application, with Homebrew-managed media-ena
 self-contained Finder `.app`.
 
 For local development on an Apple Silicon Mac, install the dependencies listed in
-`.github/workflows/macos.yml`, run
+`.github/workflows/ci.yml`, run
 `./scripts/install-dependencies.sh` and `./scripts/package-macos.sh`.
 The package script runs the tests before archiving.
 
