@@ -74,6 +74,9 @@ module video {
     if (format == 4) {
       return ".avi";
     }
+    if (format == 5) {
+      return ".gif";
+    }
     return ".mp4";
   }
 
@@ -84,7 +87,7 @@ module video {
       return String("");
     }
     var length = path.length();
-    for (var i: i64 = 0; i < 5; i += 1) {
+    for (var i: i64 = 0; i < 6; i += 1) {
       if (path.ends_with(extension(i))) {
         length -= i == 2 ? 5 : 4;
         break;
@@ -100,6 +103,9 @@ module video {
 
   /** Describes the compatible codecs chosen automatically for the container. */
   public function encoding_label(format: i64, audio: bool) String {
+    if (format == 5) {
+      return String("Animated GIF · loops forever · no audio");
+    }
     if (format == 2) {
       return String(audio ? "VP9 video · Opus audio" : "VP9 video · no audio");
     }
@@ -263,10 +269,19 @@ module video {
     if (start >= end or end > media.duration + 0.001) {
       return SystemResult.Error(Error(1, "Trim must satisfy 0 <= start < end <= video duration"));
     }
-    if (settings.format < 0 or settings.format > 4 or settings.quality < 0 or settings.quality > 4 or settings.resolution < 0 or settings.resolution > 4) {
+    if (settings.format < 0 or settings.format > 5 or settings.quality < 0 or settings.quality > 4 or settings.resolution < 0 or settings.resolution > 4) {
       return SystemResult.Error(Error(1, "Invalid export preset"));
     }
     return SystemResult.Ok(end - start);
+  }
+
+  /** Shares aspect-preserving resolution limits between video and animation exports. */
+  function scale_filter(resolution: i64) String {
+    if (resolution == 0) {
+      return String("scale=w=-2:h=trunc(ih/2)*2:reset_sar=1");
+    }
+    var limit = resolution == 1 ? 2160 : (resolution == 2 ? 1080 : (resolution == 3 ? 720 : 480));
+    return `scale=w='min(iw,${limit})':h='min(ih,${limit})':force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1`;
   }
 
   /** Constructs a container-compatible export with frame-accurate transcoding and bounded CPU use. */
@@ -288,6 +303,30 @@ module video {
     command.add_arg(settings.input);
     command.add_arg("-t");
     command.add_arg(`${duration}`);
+    if (settings.format == 5) {
+      var fps = settings.quality == 0 ? 30 : (settings.quality == 1 ? 24 : (settings.quality == 2 ? 20 : (settings.quality == 3 ? 15 : 10)));
+      var colors = settings.quality < 2 ? 256 : (settings.quality == 2 ? 128 : (settings.quality == 3 ? 96 : 64));
+      var scale = scale_filter(settings.resolution);
+      command.add_arg("-filter_complex_threads");
+      command.add_arg("1");
+      command.add_arg("-filter_complex");
+      command.add_arg(`[0:v:0]trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`);
+      command.add_arg("-map");
+      command.add_arg("[gif]");
+      command.add_arg("-an");
+      command.add_arg("-c:v");
+      command.add_arg("gif");
+      command.add_arg("-threads");
+      command.add_arg("2");
+      command.add_arg("-loop");
+      command.add_arg("0");
+      command.add_arg("-map_metadata");
+      command.add_arg("-1");
+      command.add_arg("-f");
+      command.add_arg("gif");
+      command.add_arg(temporary);
+      return SystemResult.Ok(command);
+    }
     command.add_arg("-map");
     command.add_arg("0:v:0");
     if (settings.audio) {
@@ -323,12 +362,7 @@ module video {
     command.add_arg("-pix_fmt");
     command.add_arg("yuv420p");
     command.add_arg("-vf");
-    if (settings.resolution == 0) {
-      command.add_arg("scale=w=-2:h=trunc(ih/2)*2:reset_sar=1");
-    } else {
-      var limit = settings.resolution == 1 ? 2160 : (settings.resolution == 2 ? 1080 : (settings.resolution == 3 ? 720 : 480));
-      command.add_arg(`scale=w='min(iw,${limit})':h='min(ih,${limit})':force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1`);
-    }
+    command.add_arg(scale_filter(settings.resolution));
     if (settings.audio) {
       command.add_arg("-c:a");
       command.add_arg(settings.format == 2 ? "libopus" : (settings.format == 4 ? "libmp3lame" : "aac"));

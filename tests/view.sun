@@ -56,4 +56,23 @@ module sun_video_editor {
       }
     }
   }
+
+  /** Disables GIF audio without losing the user's video audio preference. */
+  test_function gif_audio_availability() ViewResult {
+    var state = State();
+    for (var format: i64 = 5; format >= 0; format -= 5) {
+      state.settings.format = format;
+      var description = view(state);
+      var found = false;
+      for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+        var node = description.elements[i];
+        if (node.action == 8) {
+          found = true;
+          try std.test.assert(node.enabled == (format != 5));
+          try std.test.assert(node.checked == (format != 5));
+        }
+      }
+      try std.test.assert(found and state.settings.audio);
+    }
+  }
 }

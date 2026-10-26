@@ -45,7 +45,7 @@
               <LabeledField text="Format">
                 <LabeledField.body>
                   <Select selected="{state.settings.format}" changeAction="5" enabled="{state.job.mode == 0}">
-                    <Select.Options><Option key="{0}" text="MP4 · widely compatible" /><Option key="{1}" text="MOV · QuickTime" /><Option key="{2}" text="WebM · web video" /><Option key="{3}" text="MKV · flexible container" /><Option key="{4}" text="AVI · legacy devices" /></Select.Options>
+                    <Select.Options><Option key="{0}" text="MP4 · widely compatible" /><Option key="{1}" text="MOV · QuickTime" /><Option key="{2}" text="WebM · web video" /><Option key="{3}" text="MKV · flexible container" /><Option key="{4}" text="AVI · legacy devices" /><Option key="{5}" text="GIF · animated image" /></Select.Options>
                   </Select>
                 </LabeledField.body>
               </LabeledField>
@@ -63,7 +63,7 @@
                   </Select>
                 </LabeledField.body>
               </LabeledField>
-              <Checkbox text="Keep audio" checked="{state.settings.audio}" changeAction="8" enabled="{state.job.mode == 0}" />
+              <Checkbox text="Keep audio" checked="{state.settings.audio and state.settings.format != 5}" changeAction="8" enabled="{state.job.mode == 0 and state.settings.format != 5}" />
               <LabeledField text="Save as">
                 <LabeledField.body>
                   <TextInput value="{state.settings.output.clone(a)}" changeAction="2" enabled="{state.job.mode == 0}" />
@@ -71,7 +71,7 @@
               </LabeledField>
               <Button text="Choose destination…" action="14" enabled="{state.job.mode == 0}" />
               <Checkbox text="Replace existing output" checked="{state.settings.overwrite}" changeAction="9" enabled="{state.job.mode == 0}" />
-              <Button text="Export video" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
+              <Button text="Export" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
               <Button text="Cancel export" action="12" visible="{state.job.mode != 0}" enabled="{state.job.mode != 0}" />
               <Label text="{progress_label(state)}" foregroundResource="accent" horizontal="Start" />
               <Label text="Your original stays untouched." styleResource="muted" horizontal="Start" />

@@ -8,9 +8,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Build dependencies",
+      "label": "Download release dependencies",
       "type": "shell",
-      "command": "./scripts/build-dependencies.sh",
+      "command": "./scripts/install-dependencies.sh",
       "problemMatcher": []
     },
     {

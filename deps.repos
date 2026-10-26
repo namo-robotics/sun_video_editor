@@ -1,9 +1,2 @@
-repositories:
-  src/sun_ui:
-    type: git
-    url: git@github.com:namo-robotics/sun_ui.git
-    version: main
-  src/sun_gobject:
-    type: git
-    url: git@github.com:namo-robotics/sun_gobject.git
-    version: main
+# Dependencies are installed from published releases by scripts/install-dependencies.sh.
+repositories: {}

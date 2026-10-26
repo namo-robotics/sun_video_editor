@@ -16,16 +16,22 @@ Agent instructions are provided in both `AGENTS.md` and `CLAUDE.md`.
 Run from this repository's root:
 
 ```sh
-vcs import --input deps.repos .
-./scripts/build-dependencies.sh
+./scripts/install-dependencies.sh
 ./build.sh
 ./build/sun_video_editor
 ```
 
-`deps.repos` tracks `main` for the independent checkouts `src/sun_ui` and
-`src/sun_gobject`. These directories are ignored by this repository. Do not
-recursively import sun_ui's dependency manifest: it also lists this editor as an
-optional consumer. Both dependency bundles must use the same Sun compiler.
+The installer downloads published `sun_ui` and `sun_gobject` release assets into
+`build/dependencies/`. Linux uses Debian packages; macOS uses Apple Silicon
+archives. The `sun-ui` Debian package includes `sun-viewc`, and `sun-gobject`
+includes the native archive. Both packages include license notices and compiler
+version records, checked against the installed compiler before installation.
+No dependency sources are imported or built; `deps.repos` is empty.
+
+Release tags default to `dev` and can be selected with `SUN_UI_RELEASE` and
+`SUN_GOBJECT_RELEASE`. Missing assets or compiler mismatches stop setup without
+a source-build fallback. For an offline build, put the release assets in one
+directory and run `./scripts/install-dependencies.sh --from-directory /path/to/assets`.
 
 For incremental work:
 
@@ -34,9 +40,8 @@ For incremental work:
 ./build.sh --test
 ```
 
-The editor can also use existing dependency builds through `SUN_UI_BUILD` and
-`SUN_GOBJECT_BUILD`. For example, when checked out under a sun_ui workspace,
-point them at that workspace's `build` and `src/sun_gobject/build` directories.
+The editor can also use compatible prebuilt dependency bundles through
+`SUN_UI_BUILD` and `SUN_GOBJECT_BUILD`.
 Packaging additionally accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for the
 corresponding license files.
 
@@ -138,7 +143,7 @@ snapcraft release sun-video-editor REVISION stable
    source panel shows the selected filename. You can also
    launch `./build/sun_video_editor /path/to/video.mov`.
 2. Choose MP4 (widely compatible), MOV (QuickTime), WebM (web video),
-   MKV (flexible container), or AVI (legacy devices). Changing the format updates
+   MKV (flexible container), AVI (legacy devices), or GIF (animated image). Changing the format updates
    the output extension and clears any previous overwrite confirmation.
 3. Choose **Best quality**, **High quality**, **Balanced** (recommended),
    **Smaller file**, or **Smallest file**. Keep the original resolution or limit
@@ -150,7 +155,7 @@ snapcraft release sun-video-editor REVISION stable
    the track to seek and use **Play selection** to preview the selected interval.
    The time fields stay synchronized and allow exact edits in seconds or
    `HH:MM:SS`, including fractional seconds. **Reset trim** restores the full clip.
-5. Choose whether to keep audio and press **Export video**. **Cancel export**
+5. Choose whether to keep audio and press **Export**. **Cancel export**
    stops the job.
 
 With the timeline focused, arrow keys scrub, Shift+arrows move the start handle,
@@ -221,8 +226,8 @@ This is a command-line-launched GTK application, with Homebrew-managed media-ena
 self-contained Finder `.app`.
 
 For local development on an Apple Silicon Mac, install the dependencies listed in
-`.github/workflows/macos.yml`, import `deps.repos`, then run
-`./scripts/build-macos-dependencies.sh` and `./scripts/package-macos.sh`.
+`.github/workflows/macos.yml`, run
+`./scripts/install-dependencies.sh` and `./scripts/package-macos.sh`.
 The package script runs the tests before archiving.
 
 Automatic tap updates require an Actions secret named `TAP_TOKEN` with Contents

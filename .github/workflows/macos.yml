@@ -17,20 +17,12 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           brew install namo-robotics/sun/sun namo-robotics/sun/sun-gtk4 librsvg gstreamer ffmpeg coreutils cmake ninja pkgconf gobject-introspection
-          python3 -m venv .toolchain/vcs
-          .toolchain/vcs/bin/pip install vcs2l==1.1.7
       - name: Select GTK with media playback
         run: |
           echo "PKG_CONFIG_PATH=$(brew --prefix sun-gtk4)/lib/pkgconfig:$(brew --prefix libffi)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
           echo "SUN_GTK_PREFIX=$(brew --prefix sun-gtk4)" >> "$GITHUB_ENV"
-      - name: Import dependencies
-        env:
-          GIT_CONFIG_COUNT: 1
-          GIT_CONFIG_KEY_0: url.https://github.com/.insteadOf
-          GIT_CONFIG_VALUE_0: 'git@github.com:'
-        run: .toolchain/vcs/bin/vcs import --input deps.repos .
-      - name: Build native dependency bundles
-        run: ./scripts/build-macos-dependencies.sh
+      - name: Download published dependency bundles
+        run: ./scripts/install-dependencies.sh
       - name: Build, test, and package the editor
         env:
           # The hosted display cannot accommodate the 1200px resize target.

@@ -6,15 +6,15 @@ A file for guiding coding agents.
 
 - Never use git commands except readonly ones like `git status` and `git diff`.
 - Run commands from this repository's root. Keep temporary files in `tmp/` and generated artifacts in `build/`.
-- Import dependencies with `vcs import --input deps.repos .`, then run `./scripts/build-dependencies.sh`.
+- Download published dependencies with `./scripts/install-dependencies.sh`. Do not import or build dependency source checkouts.
 - Build and test the editor: `./build.sh`. Build only: `./build.sh --build`. Tests: `./build.sh --test`. Debian package: `./build.sh --package`.
 - Implement build tooling in Sun under `src/tools/`; declare products in `sun-config.json` and select them by name.
 - Keep application source and XML in `src/`, tests in `tests/`, and desktop assets in `packaging/`.
 - Format only first-party paths: `sun fmt src/main.sun src/state.sun src/view.sun src/media.sun src/process.sun src/job.sun src/tools tests`.
-- Never recursively format `src/`: `src/sun_ui/` and `src/sun_gobject/` are independent vcs2l checkouts. Read their AGENTS.md before changing them.
-- `deps.repos` lists only sun_ui and sun_gobject. Do not recursively import sun_ui's dependency manifest, which includes this application as an optional consumer.
+- Format only first-party sources; never modify downloaded dependency artifacts.
+- `deps.repos` imports no repositories. Released bundles, tools, native libraries, and license notices are stored in `build/dependencies/`.
 - Native GTK ownership and callbacks belong in sun_gobject; UI components use sun_ui's public API and keep application state explicitly owned.
-- For a checkout inside sun_ui, use `SUN_UI_BUILD` and `SUN_GOBJECT_BUILD` to select the parent workspace's bundles. Packaging also accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for license notices.
+- Default dependencies come from `build/dependencies/`. Explicit `SUN_UI_BUILD` and `SUN_GOBJECT_BUILD` overrides select other compatible bundles; packaging also accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for license notices.
 - Keep FFmpeg and ffprobe at version 8 or newer. Run media and GTK acceptance tests for changes to exports, trimming, or preview behavior.
 - The repository and executable are named `sun_video_editor`; Debian and Snap package identifiers are `sun-video-editor` because those formats do not permit underscores.
 

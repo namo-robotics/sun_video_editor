@@ -14,8 +14,6 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
     && echo 'ubuntu ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
 COPY scripts/bootstrap-sun.sh /usr/local/bin/install-sun-dev
 RUN bash /usr/local/bin/install-sun-dev --update
-RUN python3 -m venv /opt/vcs2l && /opt/vcs2l/bin/pip install --no-cache-dir vcs2l==1.1.7
-ENV PATH="/opt/vcs2l/bin:${PATH}"
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 CCACHE_MAXSIZE=10G
 USER ubuntu
 # Create mount destinations as the remote user so Docker does not create root-owned parents.

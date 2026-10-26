@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build development image
         run: docker build -t sun-video-editor-dev .
-      - name: Build dependencies, test, and package
+      - name: Download release dependencies, test, and package
         # The runner UID has no writable home in the image; keep GTK data and caches in the workspace.
         run: >-
           docker run --rm --user "$(id -u):$(id -g)"
@@ -23,12 +23,9 @@ jobs:
           -e XDG_DATA_HOME=/workspaces/sun_video_editor/tmp/ci/data
           -e XDG_CACHE_HOME=/workspaces/sun_video_editor/tmp/ci/cache
           -e XDG_CONFIG_HOME=/workspaces/sun_video_editor/tmp/ci/config
-          -e GIT_CONFIG_COUNT=1
-          -e GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf
-          -e GIT_CONFIG_VALUE_0=git@github.com:
           -v "$PWD:/workspaces/sun_video_editor" sun-video-editor-dev
           bash -o pipefail -c 'mkdir -p build "$XDG_DATA_HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME" &&
-          { vcs import --input deps.repos . && ./scripts/build-dependencies.sh && ./build.sh --package; } 2>&1 | tee build/package-tests.log'
+          { ./scripts/install-dependencies.sh && ./build.sh --package; } 2>&1 | tee build/package-tests.log'
       - name: Archive tested Snap payload
         run: tar -C build/editor-package/root -czf build/snap-payload.tar.gz .
       - uses: actions/upload-artifact@v4

@@ -60,7 +60,7 @@ module sun_video_editor {
       }
     } else if (event.value.kind == ui.ValueKind.Selection) {
       var value: i64 = -1;
-      for (var i: i64 = 0; i < 5; i += 1) {
+      for (var i: i64 = 0; i < (event.action == 5 ? 6 : 5); i += 1) {
         var key = ui.Key(i);
         if (event.value.selection.equals(key)) {
           value = i;
@@ -81,7 +81,7 @@ module sun_video_editor {
         state.settings.resolution = value;
       }
     } else if (event.value.kind == ui.ValueKind.Boolean) {
-      if (event.action == 8) {
+      if (event.action == 8 and state.settings.format != 5) {
         state.settings.audio = event.value.boolean;
       }
       if (event.action == 9) {

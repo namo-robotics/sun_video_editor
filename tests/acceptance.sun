@@ -57,7 +57,7 @@ module sun_video_editor {
       return SystemResult.Error(Error(1, "UI probe failed"));
     }
     var empty = String("");
-    for (var format: i32 = 4; format >= 0; format -= 1) {
+    for (var format: i32 = 5; format >= 0; format -= 1) {
       session.state.settings.overwrite = true;
       try renderer.edit(control(session, 5, false), empty, format);
       try turn(renderer, session);
@@ -192,6 +192,22 @@ module sun_video_editor {
     if (exported.media.duration < 1.4 or exported.media.duration > 1.6) {
       return SystemResult.Error(Error(1, "Export did not use the dragged trim interval"));
     }
+    try renderer.edit(control(session, 5, false), empty, 5);
+    try turn(renderer, session);
+    var gif = fixture.path("ui-output.gif");
+    renderer.click(control(session, 11, false));
+    try turn(renderer, session);
+    try wait_job(renderer, session);
+    if (session.state.job.percent != 100 or not std.io.exists(gif)) {
+      return SystemResult.Error(Error(1, "UI GIF export failed"));
+    }
+    try exported.probe(gif);
+    try video_fixtures.finish(exported);
+    if (not exported.media.codec.equals_literal("gif") or not exported.media.audio.equals_literal("none") or exported.media.duration < 1.4 or exported.media.duration > 1.6) {
+      return SystemResult.Error(Error(1, "UI GIF export did not preserve the trim interval"));
+    }
+    try renderer.edit(control(session, 5, false), empty, 0);
+    try turn(renderer, session);
     var manual = String("1.0");
     try renderer.edit(control(session, 3, false), manual, 0);
     try turn(renderer, session);

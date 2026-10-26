@@ -57,11 +57,11 @@ module editor_package {
     var env = std.env.Env(a);
     var gtk_source = match env.get("SUN_GOBJECT_SOURCE") {
       Option.Some(value) => value.clone(a),
-      Option.None => String("src/sun_gobject")
+      Option.None => String("build/dependencies/sun_gobject")
     };
     var ui_source = match env.get("SUN_UI_SOURCE") {
       Option.Some(value) => value.clone(a),
-      Option.None => String("src/sun_ui")
+      Option.None => String("build/dependencies/sun_ui")
     };
     try install_file(`${ui_source}/LICENSE`, `${destination}/usr/share/doc/sun-video-editor/copyright.sun_ui`, false);
     try install_file(`${gtk_source}/LICENSE`, `${destination}/usr/share/doc/sun-video-editor/copyright.sun_gobject`, false);

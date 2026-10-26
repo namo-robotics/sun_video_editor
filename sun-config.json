@@ -2,8 +2,8 @@
   "root": true,
   "sun_path": [
     "build",
-    "src/sun_ui/build",
-    "src/sun_gobject/build"
+    "build/dependencies/sun_ui/build",
+    "build/dependencies/sun_gobject/build"
   ],
   "entrypoints": [
     {

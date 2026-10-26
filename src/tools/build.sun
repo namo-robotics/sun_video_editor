@@ -33,8 +33,8 @@ module editor_build {
     command.add_arg("-o");
     command.add_arg(target.output);
     command.add_arg("--lib-path");
-    command.add_arg(setting("SUN_UI_BUILD", "src/sun_ui/build"));
-    var dependency = setting("SUN_GOBJECT_BUILD", "src/sun_gobject/build");
+    command.add_arg(setting("SUN_UI_BUILD", "build/dependencies/sun_ui/build"));
+    var dependency = setting("SUN_GOBJECT_BUILD", "build/dependencies/sun_gobject/build");
     command.add_arg("--lib-path");
     command.add_arg(dependency);
     if (gtk) {
@@ -74,10 +74,10 @@ module editor_build {
     mkdir.add_arg("build");
     mkdir.add_arg("tmp");
     try run(mkdir);
-    var ui = setting("SUN_UI_BUILD", "src/sun_ui/build");
+    var ui = setting("SUN_UI_BUILD", "build/dependencies/sun_ui/build");
     var generator = `${ui}/sun-viewc`;
     if (not std.io.is_file(generator)) {
-      return SystemResult.Error(Error(1, "Build the sun_ui dependency or set SUN_UI_BUILD to its build directory"));
+      return SystemResult.Error(Error(1, "Run scripts/install-dependencies.sh to download the published dependencies"));
     }
     var version = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
     version.add_arg("--version");

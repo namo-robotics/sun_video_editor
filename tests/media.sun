@@ -129,7 +129,7 @@ module video_tests {
     settings.input = fixture.input.clone(a);
     settings.start = String("0.5");
     settings.end = String("1.5");
-    for (var format: i64 = 0; format < 5; format += 1) {
+    for (var format: i64 = 0; format < 6; format += 1) {
       var largest: i64 = 0;
       settings.format = format;
       for (var quality: i64 = 0; quality < 5; quality += 1) {
@@ -151,12 +151,34 @@ module video_tests {
         try result.probe(settings.output);
         try video_fixtures.finish(result);
         try std.test.assert(result.media.duration >= 0.9 and result.media.duration <= 1.3);
-        var codec = String(format == 2 ? "vp9" : (format == 4 ? "mpeg4" : "h264"));
-        var audio = String(quality == 4 ? "none" : (format == 2 ? "opus" : (format == 4 ? "mp3" : "aac")));
+        var codec = String(format == 5 ? "gif" : (format == 2 ? "vp9" : (format == 4 ? "mpeg4" : "h264")));
+        var audio = String(quality == 4 or format == 5 ? "none" : (format == 2 ? "opus" : (format == 4 ? "mp3" : "aac")));
         try std.test.assert(result.media.codec.equals(codec));
         try std.test.assert(result.media.audio.equals(audio));
         try std.test.assert_eq(result.media.width, 320);
         try std.test.assert_eq(result.media.height, 240);
+        if (format == 5) {
+          var frames = std.process.Command(a, "ffprobe");
+          frames.add_arg("-v");
+          frames.add_arg("error");
+          frames.add_arg("-ignore_loop");
+          frames.add_arg("1");
+          frames.add_arg("-count_frames");
+          frames.add_arg("-select_streams");
+          frames.add_arg("v:0");
+          frames.add_arg("-show_entries");
+          frames.add_arg("stream=nb_read_frames");
+          frames.add_arg("-of");
+          frames.add_arg("default=noprint_wrappers=1:nokey=1");
+          frames.add_arg(settings.output);
+          var count = try video.capture(frames);
+          var expected = quality == 0 ? 30 : (quality == 1 ? 24 : (quality == 2 ? 20 : (quality == 3 ? 15 : 10)));
+          var number = match count.parse_i64() {
+            Option.Some(value) => value,
+            Option.None => 0
+          };
+          try std.test.assert_eq(number, expected);
+        }
       }
     }
     return TestResult.Ok;
@@ -170,6 +192,10 @@ module video_tests {
     path = String("/videos.mp4/clip");
     changed = video.output_path(path, 4);
     try std.test.assert(changed.equals_literal("/videos.mp4/clip.avi"));
+    changed = video.output_path(changed, 5);
+    try std.test.assert(changed.equals_literal("/videos.mp4/clip.gif"));
+    changed = video.output_path(changed, 0);
+    try std.test.assert(changed.equals_literal("/videos.mp4/clip.mp4"));
     path = String("");
     changed = video.output_path(path, 2);
     try std.test.assert(changed.is_empty());
@@ -177,7 +203,7 @@ module video_tests {
     var media = video.Media();
     media.duration = 4.0;
     for (var i: i64 = 0; i < 3; i += 1) {
-      settings.format = i == 0 ? 5 : 0;
+      settings.format = i == 0 ? 6 : 0;
       settings.quality = i == 1 ? 5 : 2;
       settings.resolution = i == 2 ? 5 : 0;
       match video.trim_length(settings, media) {
@@ -335,6 +361,15 @@ module video_tests {
     try video_fixtures.finish(smaller);
     try std.test.assert_eq(smaller.media.width, 480);
     try std.test.assert_eq(smaller.media.height, 360);
+    settings.format = 5;
+    settings.output = fixture.path("480.gif");
+    try job.convert(settings);
+    try video_fixtures.finish(job);
+    try smaller.probe(settings.output);
+    try video_fixtures.finish(smaller);
+    try std.test.assert_eq(smaller.media.width, 480);
+    try std.test.assert_eq(smaller.media.height, 360);
+    settings.format = 0;
     settings.resolution = 1;
     settings.output = fixture.path("2160.mp4");
     try job.convert(settings);
