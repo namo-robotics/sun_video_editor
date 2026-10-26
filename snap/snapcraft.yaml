@@ -38,4 +38,4 @@ slots:
   ui-application:
     interface: dbus
     bus: session
-    name: org.sunlang.UIPrototype
+    name: org.namo_robotics.VideoEditor

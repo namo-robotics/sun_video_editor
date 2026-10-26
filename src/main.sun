@@ -128,7 +128,7 @@ module sun_video_editor {
   public function run(automated: bool, initial: const ref String) SystemResult<void> {
     try dependencies();
     var title = String("Sun Video Editor");
-    var renderer = try ui_gtk.Renderer(title);
+    var renderer = try ui_gtk.Renderer(title, String("org.namo_robotics.VideoEditor"));
     try renderer.set_default_size(1160, 860);
     var state = State();
     if (not initial.is_empty()) {
