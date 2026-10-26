@@ -3,8 +3,9 @@ using std;
 /** Builds the editor against independently managed UI and GTK dependency bundles. */
 module editor_build {
 
-  /** Runs a command and preserves its failure status. */
+  /** Runs a noninteractive build command without exposing the controlling terminal. */
   function run(command: ref std.process.Command) SystemResult<void> {
+    command.set_stdin(std.process.Stdio.Null);
     var status = try command.status();
     if (status != 0) {
       return SystemResult.Error(Error(status, "Build command failed"));
