@@ -21,17 +21,24 @@ Run from this repository's root:
 ./build/sun_video_editor
 ```
 
+The installer first installs missing system dependencies with apt-get (using
+sudo when needed) on Ubuntu, or Homebrew on macOS. This includes GTK development
+libraries, media dependencies, and test tools, plus Debian packaging tools on
+Ubuntu. It verifies that FFmpeg and ffprobe are version 8 or newer.
+
 The installer downloads published `sun_ui` and `sun_gobject` release assets into
 `build/dependencies/`. Linux uses Debian packages; macOS uses Apple Silicon
 archives. The `sun-ui` Debian package includes `sun-viewc`, and `sun-gobject`
 includes the native archive. Both packages include license notices and compiler
-version records, checked against the installed compiler before installation.
+version records. Version differences are informational; Sun enforces bundle
+compatibility during compilation.
 No dependency sources are imported or built; `deps.repos` is empty.
 
 Release tags default to `dev` and can be selected with `SUN_UI_RELEASE` and
-`SUN_GOBJECT_RELEASE`. Missing assets or compiler mismatches stop setup without
+`SUN_GOBJECT_RELEASE`. Missing assets stop setup without
 a source-build fallback. For an offline build, put the release assets in one
 directory and run `./scripts/install-dependencies.sh --from-directory /path/to/assets`.
+Offline setup requires the system packages and Sun compiler to be installed already.
 
 For incremental work:
 
@@ -225,9 +232,9 @@ This is a command-line-launched GTK application, with Homebrew-managed media-ena
 8+, GStreamer, and GNU coreutils. The binary is ad-hoc signed; it is not a notarized,
 self-contained Finder `.app`.
 
-For local development on an Apple Silicon Mac, install the dependencies listed in
-`.github/workflows/ci.yml`, run
+For local development on an Apple Silicon Mac, install Homebrew, then run
 `./scripts/install-dependencies.sh` and `./scripts/package-macos.sh`.
+The build script selects the media-enabled `sun-gtk4` pkg-config paths.
 The package script runs the tests before archiving.
 
 Automatic tap updates require an Actions secret named `TAP_TOKEN` with Contents

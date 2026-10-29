@@ -39,18 +39,23 @@ Reopen in Container**. The development container provides the Sun compiler,
 native build dependencies, FFmpeg 8+, and test tools. The editor uses published
 `sun_ui` and `sun_gobject` releases; no dependency source checkouts are needed.
 
-From the editor repository root inside the container, download the released
-dependencies, then build the local Debian package:
+From the editor repository root, either on Ubuntu directly or inside the
+container, install the dependencies and build the local Debian package:
 
 ```sh
 ./scripts/install-dependencies.sh
 ./build.sh --package
 ```
 
-The dependency installer extracts the published Debian packages into
-`build/dependencies/`, including `sun-viewc` from the `sun-ui` package. It checks
-that both releases match your Sun compiler and never builds dependencies from
-source. The default release tag is `dev`; `SUN_UI_RELEASE` and
+The dependency installer installs missing system packages with `apt-get`, using
+`sudo` when needed. These include GTK development files, build and packaging
+tools, FFmpeg, GStreamer plugins, and headless test tools. It requires FFmpeg
+and ffprobe 8 or newer. Already installed packages are left in place.
+
+It also extracts the published Debian packages into `build/dependencies/`,
+including `sun-viewc` from the `sun-ui` package. Compiler version differences
+are informational; Sun checks bundle compatibility during the build. No
+dependency sources are built. The default release tag is `dev`; `SUN_UI_RELEASE` and
 `SUN_GOBJECT_RELEASE` can select another tag with the same asset names.
 
 The package command builds the editor and runs its media and desktop acceptance

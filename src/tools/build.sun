@@ -53,7 +53,8 @@ module editor_build {
       }
       var output = try pkg.output();
       if (output.status() != 0) {
-        return SystemResult.Error(Error(1, "Install GTK development packages"));
+        eprint(output.stderr());
+        return SystemResult.Error(Error(1, "Cannot build the editor: pkg-config could not resolve GTK development libraries. Run ./scripts/install-dependencies.sh, then retry ./build.sh. No executable or package was produced by this attempt."));
       }
       var flags = output.stdout().split_whitespace(a);
       for (var flag: ref String in flags) {

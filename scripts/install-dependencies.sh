@@ -9,18 +9,20 @@ elif [[ $# != 0 ]]; then
   echo 'Usage: install-dependencies.sh [--from-directory DIRECTORY]' >&2
   exit 1
 fi
-./scripts/bootstrap-sun.sh
 mkdir -p tmp build/dependencies
 staging=$(mktemp -d "$PWD/tmp/releases.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
-compiler_version=$("${SUN_EXECUTABLE:-sun}" --version 2>&1)
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) platform=linux ;;
   Darwin-arm64) platform=macos ;;
   *) echo 'Release dependencies support Linux x86_64 and macOS arm64.' >&2; exit 1 ;;
 esac
 
-# Keep both installations staged until all assets and compiler versions have been checked.
+./scripts/install-system-dependencies.sh
+./scripts/bootstrap-sun.sh
+compiler_version=$("${SUN_EXECUTABLE:-sun}" --version 2>&1)
+
+# Keep both installations staged until all required assets have been checked.
 for dependency in sun_ui sun_gobject; do
   package=${dependency//_/-}
   if [[ $dependency == sun_ui ]]; then
@@ -57,10 +59,10 @@ for dependency in sun_ui sun_gobject; do
     license=LICENSE
   fi
   if [[ $(cat "$notices/sun-version.txt") != "$compiler_version" ]]; then
-    echo "$dependency release requires the compiler recorded in its sun-version.txt:" >&2
+    # Producer versions are provenance; Sun checks bundle compatibility when building.
+    echo "$dependency was built with a different compiler; Sun will check bundle compatibility during the build:" >&2
     cat "$notices/sun-version.txt" >&2
-    echo "Installed compiler: $compiler_version" >&2
-    exit 1
+    printf '\nInstalled compiler: %s\n' "$compiler_version" >&2
   fi
   target="$staging/$dependency"
   mkdir -p "$target/build"
