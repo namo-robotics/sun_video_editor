@@ -47,8 +47,20 @@ For incremental work:
 ./build.sh --test
 ```
 
+On Linux, the GTK acceptance test runs under Xvfb with a private D-Bus session
+and portal access disabled. This keeps the headless test independent of desktop
+portal services and their document mounts, while GTK warnings remain fatal.
+
 The editor can also use compatible prebuilt dependency bundles through
-`SUN_UI_BUILD` and `SUN_GOBJECT_BUILD`.
+`SUN_UI_BUILD` and `SUN_GOBJECT_BUILD`. The build tool supplies dependency search
+paths so these overrides take precedence over the downloaded defaults.
+Capture previews require toolkit bundles containing the `Image` widget and
+the `Video` widget’s `trimControls` option.
+For the locally built toolkit checkouts, run:
+
+```sh
+SUN_UI_BUILD="$PWD/../sun_ui/build" SUN_GOBJECT_BUILD="$PWD/../sun_gobject/build" ./build.sh
+```
 Packaging additionally accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for the
 corresponding license files.
 
@@ -198,6 +210,76 @@ named `<output>.sun-video.*`; these are not completed exports.
 HDR/BT.2020 sources are rejected until color-managed conversion is implemented.
 There is no batch queue, hardware encoding, or lossless trim mode. The interface reports bounded FFmpeg diagnostics for invalid or unsupported
 inputs and failed encodes.
+
+## Screencast
+
+The app starts in a compact window with two icon tiles for Video Editor and
+Screencast. Opening a tool expands the window; returning home restores its compact size. A file
+passed on the command line still opens directly in the editor. Returning home
+preserves the current editor settings and source; navigation is disabled during
+active conversion or capture.
+
+Capture settings and process ownership live in `src/capture.sun`. The companion
+`src/tools/capture.py` owns the asynchronous desktop portal connection, received
+PipeWire file descriptor, and GStreamer callbacks. Python GI is used for these
+native APIs because the published Sun UI bindings do not expose them. No GTK
+objects or callbacks are added to application code.
+
+Screenshots and recordings use the ScreenCast portal. The permission dialog selects
+one screen or window before the delay begins. Area selection also finishes before
+the countdown; no frame is captured until that countdown expires.
+Screenshot and Recording icon buttons select PNG or WebM capture, with the current
+mode highlighted. The Screen, Window, and Selection icon buttons highlight the current source.
+For **Selection**, the helper grabs the pointer and displays a small instruction
+bar plus one hollow outline window on the live authorized screen using the
+portal's screen position and size. A directly owned X11 window has a hollow bounding shape. Move, resize, shape
+replacement, and repaint are serialized on one connection, avoiding Tk wrapper
+resizes and retained edge fragments.
+It never creates a screen-sized filled window
+or depends on compositor opacity, so the desktop stays visible while dragging. Dragging and
+releasing confirms the rectangle; Esc cancels. No PipeWire connection, preview
+frame, or output file is created before selection. The overlay is destroyed
+before the countdown starts. Capture then opens the stream and maps the logical
+rectangle to actual stream pixels before cropping and encoding. A stream size
+change during capture stops the operation rather than silently moving the crop.
+Live selection requires an Ubuntu desktop with XWayland and portal
+screen geometry; unsupported or out-of-bounds layouts fail explicitly.
+Screenshots retain the portal stream's full pixel resolution as lossless PNG;
+recordings retain that resolution as VP8 WebM, capped at 30 fps. Recording uses
+constrained quality with a resolution-scaled bitrate budget (about 15.6 Mb/s for
+1080p and 62.2 Mb/s for 4K) instead of the encoder's low default bitrate.
+Small selected areas retain their actual pixel dimensions; captures are never
+upscaled to pretend to add detail. PipeWire repeats a still
+frame periodically, and frame-rate conversion drops excess frames without waiting
+for the next one. Stop sharing and Stop and save both drain the encoder downstream
+of the source, including when the source disconnects before the portal notification.
+Other encoder and output errors still fail the capture. Stop sends EOS
+and waits for the muxer to finalize. Files are written privately, then published
+without replacing existing paths. Cancellation and normal app shutdown discard
+unfinished output and close the portal session. Forced termination can leave a
+hidden `.sun-capture-*` file in the destination directory.
+
+Ubuntu capture dependencies are `python3-gi`, `gir1.2-gstreamer-1.0`,
+`fonts-noto-core`, `python3-tk`, `gstreamer1.0-pipewire`, and
+`gstreamer1.0-plugins-good`, plus a running desktop
+portal with ScreenCast support. The installer and Debian/Snap payload declare
+the runtime packages. The helper is installed alongside the executable.
+Capture is Ubuntu-only for now; audio is not implemented. Areas are selected
+within a single authorized screen. Snap confinement and real portal capture require desktop validation.
+
+On Linux, `./build.sh --test` additionally runs synthetic PNG/WebM encoder,
+countdown, area selection, exact cropped dimensions, cancellation, and output-cleanup
+tests under a virtual display. GTK acceptance checks the
+home tiles, navigation, and invalid delays without requesting desktop capture.
+For manual Ubuntu validation, test screen, window, and area captures with zero and
+nonzero delays, cancel the chooser and countdown, stop a recording, close the
+app during capture, and play the completed recording inline on the Screencast screen.
+Completed recordings are probed independently of editor state and shown in an
+inline player with standard playback controls and no trim timeline; screenshots
+show an inline image preview. Each preview has a Save as button that copies the
+completed capture to a chosen filename and folder, keeping the original capture.
+The copy runs in the background and is published only after it completes. Completed recordings also offer Open in Video Editor, which loads the saved
+recording and prepares a fresh export destination.
 
 ## Structure and tests
 

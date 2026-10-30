@@ -54,7 +54,12 @@ module editor_build {
       var output = try pkg.output();
       if (output.status() != 0) {
         eprint(output.stderr());
-        return SystemResult.Error(Error(1, "Cannot build the editor: pkg-config could not resolve GTK development libraries. Run ./scripts/install-dependencies.sh, then retry ./build.sh. No executable or package was produced by this attempt."));
+        return SystemResult.Error(
+          Error(
+            1,
+            "Cannot build the editor: pkg-config could not resolve GTK development libraries. Run ./scripts/install-dependencies.sh, then retry ./build.sh. No executable or package was produced by this attempt."
+          )
+        );
       }
       var flags = output.stdout().split_whitespace(a);
       for (var flag: ref String in flags) {
@@ -79,7 +84,9 @@ module editor_build {
     var ui = setting("SUN_UI_BUILD", "build/dependencies/sun_ui/build");
     var generator = `${ui}/sun-viewc`;
     if (not std.io.is_file(generator)) {
-      return SystemResult.Error(Error(1, "Run scripts/install-dependencies.sh to download the published dependencies"));
+      return SystemResult.Error(
+        Error(1, "Run scripts/install-dependencies.sh to download the published dependencies")
+      );
     }
     var version = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
     version.add_arg("--version");
@@ -95,6 +102,10 @@ module editor_build {
     generate.add_arg("src/sun_video_editor.view.xml");
     generate.add_arg("build/generated/sun_video_editor.view.sun");
     try run(generate);
+    var helper = std.process.Command(a, "cp");
+    helper.add_arg("src/tools/capture.py");
+    helper.add_arg("build/sun_video_editor.capture.py");
+    try run(helper);
     try compile("tests", false);
     return compile("sun_video_editor", true);
   }
@@ -114,9 +125,22 @@ module editor_build {
     platform.add_arg("-s");
     var platform_output = try platform.output();
     if (platform_output.stdout().starts_with("Darwin")) {
-      acceptance.add_arg("export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo; gtimeout 60s \"$1\" --self-test");
+      acceptance.add_arg(
+        "export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo; gtimeout 60s \"$1\" --self-test"
+      );
     } else {
-      acceptance.add_arg("export G_DEBUG=fatal-warnings GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test");
+      var capture_tests = std.process.Command(a, "dbus-run-session");
+      capture_tests.add_arg("--");
+      capture_tests.add_arg("xvfb-run");
+      capture_tests.add_arg("-a");
+      capture_tests.add_arg("/usr/bin/python3");
+      capture_tests.add_arg("-B");
+      capture_tests.add_arg("tests/capture_backend.py");
+      try run(capture_tests);
+      // The virtual desktop has no portal services; keep GTK warnings fatal without activating host portals.
+      acceptance.add_arg(
+        "export G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test"
+      );
     }
     acceptance.add_arg("editor-acceptance");
     acceptance.add_arg(app.output);
@@ -159,4 +183,10 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon"], source_files: ["targets.sun"] }
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ], source_files: [
+    "targets.sun"
+  ]
+}

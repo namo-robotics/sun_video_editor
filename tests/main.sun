@@ -3,7 +3,22 @@ function main() i32 {
   return 0;
 }
 manifest {
-  test_files: ["media.sun", "view.sun"]
-  libraries: ["stdlib.moon", "sun_ui.moon"]
-  source_files: ["../src/state.sun", "../src/view.sun", "../build/generated/sun_video_editor.view.sun", "../src/process.sun", "../src/media.sun", "../src/job.sun", "fixtures.sun"]
+  test_files: [
+    "media.sun",
+    "view.sun"
+  ]
+  libraries: [
+    "stdlib.moon",
+    "sun_ui.moon"
+  ]
+  source_files: [
+    "../src/capture.sun",
+    "../src/state.sun",
+    "../src/view.sun",
+    "../build/generated/sun_video_editor.view.sun",
+    "../src/process.sun",
+    "../src/media.sun",
+    "../src/job.sun",
+    "fixtures.sun"
+  ]
 }

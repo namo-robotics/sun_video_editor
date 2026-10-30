@@ -1,9 +1,10 @@
 <Views module="sun_video_editor">
   <Include source="theme.view.xml" />
-  <View name="view" state="State" resources="{editor_theme.resources()}" themeResource="studio">
+  <View name="editor_view" state="State" resources="{editor_theme.resources()}" themeResource="studio">
     <Scroll expandX="true" expandY="true" backgroundResource="canvas">
       <Column margin="24" spacing="20" expandY="true">
         <Row spacing="16">
+          <Button text="Home" action="100" enabled="{state.job.mode == 0}" />
           <Column spacing="4" expandX="true">
             <Label text="Sun Video Editor" styleResource="title" horizontal="Start" />
             <Label text="A lighter file. Just the part you want." styleResource="muted" horizontal="Start" />
@@ -79,6 +80,65 @@
           </Panel>
         </Grid>
         <Label text="{status_text(state)}" styleResource="muted" horizontal="Start" />
+      </Column>
+    </Scroll>
+  </View>
+  <View name="home_view" state="State" resources="{editor_theme.resources()}" themeResource="studio">
+    <Scroll expandX="true" expandY="true" backgroundResource="canvas">
+      <Grid margin="24" spacing="16" expandX="true">
+        <Grid.Columns><Track kind="Weight" value="1" /><Track kind="Weight" value="1" /></Grid.Columns>
+        <Grid.Rows><Track kind="Auto" /></Grid.Rows>
+        <Button text="✂&#10;Video Editor" action="101" width="240" height="168" expandX="true" styleResource="homeTile" />
+        <Button text="🖵&#10;Screencast" action="102" column="1" width="240" height="168" expandX="true" styleResource="homeTile" />
+      </Grid>
+    </Scroll>
+  </View>
+  <View name="capture_view" state="State" resources="{editor_theme.resources()}" themeResource="studio">
+    <Scroll expandX="true" expandY="true" backgroundResource="canvas">
+      <Column margin="32" spacing="20">
+        <Row spacing="16"><Button text="Home" action="100" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" /><Label text="Screencast" styleResource="title" /></Row>
+        <Label text="Take a screenshot or record a screen, window, or selected area." horizontal="Start" />
+        <Column styleResource="panel" spacing="16">
+          <Label text="Capture" horizontal="Start" />
+          <Row spacing="12">
+            <Button key="capture-photo" text="📷&#10;Screenshot · PNG" action="111" width="240" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 0 ? 0x082b2a : 0xeaf2ff}" />
+            <Button key="capture-video" text="●&#10;Recording · WebM" action="112" width="240" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
+          </Row>
+          <Label text="Source" horizontal="Start" />
+          <Row spacing="12">
+            <Button key="capture-screen" text="🖵&#10;Screen" action="120" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 0 ? 0x082b2a : 0xeaf2ff}" />
+            <Button key="capture-window" text="🗗&#10;Window" action="121" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 1 ? 0x082b2a : 0xeaf2ff}" />
+            <Button key="capture-selection" text="⬚&#10;Selection" action="122" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 2 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 2 ? 0x082b2a : 0xeaf2ff}" />
+          </Row>
+          <Label text="Share a screen, then drag directly on it. Release to confirm; Esc to cancel." visible="{state.capture.source == 2}" horizontal="Start" styleResource="muted" />
+          <Label text="Delay in seconds" horizontal="Start" />
+          <TextInput value="{state.capture.delay.clone(a)}" changeAction="110" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+          <Checkbox text="Include pointer" checked="{state.capture.cursor}" changeAction="113" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+          <Row spacing="12">
+            <Button text="Choose source and start" action="114" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="primary" />
+            <Button visible="{state.capture.kind == 1}" text="Stop and save" action="115" enabled="{state.capture.recording and not state.capture.stopping}" />
+            <Button text="Cancel" action="116" enabled="{state.capture.process.running and not state.capture.stopping}" />
+          </Row>
+          <Label text="{state.capture.message.clone(a)}" horizontal="Start" />
+          <If test="{not state.capture.saved.is_empty() and state.capture.kind == 0 and not state.capture.process.running}">
+            <Row spacing="12"><Label text="Screenshot preview" horizontal="Start" /><Button text="Save as…" action="124" enabled="{not state.capture.copy_process.running}" /></Row>
+            <Image key="screenshot-preview" text="{state.capture.saved.clone(a)}" height="360" expandX="true" />
+          </If>
+          <If test="{not state.capture.saved.is_empty() and state.capture.kind == 1 and not state.capture.process.running}">
+            <Row spacing="12">
+              <Label text="Recording preview" horizontal="Start" />
+              <Button text="Save as…" action="124" enabled="{not state.capture.copy_process.running}" />
+              <Button text="Open in Video Editor" action="125" enabled="{not state.capture.copy_process.running and state.job.mode == 0}" />
+            </Row>
+            <If test="{state.capture.preview.ready}">
+              <Video trimControls="false" key="recording-preview" text="{state.capture.saved.clone(a)}" duration="{_convert&lt;i64&gt;(state.capture.preview.media.duration * 1000000.0)}" trimStart="{state.capture.preview_start}" trimEnd="{state.capture.preview_end}" position="{state.capture.preview_position}" changeAction="123" height="360" expandX="true" spacing="12" />
+            </If>
+            <If test="{not state.capture.preview.ready}">
+              <Label text="{state.capture.preview.message.clone(a)}" horizontal="Start" styleResource="muted" />
+            </If>
+          </If>
+        </Column>
+        <Label text="Ubuntu desktop required. Recordings are silent. Captures are saved in Pictures or Videos." styleResource="muted" horizontal="Start" />
       </Column>
     </Scroll>
   </View>

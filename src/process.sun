@@ -41,6 +41,13 @@ module video {
       return SystemResult.Ok;
     }
 
+    /** Sends an interrupt so a capture helper can finalize its recording. */
+    public method interrupt() void {
+      if (this.running) {
+        ignore_error(this.child.kill(2));
+      }
+    }
+
     /** Requests termination, allowing the child a short grace period before forced termination. */
     public method cancel() void {
       if (this.running and not this.cancelling) {
@@ -131,7 +138,9 @@ module video {
   public function capture(command: ref std.process.Command) SystemResult<String> {
     var result = try command.output();
     if (result.status() != 0) {
-      return SystemResult.Error(Error(result.status(), result.stderr().clone(make_heap_allocator())));
+      return SystemResult.Error(
+        Error(result.status(), result.stderr().clone(make_heap_allocator()))
+      );
     }
     var text = result.stdout().clone(make_heap_allocator());
     if (text.ends_with("\n")) {

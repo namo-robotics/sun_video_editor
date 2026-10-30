@@ -3,6 +3,17 @@ using std;
 /** Supplies presentation values for the generated XML view without constructing widgets. */
 module sun_video_editor {
 
+  /** Selects the active screen while preserving the editor's owned state. */
+  function view(state: const ref State) ui.View {
+    if (state.page == 0) {
+      return home_view(state);
+    }
+    if (state.page == 2) {
+      return capture_view(state);
+    }
+    return editor_view(state);
+  }
+
   /** Expresses the loaded duration in microseconds for the preview widget. */
   function duration_us(state: const ref State) i64 {
     return state.job.ready ? _convert<i64>(state.job.media.duration * 1000000.0) : 0;

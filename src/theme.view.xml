@@ -20,10 +20,13 @@
     <Style name="panel"><Normal backgroundResource="panelBackground" radius="0" padding="18" /></Style>
     <Style name="muted"><Normal foregroundResource="mutedText" fontSize="12" /></Style>
     <Style name="title"><Normal foregroundResource="titleText" fontSize="28" /></Style>
+    <Style name="homeTile" basedOn="control"><Normal foregroundResource="accent" backgroundResource="panelBackground" fontSize="22" padding="16" radius="12" /></Style>
     <Style name="section"><Normal foregroundResource="accent" fontSize="12" /></Style>
     <Style name="field" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="fieldBackground" /><Disabled foregroundResource="disabledText" /></Style>
     <Style name="primary" basedOn="control"><Normal foregroundResource="primaryText" backgroundResource="accent" fontSize="15" borderWidth="0" radius="0" padding="10" /><Disabled foregroundResource="primaryDisabled" /></Style>
     <Style name="secondary" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="secondaryBackground" /><Disabled foregroundResource="disabledText" /></Style>
+    <Style name="captureMode" basedOn="secondary"><Normal fontSize="18" /></Style>
+    <Style name="captureSource" basedOn="secondary"><Normal fontSize="24" /></Style>
     <Theme name="studio" basedOn="base">
       <Default kind="TextInput" styleResource="field" />
       <Default kind="Select" styleResource="field" />

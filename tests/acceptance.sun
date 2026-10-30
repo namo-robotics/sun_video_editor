@@ -3,12 +3,13 @@ using std;
 /** Exercises the video editor through real GTK events under a virtual display. */
 module sun_video_editor {
 
-  /** Resolves a control by action using generated keys, optionally returning its panel. */
+  /** Resolves a control by action (or the image with -1), optionally returning its panel. */
   function control(session: const ref ui.Session<State>, action: i64, panel: bool) u64 {
     var a = make_heap_allocator();
     var description = view(session.state);
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
-      if (description.elements[i].action != action) {
+      if ((action != -1 and description.elements[i].action != action) or
+        (action == -1 and description.elements[i].kind != ui.Kind.Image)) {
         continue;
       }
       var index = i;
@@ -33,7 +34,10 @@ module sun_video_editor {
   }
 
   /** Waits for media work while continuing to dispatch native events and update the view. */
-  function wait_job(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) SystemResult<void> {
+  function wait_job(
+    renderer: ref ui_gtk.Renderer,
+    session: ref ui.Session<State>
+  ) SystemResult<void> {
     var start = std.time.now();
     var delay = std.time.create_duration_millis(10);
     while (session.state.job.mode != 0) {
@@ -47,7 +51,52 @@ module sun_video_editor {
   }
 
   /** Checks native form edits, asynchronous completion, cancellation, and subscription cleanup. */
-  function acceptance(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) SystemResult<void> {
+  function acceptance(
+    renderer: ref ui_gtk.Renderer,
+    session: ref ui.Session<State>
+  ) SystemResult<void> {
+    if (session.state.page != 0 or control(session, 101, false) == 0 or
+      control(session, 102, false) == 0) {
+      return SystemResult.Error(Error(1, "Home screen tiles are missing"));
+    }
+    renderer.click(control(session, 102, false));
+    try turn(renderer, session);
+    if (session.state.page != 2 or control(session, 114, false) == 0) {
+      return SystemResult.Error(Error(1, "Screencast tile did not open capture controls"));
+    }
+    renderer.click(control(session, 112, false));
+    try turn(renderer, session);
+    if (session.state.capture.kind != 1) {
+      return SystemResult.Error(Error(1, "Recording icon did not select WebM capture"));
+    }
+    renderer.click(control(session, 111, false));
+    try turn(renderer, session);
+    if (session.state.capture.kind != 0) {
+      return SystemResult.Error(Error(1, "Screenshot icon did not select PNG capture"));
+    }
+    for (var source: i64 = 0; source < 3; source += 1) {
+      renderer.click(control(session, 120 + source, false));
+      try turn(renderer, session);
+      if (session.state.capture.source != source) {
+        return SystemResult.Error(Error(1, "Source icon did not update capture settings"));
+      }
+    }
+    var invalid_delay = String("-1");
+    try renderer.edit(control(session, 110, false), invalid_delay, 0);
+    try turn(renderer, session);
+    renderer.click(control(session, 114, false));
+    try turn(renderer, session);
+    if (session.state.capture.process.running or
+      not session.state.capture.message.contains("whole number")) {
+      return SystemResult.Error(Error(1, "Invalid capture delay was not rejected"));
+    }
+    renderer.click(control(session, 100, false));
+    try turn(renderer, session);
+    renderer.click(control(session, 101, false));
+    try turn(renderer, session);
+    if (session.state.page != 1) {
+      return SystemResult.Error(Error(1, "Video Editor tile did not open editor"));
+    }
     var fixture = try video_fixtures.Fixture();
     try open_source(session.state, fixture.input);
     try session.render(renderer);
@@ -61,8 +110,12 @@ module sun_video_editor {
       session.state.settings.overwrite = true;
       try renderer.edit(control(session, 5, false), empty, format);
       try turn(renderer, session);
-      if (session.state.settings.format != format or not session.state.settings.output.ends_with(video.extension(format)) or session.state.settings.overwrite) {
-        return SystemResult.Error(Error(1, "Format selection did not update the destination safely"));
+      if (session.state.settings.format != format or
+        not session.state.settings.output.ends_with(video.extension(format)) or
+        session.state.settings.overwrite) {
+        return SystemResult.Error(
+          Error(1, "Format selection did not update the destination safely")
+        );
       }
     }
     for (var quality: i32 = 4; quality >= 0; quality -= 1) {
@@ -116,19 +169,22 @@ module sun_video_editor {
       }
       try renderer.set_default_size(1160, 1200);
       deadline = std.time.now();
-      while (renderer.extent(preview, false) <= original_height + 100 and deadline.elapsed().as_millis() < 5000) {
+      while (renderer.extent(preview, false) <= original_height + 100 and
+        deadline.elapsed().as_millis() < 5000) {
         try turn(renderer, session);
         std.time.sleep(delay);
       }
       if (renderer.extent(preview, false) <= original_height + 100) {
         return SystemResult.Error(Error(1, "Preview did not grow with the window height"));
       }
-      if (renderer.extent(control(session, 15, true), false) != renderer.extent(control(session, 11, true), false)) {
+      if (renderer.extent(control(session, 15, true), false) !=
+        renderer.extent(control(session, 11, true), false)) {
         return SystemResult.Error(Error(1, "Panels did not fill the same grid row height"));
       }
       try renderer.set_default_size(1160, 860);
       deadline = std.time.now();
-      while (renderer.extent(preview, false) > original_height + 10 and deadline.elapsed().as_millis() < 5000) {
+      while (renderer.extent(preview, false) > original_height + 10 and
+        deadline.elapsed().as_millis() < 5000) {
         try turn(renderer, session);
         std.time.sleep(delay);
       }
@@ -203,7 +259,9 @@ module sun_video_editor {
     }
     try exported.probe(gif);
     try video_fixtures.finish(exported);
-    if (not exported.media.codec.equals_literal("gif") or not exported.media.audio.equals_literal("none") or exported.media.duration < 1.4 or exported.media.duration > 1.6) {
+    if (not exported.media.codec.equals_literal("gif") or
+      not exported.media.audio.equals_literal("none") or exported.media.duration < 1.4 or
+      exported.media.duration > 1.6) {
       return SystemResult.Error(Error(1, "UI GIF export did not preserve the trim interval"));
     }
     try renderer.edit(control(session, 5, false), empty, 0);
@@ -223,6 +281,125 @@ module sun_video_editor {
     try wait_job(renderer, session);
     if (not session.state.job.cancelled or std.io.exists(output)) {
       return SystemResult.Error(Error(1, "UI cancel failed"));
+    }
+    var recording = fixture.path("recording-preview.webm");
+    var encode = std.process.Command(make_heap_allocator(), "ffmpeg");
+    var flags = String("-hide_banner -loglevel error -y -i").split_whitespace(
+      make_heap_allocator()
+    );
+    for (var flag: ref String in flags) {
+      encode.add_arg(flag);
+    }
+    encode.add_arg(fixture.input);
+    var output_flags = String("-t 2 -c:v libvpx -deadline realtime -threads 1 -an").split_whitespace(
+      make_heap_allocator()
+    );
+    for (var flag: ref String in output_flags) {
+      encode.add_arg(flag);
+    }
+    encode.add_arg(recording);
+    var encoded = try video.capture(encode);
+    var editor_input = session.state.settings.input.clone(make_heap_allocator());
+    session.state.page = 2;
+    session.state.capture.kind = 1;
+    session.state.capture.saved = recording;
+    try turn(renderer, session);
+    deadline = std.time.now();
+    while (session.state.capture.preview.mode != 0 and deadline.elapsed().as_secs() < 10) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+    }
+    if (not session.state.capture.preview.ready or
+      not session.state.settings.input.equals(editor_input) or control(session, 117, false) != 0) {
+      return SystemResult.Error(
+        Error(1, "Recording preview did not load independently of the editor")
+      );
+    }
+    if (control(session, 124, false) == 0) {
+      return SystemResult.Error(Error(1, "Recording preview is missing Save as"));
+    }
+    var recorded_preview = control(session, 123, false);
+    deadline = std.time.now();
+    while (renderer.media_status(recorded_preview) == 0 and deadline.elapsed().as_secs() < 10) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+    }
+    if (recorded_preview == 0 or renderer.media_status(recorded_preview) != 1) {
+      return SystemResult.Error(Error(1, "Inline WebM recording preview did not decode"));
+    }
+    renderer.toggle_media(recorded_preview);
+    deadline = std.time.now();
+    while (renderer.media_timestamp(recorded_preview) < 100000 and
+      deadline.elapsed().as_secs() < 5) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+    }
+    if (renderer.media_timestamp(recorded_preview) < 100000) {
+      return SystemResult.Error(Error(1, "Inline recording did not play"));
+    }
+    renderer.toggle_media(recorded_preview);
+    try renderer.drag_media(recorded_preview, 0.0, 0.6);
+    try turn(renderer, session);
+    if (session.state.capture.preview_position <= 0 or session.state.page != 2 or
+      session.state.capture.preview_start != 0 or
+      session.state.capture.preview_end !=
+        _convert<i64>(session.state.capture.preview.media.duration * 1000000.0)) {
+      return SystemResult.Error(
+        Error(1, "Inline recording did not preserve seeking on the capture screen")
+      );
+    }
+    if (control(session, 125, false) == 0) {
+      return SystemResult.Error(Error(1, "Recording preview is missing Open in Video Editor"));
+    }
+    var captured_path = session.state.capture.saved.clone(make_heap_allocator());
+    var captured_absolute = try video.absolute(captured_path);
+    renderer.click(control(session, 125, false));
+    try turn(renderer, session);
+    try wait_job(renderer, session);
+    if (session.state.page != 1 or not session.state.job.ready or
+      not session.state.settings.input.equals(captured_path) or
+      not session.state.job.loaded.equals(captured_absolute) or
+      not session.state.capture.saved.equals(captured_path) or session.state.settings.overwrite or
+      session.state.settings.output.equals(output)) {
+      return SystemResult.Error(Error(1, "Recording did not open as a fresh editor input"));
+    }
+    session.state.page = 2;
+    try session.render(renderer);
+    var screenshot = fixture.path("screenshot-preview.png");
+    var snapshot = std.process.Command(make_heap_allocator(), "ffmpeg");
+    for (var flag: ref String in flags) {
+      snapshot.add_arg(flag);
+    }
+    snapshot.add_arg(fixture.input);
+    snapshot.add_arg("-frames:v");
+    snapshot.add_arg("1");
+    snapshot.add_arg("-threads");
+    snapshot.add_arg("1");
+    snapshot.add_arg(screenshot);
+    var snapped = try video.capture(snapshot);
+    session.state.capture.kind = 0;
+    session.state.capture.saved = screenshot.clone(make_heap_allocator());
+    try session.render(renderer);
+    var image_preview = control(session, -1, false);
+    if (image_preview == 0 or control(session, 124, false) == 0 or
+      renderer.image_status(image_preview) != 1 or control(session, 123, false) != 0 or
+      control(session, 125, false) != 0) {
+      return SystemResult.Error(Error(1, "Screenshot preview did not replace the video player"));
+    }
+    session.state.capture.saved = fixture.path("missing.png");
+    try session.render(renderer);
+    if (renderer.image_status(image_preview) != -1) {
+      return SystemResult.Error(Error(1, "Missing screenshot did not show an inline failure"));
+    }
+    session.state.capture.saved = screenshot.clone(make_heap_allocator());
+    try session.render(renderer);
+    if (renderer.image_status(image_preview) != 1) {
+      return SystemResult.Error(Error(1, "Screenshot preview did not recover with a valid image"));
+    }
+    session.state.capture.saved = String("");
+    try session.render(renderer);
+    if (control(session, -1, false) != 0 or not std.io.exists(screenshot)) {
+      return SystemResult.Error(Error(1, "Clearing the preview removed the saved screenshot"));
     }
     session.tree.shutdown(renderer);
     if (renderer.creates != renderer.removals) {

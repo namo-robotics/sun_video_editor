@@ -1,0 +1,307 @@
+using std;
+
+/** Owns capture settings and the asynchronous desktop capture helper. */
+module screencast {
+
+  /** Validates a bounded, whole-second countdown without accepting shell syntax. */
+  public function delay_seconds(text: const ref String) SystemResult<i64> {
+    if (text.is_empty() or text.length() > 4) {
+      return SystemResult.Error(Error(1, "Enter a whole number of seconds from 0 to 3600"));
+    }
+    var value: i64 = 0;
+    for (var i: i64 = 0; i < text.length(); i += 1) {
+      var digit = match text.at(i) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => b' '
+      };
+      if (digit < b'0' or digit > b'9') {
+        return SystemResult.Error(Error(1, "Enter a whole number of seconds from 0 to 3600"));
+      }
+      value = value * 10 + _convert<i64>(digit - b'0');
+    }
+    if (value > 3600) {
+      return SystemResult.Error(Error(1, "Delay cannot exceed 3600 seconds"));
+    }
+    return SystemResult.Ok(value);
+  }
+
+  /** Finds the companion helper beside an explicit executable path or a PATH entry. */
+  public function helper_path(executable: const ref String) String {
+    var candidate = `${executable}.capture.py`;
+    if (std.io.is_file(candidate)) {
+      return candidate;
+    }
+    var a = make_heap_allocator();
+    var env = std.env.Env(a);
+    match env.get("PATH") {
+      Option.Some(path) => {
+        var directories = path.split(a, b':');
+        for (var directory: ref String in directories) {
+          var installed = `${directory}/${executable}.capture.py`;
+          if (std.io.is_file(installed)) {
+            return installed;
+          }
+        }
+      },
+      Option.None => {}
+    };
+    return candidate;
+  }
+
+  /** Keeps capture lifetime separate from the editor's conversion jobs. */
+  public class Capture {
+    public var process: video.Process = video.Process();
+    public var copy_process: video.Process = video.Process();
+    var copy_temporary: String = String("");
+    var copy_destination: String = String("");
+    public var helper: String = String("build/sun_video_editor.capture.py");
+    public var delay: String = String("0");
+    public var kind: i64 = 0;
+    public var source: i64 = 0;
+    public var cursor: bool = true;
+    public var recording: bool = false;
+    public var stopping: bool = false;
+    public var message: String = String("Ready to capture.");
+    public var saved: String = String("");
+    public var preview: video.Job = video.Job();
+    public var preview_position: i64 = 0;
+    public var preview_start: i64 = 0;
+    public var preview_end: i64 = 0;
+    var preview_path: String = String("");
+    var stopping_at: std.time.Instant = std.time.now();
+    var observed: i64 = 0;
+
+    /** Cancels an owned capture and gives it time to close its portal and remove partial output. */
+    deinit() {
+      this.copy_process.stop();
+      this.cleanup_copy();
+      if (this.process.running) {
+        this.process.cancel();
+        var start = std.time.now();
+        while (this.process.running and start.elapsed().as_millis() < 1800) {
+          ignore_error(this.process.tick());
+          std.time.sleep(std.time.create_duration_millis(10));
+        }
+        this.process.stop();
+      }
+    }
+
+    /** Removes only this save operation's private partial file. */
+    method cleanup_copy() void {
+      if (not this.copy_temporary.is_empty()) {
+        ignore_error(std.io.remove_file(this.copy_temporary));
+        this.copy_temporary = String("");
+      }
+    }
+
+    /** Copies a completed capture asynchronously; the save chooser confirms replacements. */
+    public method save_copy(source: ref String, destination: const ref String) SystemResult<void> {
+      if (this.copy_process.running or source.is_empty() or not std.io.is_file(source)) {
+        return SystemResult.Error(
+          Error(1, "The captured file is unavailable or a save is already running")
+        );
+      }
+      var a = make_heap_allocator();
+      this.copy_destination = destination.clone(a);
+      var suffix = source.ends_with(".png") ? ".png" : ".webm";
+      if (not this.copy_destination.ends_with(suffix)) {
+        return SystemResult.Error(
+          Error(1, `Keep the ${suffix} extension when saving this capture`)
+        );
+      }
+      if (this.copy_destination.equals(source)) {
+        this.message = String("Capture is already saved at that location.");
+        return SystemResult.Ok;
+      }
+      var reserve = std.process.Command(a, "mktemp");
+      reserve.add_arg("--");
+      reserve.add_arg(`${this.copy_destination}.sun-save-XXXXXX`);
+      this.copy_temporary = try video.capture(reserve);
+      var command = std.process.Command(a, "cp");
+      command.add_arg("--");
+      command.add_arg(source);
+      command.add_arg(this.copy_temporary);
+      match this.copy_process.start(command) {
+        SystemResult.Ok => {},
+        SystemResult.Error(error) => {
+          this.cleanup_copy();
+          return SystemResult.Error(error);
+        }
+      };
+      this.message = String("Saving a copy…");
+      return SystemResult.Ok;
+    }
+
+    /** Publishes a complete copy atomically, preserving the original capture on failure. */
+    method tick_copy() SystemResult<bool> {
+      if (not this.copy_process.running) {
+        return SystemResult.Ok(false);
+      }
+      match this.copy_process.tick() {
+        SystemResult.Ok => {},
+        SystemResult.Error(error) => {
+          this.copy_process.stop();
+          this.cleanup_copy();
+          this.message = error.message().clone(make_heap_allocator());
+          return SystemResult.Ok(true);
+        }
+      };
+      if (not this.copy_process.running) {
+        if (this.copy_process.status == 0) {
+          match std.io.rename_file(this.copy_temporary, this.copy_destination) {
+            SystemResult.Ok => {
+              this.message = `Saved copy: ${this.copy_destination}`;
+            },
+            SystemResult.Error(error) => {
+              this.message = error.message().clone(make_heap_allocator());
+            }
+          };
+        } else {
+          this.message = `Save failed: ${this.copy_process.diagnostics}`;
+        }
+        this.cleanup_copy();
+        return SystemResult.Ok(true);
+      }
+      return SystemResult.Ok(false);
+    }
+
+    /** Starts a portal request; the helper counts down only after source selection. */
+    public method start() SystemResult<void> {
+      var seconds = try delay_seconds(this.delay);
+      if (not std.io.is_file(this.helper)) {
+        return SystemResult.Error(
+          Error(
+            1,
+            "Screencast requires the Ubuntu capture helper installed alongside the application"
+          )
+        );
+      }
+      var a = make_heap_allocator();
+      var env = std.env.Env(a);
+      var interpreter = match env.get("SNAP") {
+        Option.Some(root) => `${root}/usr/bin/python3`,
+        Option.None => String("/usr/bin/python3")
+      };
+      var command = std.process.Command(a, interpreter);
+      command.add_arg(this.helper);
+      command.add_arg(this.kind == 0 ? "screenshot" : "record");
+      command.add_arg(this.source == 2 ? "area" : (this.source == 0 ? "screen" : "window"));
+      command.add_arg(`${seconds}`);
+      command.add_arg(this.cursor ? "cursor" : "hidden");
+      try this.process.start(command);
+      this.observed = 0;
+      this.recording = false;
+      this.stopping = false;
+      this.saved = String("");
+      this.preview = video.Job();
+      this.preview_path = String("");
+      this.preview_position = 0;
+      this.preview_start = 0;
+      this.preview_end = 0;
+      this.message = String("Choose a source in the desktop permission dialog…");
+      return SystemResult.Ok;
+    }
+
+    /** Finalizes a recording without terminating the encoder before its trailer is written. */
+    public method finish() void {
+      if (this.recording and not this.stopping) {
+        this.process.interrupt();
+        this.stopping = true;
+        this.stopping_at = std.time.now();
+        this.message = String("Saving recording…");
+      }
+    }
+
+    /** Cancels selection, countdown, or capture and discards unfinished output. */
+    public method cancel() void {
+      this.process.cancel();
+      this.stopping = true;
+      this.stopping_at = std.time.now();
+      this.message = String("Capture cancelled.");
+    }
+
+    /** Probes a completed recording for inline playback without changing the editor state. */
+    public method tick_preview() SystemResult<bool> {
+      if (this.process.running or this.kind != 1 or this.saved.is_empty()) {
+        return SystemResult.Ok(false);
+      }
+      var changed = false;
+      if (not this.preview_path.equals(this.saved)) {
+        this.preview_path = this.saved.clone(make_heap_allocator());
+        this.preview_position = 0;
+        this.preview_start = 0;
+        this.preview_end = 0;
+        match this.preview.probe(this.saved) {
+          SystemResult.Ok => {},
+          SystemResult.Error(error) => {
+            this.preview.fail(error);
+          }
+        };
+        changed = true;
+      }
+      var mode = this.preview.mode;
+      if (mode != 0) {
+        match this.preview.tick() {
+          SystemResult.Ok => {},
+          SystemResult.Error(error) => {
+            this.preview.fail(error);
+          }
+        };
+        if (this.preview.mode == 0) {
+          if (this.preview.ready) {
+            this.preview_end = _convert<i64>(this.preview.media.duration * 1000000.0);
+          }
+          changed = true;
+        }
+      }
+      return SystemResult.Ok(changed);
+    }
+
+    /** Reads helper progress and completion without blocking GTK event dispatch. */
+    public method tick() SystemResult<bool> {
+      var copy_changed = try this.tick_copy();
+      if (not this.process.running) {
+        var preview_changed = try this.tick_preview();
+        return SystemResult.Ok(copy_changed or preview_changed);
+      }
+      try this.process.tick();
+      var changed = false;
+      if (this.process.text.length() != this.observed and this.process.text.ends_with("\n")) {
+        this.observed = this.process.text.length();
+        var lines = this.process.text.split(make_heap_allocator(), b'\n');
+        for (var line: ref String in lines) {
+          if (line.equals_literal("Recording…")) {
+            this.recording = true;
+          }
+          if (not line.is_empty()) {
+            this.message = line.clone(make_heap_allocator());
+          }
+          if (line.starts_with("Saved: ")) {
+            this.saved = match line.substr(make_heap_allocator(), 7, line.length() - 7) {
+              AccessResult.Ok(value) => value,
+              AccessResult.OutOfBounds(_) => String("")
+            };
+          }
+        }
+        changed = true;
+      }
+      if (this.stopping and this.stopping_at.elapsed().as_secs() > 15) {
+        this.process.stop();
+        this.message = String("Capture did not finish saving in time.");
+      }
+      if (not this.process.running) {
+        this.recording = false;
+        if (this.process.status != 0 and not this.stopping and
+          not this.message.starts_with("Capture failed:")) {
+          this.message = String(
+            "Capture failed. Check desktop capture permissions and capture dependencies."
+          );
+          eprintln(this.process.diagnostics);
+        }
+        changed = true;
+      }
+      var preview_changed = try this.tick_preview();
+      return SystemResult.Ok(changed or preview_changed);
+    }
+  }
+}

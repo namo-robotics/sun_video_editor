@@ -1,8 +1,18 @@
 # sun_video_editor
 
-Convert, compress, and trim videos locally. Export to MP4, MOV, WebM, MKV, AVI, or animated GIF.
+Two tools for local video work:
 
-For GIFs, select **GIF · animated image**, choose your trim and maximum resolution, then export to a `.gif` file. Animations loop continuously and have no audio. Quality presets control frame rate and palette size: Best uses 30 fps / 256 colors, High 24 fps / 256 colors, Balanced 20 fps / 128 colors, Smaller 15 fps / 96 colors, and Smallest 10 fps / 64 colors.
+- **Video Editor:** trim, convert, and compress videos. Export to MP4, MOV, WebM,
+  MKV, AVI, or animated GIF.
+- **Screencast:** capture a screen, window, or selected area as a PNG screenshot
+  or high-quality silent WebM recording at the source resolution, with an optional
+  delay, image previews, and recording playback. Screenshots use lossless PNG.
+
+Captures request screen-sharing authorization. Choose the source first; the delay
+then runs before the screenshot or recording starts.
+
+Video editing supports Ubuntu and macOS. Screencast requires Ubuntu with PipeWire
+and desktop portal support; audio recording is not yet supported.
 
 ![Sun Video Editor showing video preview, trim controls, and export settings](assets/sun_video_editor.png)
 

@@ -5,10 +5,14 @@ module sun_video_editor {
 
   /** Owns form values, asynchronous work, and requests for platform dialogs. */
   class State {
+    var page: i32 = 0;
+    var capture: screencast.Capture = screencast.Capture();
     var settings: video.Settings = video.Settings();
     var job: video.Job = video.Job();
     var open_requested: bool = false;
     var save_requested: bool = false;
+    var capture_save_requested: bool = false;
+    var capture_save_source: String = String("");
     var position: i64 = 0;
   }
 
@@ -25,14 +29,84 @@ module sun_video_editor {
 
   /** Selects a source and immediately starts reading its media information. */
   function open_source(state: ref State, path: const ref String) SystemResult<void> {
+    state.page = 1;
     state.settings.input = path.clone(make_heap_allocator());
     state.position = 0;
     return state.job.probe(state.settings.input);
   }
 
   /** Applies captured events while rejecting edits during probing or conversion. */
-  function handle(state: ref State, event: const ref ui.Event, queue: ref ui.EventQueue) SystemResult<void> {
+  function handle(
+    state: ref State,
+    event: const ref ui.Event,
+    queue: ref ui.EventQueue
+  ) SystemResult<void> {
     var a = make_heap_allocator();
+    if (event.action >= 100) {
+      if (event.action == 116) {
+        state.capture.cancel();
+      }
+      if (event.action == 115) {
+        state.capture.finish();
+      }
+      if (state.capture.process.running or state.capture.copy_process.running or
+        state.job.mode != 0) {
+        return SystemResult.Ok;
+      }
+      if (event.action == 125 and state.capture.kind == 1 and not state.capture.saved.is_empty()) {
+        var recording = state.capture.saved.clone(a);
+        state.settings.output = String("");
+        state.settings.overwrite = false;
+        report(state, open_source(state, recording));
+      }
+      if (event.action == 124 and not state.capture.saved.is_empty() and
+        not state.capture.copy_process.running) {
+        state.capture_save_requested = true;
+      }
+      if (event.action == 100) {
+        state.page = 0;
+      }
+      if (event.action == 101) {
+        state.page = 1;
+      }
+      if (event.action == 102) {
+        state.page = 2;
+      }
+      if (event.action == 110 and event.value.kind == ui.ValueKind.Text) {
+        state.capture.delay = event.value.text.clone(a);
+      }
+      if (event.action >= 120 and event.action <= 122) {
+        state.capture.source = event.action - 120;
+      }
+      if ((event.action == 111 or event.action == 112) and
+        state.capture.kind != event.action - 111) {
+        state.capture.kind = event.action - 111;
+        state.capture.saved = String("");
+      }
+      if (event.action == 113 and event.value.kind == ui.ValueKind.Boolean) {
+        state.capture.cursor = event.value.boolean;
+      }
+      if (event.action == 114) {
+        match state.capture.start() {
+          SystemResult.Ok => {},
+          SystemResult.Error(error) => {
+            state.capture.message = error.message().clone(a);
+          }
+        };
+      }
+      if (event.action == 123 and event.value.kind == ui.ValueKind.Range and
+        state.capture.preview.ready) {
+        var duration = _convert<i64>(state.capture.preview.media.duration * 1000000.0);
+        if (event.value.range_start >= 0 and event.value.range_end > event.value.range_start and
+          event.value.range_end <= duration and event.value.position >= 0 and
+          event.value.position <= duration) {
+          state.capture.preview_start = event.value.range_start;
+          state.capture.preview_end = event.value.range_end;
+          state.capture.preview_position = event.value.position;
+        }
+      }
+      return SystemResult.Ok;
+    }
     if (event.action == 12) {
       state.job.cancel();
       return SystemResult.Ok;
@@ -42,7 +116,9 @@ module sun_video_editor {
     }
     if (event.value.kind == ui.ValueKind.Range and event.action == 15 and state.job.ready) {
       var duration = duration_us(state);
-      if (event.value.range_start >= 0 and event.value.range_end > event.value.range_start and event.value.range_end <= duration and event.value.position >= 0 and event.value.position <= duration) {
+      if (event.value.range_start >= 0 and event.value.range_end > event.value.range_start and
+        event.value.range_end <= duration and event.value.position >= 0 and
+        event.value.position <= duration) {
         state.settings.start = timestamp(event.value.range_start);
         state.settings.end = timestamp(event.value.range_end);
         state.position = event.value.position;

@@ -10,6 +10,7 @@ module sun_video_editor {
   test_function reusable_converter_states() ViewResult {
     for (var stage: i32 = 0; stage < 4; stage += 1) {
       var state = State();
+      state.page = 1;
       state.job.ready = stage > 0;
       state.job.media.duration = 10.0;
       state.job.loaded = String("clip.mp4");
@@ -48,7 +49,7 @@ module sun_video_editor {
           try std.test.assert(description.elements[previous].action != node.action);
         }
       }
-      try std.test.assert_eq(controls, 14);
+      try std.test.assert_eq(controls, 15);
       var again = view(state);
       try std.test.assert_eq(description.elements.size(), again.elements.size());
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
@@ -60,6 +61,7 @@ module sun_video_editor {
   /** Disables GIF audio without losing the user's video audio preference. */
   test_function gif_audio_availability() ViewResult {
     var state = State();
+    state.page = 1;
     for (var format: i64 = 5; format >= 0; format -= 5) {
       state.settings.format = format;
       var description = view(state);
@@ -73,6 +75,55 @@ module sun_video_editor {
         }
       }
       try std.test.assert(found and state.settings.audio);
+    }
+  }
+
+  /** Accepts whole-second delays and rejects malformed or unbounded countdowns. */
+  test_function capture_delay_validation() ViewResult {
+    try std.test.assert_eq(try screencast.delay_seconds(String("0")), 0);
+    try std.test.assert_eq(try screencast.delay_seconds(String("3600")), 3600);
+    var invalid = String("-1 1.5 3601 99999 nope").split_whitespace(make_heap_allocator());
+    invalid.push(String(""));
+    for (var value: ref String in invalid) {
+      match screencast.delay_seconds(value) {
+        SystemResult.Ok(_) => {
+          try std.test.assert(false);
+        },
+        SystemResult.Error(_) => {}
+      };
+    }
+  }
+
+  /** Save as copies both capture types without changing the preview or the original file. */
+  test_function capture_save_copy() ViewResult {
+    var fixture = try video_fixtures.Fixture();
+    var a = make_heap_allocator();
+    for (var kind: i64 = 0; kind < 2; kind += 1) {
+      var capture = screencast.Capture();
+      var source = fixture.path(kind == 0 ? "original.png" : "original.webm");
+      var target = fixture.path(kind == 0 ? "copy with spaces.png" : "copy with spaces.webm");
+      var contents = String("capture bytes");
+      try std.io.write_string(source, contents);
+      capture.saved = source.clone(a);
+      try capture.save_copy(source, target);
+      var deadline = std.time.now();
+      while (capture.copy_process.running and deadline.elapsed().as_secs() < 5) {
+        var changed = try capture.tick();
+        std.time.sleep(std.time.create_duration_millis(10));
+      }
+      try std.test.assert(not capture.copy_process.running);
+      var saved = try std.io.read_to_string(a, target);
+      try std.test.assert(saved.equals(contents));
+      try std.test.assert(capture.saved.equals(source) and std.io.is_file(source));
+      try std.test.assert(capture.message.starts_with("Saved copy:"));
+      var invalid = fixture.path("missing-dir/copy.png");
+      match capture.save_copy(source, invalid) {
+        SystemResult.Ok => {
+          try std.test.assert(false);
+        },
+        SystemResult.Error(_) => {}
+      };
+      try std.test.assert(std.io.is_file(source));
     }
   }
 }

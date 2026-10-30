@@ -37,8 +37,11 @@ module editor_package {
 
   /** Stages executable, desktop integration, and notices in a bounded build directory. */
   public function stage(destination: String) SystemResult<void> {
-    if (not destination.equals_literal("build/editor-package/root") and not destination.equals_literal("debian/sun-video-editor")) {
-      return SystemResult.Error(Error(1, "Stage destination must be build/editor-package/root or debian/sun-video-editor"));
+    if (not destination.equals_literal("build/editor-package/root") and
+      not destination.equals_literal("debian/sun-video-editor")) {
+      return SystemResult.Error(
+        Error(1, "Stage destination must be build/editor-package/root or debian/sun-video-editor")
+      );
     }
     var a = make_heap_allocator();
     var target = try build_targets.load("sun_video_editor");
@@ -51,9 +54,26 @@ module editor_package {
     clear.add_arg(destination);
     var cleared = try capture(clear);
     try install_file(target.output.clone(a), `${destination}/usr/bin/sun_video_editor`, true);
-    try install_file(String("packaging/sun-video-editor.desktop"), `${destination}/usr/share/applications/sun-video-editor.desktop`, false);
-    try install_file(String("packaging/sun-video-editor.png"), `${destination}/usr/share/pixmaps/sun-video-editor.png`, false);
-    try install_file(String("debian/copyright"), `${destination}/usr/share/doc/sun-video-editor/copyright`, false);
+    try install_file(
+      String("src/tools/capture.py"),
+      `${destination}/usr/bin/sun_video_editor.capture.py`,
+      false
+    );
+    try install_file(
+      String("packaging/sun-video-editor.desktop"),
+      `${destination}/usr/share/applications/sun-video-editor.desktop`,
+      false
+    );
+    try install_file(
+      String("packaging/sun-video-editor.png"),
+      `${destination}/usr/share/pixmaps/sun-video-editor.png`,
+      false
+    );
+    try install_file(
+      String("debian/copyright"),
+      `${destination}/usr/share/doc/sun-video-editor/copyright`,
+      false
+    );
     var env = std.env.Env(a);
     var gtk_source = match env.get("SUN_GOBJECT_SOURCE") {
       Option.Some(value) => value.clone(a),
@@ -63,10 +83,26 @@ module editor_package {
       Option.Some(value) => value.clone(a),
       Option.None => String("build/dependencies/sun_ui")
     };
-    try install_file(`${ui_source}/LICENSE`, `${destination}/usr/share/doc/sun-video-editor/copyright.sun_ui`, false);
-    try install_file(`${gtk_source}/LICENSE`, `${destination}/usr/share/doc/sun-video-editor/copyright.sun_gobject`, false);
-    try install_file(String("/usr/share/doc/sun/copyright"), `${destination}/usr/share/doc/sun-video-editor/copyright.sun`, false);
-    try install_file(String("build/sun-version.txt"), `${destination}/usr/share/doc/sun-video-editor/sun-version.txt`, false);
+    try install_file(
+      `${ui_source}/LICENSE`,
+      `${destination}/usr/share/doc/sun-video-editor/copyright.sun_ui`,
+      false
+    );
+    try install_file(
+      `${gtk_source}/LICENSE`,
+      `${destination}/usr/share/doc/sun-video-editor/copyright.sun_gobject`,
+      false
+    );
+    try install_file(
+      String("/usr/share/doc/sun/copyright"),
+      `${destination}/usr/share/doc/sun-video-editor/copyright.sun`,
+      false
+    );
+    try install_file(
+      String("build/sun-version.txt"),
+      `${destination}/usr/share/doc/sun-video-editor/sun-version.txt`,
+      false
+    );
     return SystemResult.Ok;
   }
 
@@ -137,4 +173,10 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     }
   };
 }
-manifest { libraries: ["stdlib.moon"], source_files: ["targets.sun"] }
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ], source_files: [
+    "targets.sun"
+  ]
+}

@@ -12,9 +12,23 @@ module sun_video_editor {
     }
     if (state.save_requested) {
       state.save_requested = false;
+      state.capture_save_source = String("");
       var filename = String("converted");
       filename.append(video.extension(state.settings.format));
       try renderer.choose_output(filename);
+    }
+    if (state.capture_save_requested) {
+      state.capture_save_requested = false;
+      state.capture_save_source = state.capture.saved.clone(make_heap_allocator());
+      var filename = String(state.capture.kind == 0 ? "Screenshot.png" : "Recording.webm");
+      match renderer.choose_output(filename) {
+        SystemResult.Ok => {},
+        SystemResult.Error(error) => {
+          state.capture.message = error.message().clone(make_heap_allocator());
+          state.capture_save_source = String("");
+          changed = true;
+        }
+      };
     }
     match try renderer.take_input_path() {
       Option.Some(path) => {
@@ -27,7 +41,16 @@ module sun_video_editor {
     };
     match try renderer.take_output_path() {
       Option.Some(path) => {
-        if (state.job.mode == 0) {
+        if (not state.capture_save_source.is_empty()) {
+          match state.capture.save_copy(state.capture_save_source, path) {
+            SystemResult.Ok => {},
+            SystemResult.Error(error) => {
+              state.capture.message = error.message().clone(make_heap_allocator());
+            }
+          };
+          state.capture_save_source = String("");
+          changed = true;
+        } else if (state.job.mode == 0) {
           state.settings.output = path;
           state.settings.overwrite = false;
           changed = true;
@@ -56,7 +79,9 @@ module sun_video_editor {
     var encoders = match video.capture(command) {
       SystemResult.Ok(value) => value,
       SystemResult.Error(_) => {
-        return SystemResult.Error(Error(1, "Install FFmpeg (including ffprobe) before running this example"));
+        return SystemResult.Error(
+          Error(1, "Install FFmpeg (including ffprobe) before running this example")
+        );
       }
     };
     if (not encoders.contains("libx264") or not encoders.contains(" aac ")) {
@@ -76,13 +101,19 @@ module sun_video_editor {
     scale.add_arg("filter=scale");
     var capabilities = try video.capture(scale);
     if (not capabilities.contains("reset_sar")) {
-      return SystemResult.Error(Error(1, "This example requires FFmpeg with scale reset_sar support (use FFmpeg 8 or newer)"));
+      return SystemResult.Error(
+        Error(
+          1,
+          "This example requires FFmpeg with scale reset_sar support (use FFmpeg 8 or newer)"
+        )
+      );
     }
     return SystemResult.Ok;
   }
 
   /** Runs a bounded nonblocking turn and redraws only when asynchronous state changes. */
   function turn(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) SystemResult<void> {
+    var previous_page = session.state.page;
     renderer.poll(session.tree, session.queue, false);
     if (not renderer.running()) {
       session.state.job.process.stop();
@@ -92,12 +123,27 @@ module sun_video_editor {
     var percent = session.state.job.percent;
     var mode = session.state.job.mode;
     var changed = false;
-    match dialogs(renderer, session.state) {
+    match session.state.capture.tick() {
       SystemResult.Ok(value) => {
         changed = value;
       },
       SystemResult.Error(error) => {
-        session.state.job.fail(error);
+        session.state.capture.cancel();
+        session.state.capture.message = error.message().clone(make_heap_allocator());
+        changed = true;
+      }
+    };
+    match dialogs(renderer, session.state) {
+      SystemResult.Ok(value) => {
+        changed = changed or value;
+      },
+      SystemResult.Error(error) => {
+        if (not session.state.capture_save_source.is_empty()) {
+          session.state.capture.message = error.message().clone(make_heap_allocator());
+          session.state.capture_save_source = String("");
+        } else {
+          session.state.job.fail(error);
+        }
         changed = true;
       }
     };
@@ -121,26 +167,43 @@ module sun_video_editor {
     if (changed or percent != session.state.job.percent or mode != session.state.job.mode) {
       try session.render(renderer);
     }
+    if (previous_page != session.state.page) {
+      try renderer.set_default_size(
+        session.state.page == 0 ? 544 : 1160,
+        session.state.page == 0 ? 216 : 860
+      );
+    }
     return SystemResult.Ok;
   }
 
   /** Runs the interactive application or the headless acceptance scenario. */
-  public function run(automated: bool, initial: const ref String) SystemResult<void> {
+  public function run(
+    automated: bool,
+    initial: const ref String,
+    helper: const ref String
+  ) SystemResult<void> {
     try dependencies();
     var title = String("Sun Video Editor");
     var renderer = try ui_gtk.Renderer(title, String("org.namo_robotics.VideoEditor"));
-    try renderer.set_default_size(1160, 860);
     var state = State();
+    state.capture.helper = helper.clone(make_heap_allocator());
     if (not initial.is_empty()) {
       report(state, open_source(state, initial));
     }
+    try renderer.set_default_size(state.page == 0 ? 544 : 1160, state.page == 0 ? 216 : 860);
     var session = ui.Session<State>(state, view, handle);
     try session.render(renderer);
     if (automated) {
       return acceptance(renderer, session);
     }
     while (renderer.running()) {
-      try renderer.wait_events(session.tree, session.queue, session.state.job.mode == 0 ? 0 : 20);
+      try renderer.wait_events(
+        session.tree,
+        session.queue,
+        session.state.job.mode == 0 and not session.state.capture.process.running and
+          session.state.capture.preview.mode == 0 and
+          not session.state.capture.copy_process.running ? 0 : 20
+      );
       try turn(renderer, session);
     }
     session.state.job.process.stop();
@@ -175,7 +238,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
     eprintln("Usage: sun_video_editor [VIDEO|--self-test]");
     return 1;
   }
-  return match sun_video_editor.run(automated, initial) {
+  return match sun_video_editor.run(automated, initial, screencast.helper_path(args[0])) {
     SystemResult.Ok => 0,
     SystemResult.Error(error) => {
       eprintln(error.message());
@@ -184,6 +247,22 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   };
 }
 manifest {
-  libraries: ["stdlib.moon", "sun_ui.moon", "sun_gobject.moon", "sun_gtk.moon", "sun_ui_gtk.moon"]
-  source_files: ["process.sun", "media.sun", "job.sun", "state.sun", "view.sun", "../build/generated/sun_video_editor.view.sun", "../tests/fixtures.sun", "../tests/acceptance.sun"]
+  libraries: [
+    "stdlib.moon",
+    "sun_ui.moon",
+    "sun_gobject.moon",
+    "sun_gtk.moon",
+    "sun_ui_gtk.moon"
+  ]
+  source_files: [
+    "capture.sun",
+    "process.sun",
+    "media.sun",
+    "job.sun",
+    "state.sun",
+    "view.sun",
+    "../build/generated/sun_video_editor.view.sun",
+    "../tests/fixtures.sun",
+    "../tests/acceptance.sun"
+  ]
 }
