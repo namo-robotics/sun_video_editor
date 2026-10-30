@@ -4,8 +4,6 @@
     "context": "..",
     "dockerfile": "../Dockerfile"
   },
-  "containerUser": "ubuntu",
-  "remoteUser": "ubuntu",
   "updateRemoteUserUID": true,
   "mounts": [
     "source=vscode-user-data,target=/home/ubuntu/.vscode-server/data/User,type=volume",
@@ -16,12 +14,23 @@
     "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind,consistency=cached"
   ],
   "containerEnv": {
-    "CTEST_PARALLEL_LEVEL": "4",
+    "CCACHE_DIR": "/home/ubuntu/.cache/ccache",
+
     "CCACHE_MAXSIZE": "10G"
   },
-  "postCreateCommand": "sudo chown ubuntu:ubuntu /home/ubuntu/.cache/ccache && ./scripts/bootstrap-sun.sh --update",
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
   "customizations": {
     "vscode": {
+      "settings": {
+        "cmake.configureOnOpen": false,
+        "[sun]": {
+          "editor.defaultFormatter": "namo-robotics.sun-language",
+          "editor.formatOnSave": true
+        },
+        "[cpp]": {
+          "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+        }
+      },
       "extensions": [
         "namo-robotics.sun-language",
         "llvm-vs-code-extensions.vscode-clangd",

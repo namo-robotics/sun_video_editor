@@ -78,3 +78,8 @@ run `./build/sun_video_editor` in a desktop session with the required libraries.
 
 For macOS source builds and further setup details, see the
 [Development and release guide](docs/development.md).
+
+## Shared development container
+
+See [.devcontainer/README.md](.devcontainer/README.md) for the applied Sun template
+version, project-specific settings, and rebuild instructions.
