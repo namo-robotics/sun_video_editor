@@ -27,7 +27,7 @@ module screencast {
 
   /** Finds the companion helper beside an explicit executable path or a PATH entry. */
   public function helper_path(executable: const ref String) String {
-    var candidate = `${executable}.capture.py`;
+    var candidate = `${executable}.capture`;
     if (std.io.is_file(candidate)) {
       return candidate;
     }
@@ -37,7 +37,7 @@ module screencast {
       Option.Some(path) => {
         var directories = path.split(a, b':');
         for (var directory: ref String in directories) {
-          var installed = `${directory}/${executable}.capture.py`;
+          var installed = `${directory}/${executable}.capture`;
           if (std.io.is_file(installed)) {
             return installed;
           }
@@ -54,7 +54,7 @@ module screencast {
     public var copy_process: video.Process = video.Process();
     var copy_temporary: String = String("");
     var copy_destination: String = String("");
-    public var helper: String = String("build/sun_video_editor.capture.py");
+    public var helper: String = String("build/sun_video_editor.capture");
     public var delay: String = String("0");
     public var kind: i64 = 0;
     public var source: i64 = 0;
@@ -177,13 +177,7 @@ module screencast {
         );
       }
       var a = make_heap_allocator();
-      var env = std.env.Env(a);
-      var interpreter = match env.get("SNAP") {
-        Option.Some(root) => `${root}/usr/bin/python3`,
-        Option.None => String("/usr/bin/python3")
-      };
-      var command = std.process.Command(a, interpreter);
-      command.add_arg(this.helper);
+      var command = std.process.Command(a, this.helper);
       command.add_arg(this.kind == 0 ? "screenshot" : "record");
       command.add_arg(this.source == 2 ? "area" : (this.source == 0 ? "screen" : "window"));
       command.add_arg(`${seconds}`);

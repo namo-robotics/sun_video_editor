@@ -1,0 +1,264 @@
+using std;
+
+/** Coordinates permission, live selection, timing, encoding, and publication in Sun. */
+module capture_backend {
+
+  /** Validates the bounded private helper countdown argument. */
+  public function delay_seconds(text: ref String) SystemResult<i64> {
+    if (text.is_empty() or text.length() > 4) {
+      return SystemResult.Error(Error(1, "Invalid capture delay"));
+    }
+    var value: i64 = 0;
+    for (var i: i64 = 0; i < text.length(); i += 1) {
+      var digit = match text.at(i) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => b' '
+      };
+      if (digit < b'0' or digit > b'9') {
+        return SystemResult.Error(Error(1, "Invalid capture delay"));
+      }
+      value = value * 10 + _convert<i64>(digit - b'0');
+    }
+    if (value > 3600) {
+      return SystemResult.Error(Error(1, "Capture delay exceeds one hour"));
+    }
+    return SystemResult.Ok(value);
+  }
+
+  /** Owns one capture; member order ensures pipelines stop before output and session cleanup. */
+  public class Capture {
+    var portal: desktop.Portal = desktop.Portal();
+    var output: desktop.Output = desktop.Output();
+    var pipeline: desktop.Pipeline = desktop.Pipeline();
+    var selector: desktop.Selection = desktop.Selection();
+    public var video: bool;
+    var area: bool;
+    var window: bool;
+    var cursor: bool;
+    var delay: i64;
+    var stage: i32 = 0;
+    var clock: std.time.Instant = std.time.now();
+    var previous_seconds: i64 = -1;
+    public var recording: bool = false;
+    public var finishing: bool = false;
+    public var completed: bool = false;
+    public var cancelled: bool = false;
+    public var destination: String = String("");
+    public var logical_width: i32 = 0;
+    public var logical_height: i32 = 0;
+    public var x: i32 = 0;
+    public var y: i32 = 0;
+    public var width: i32 = 0;
+    public var height: i32 = 0;
+    var synthetic: bool = false;
+
+    /** Stores settings without requesting permission or creating a file. */
+    init(video: bool, area: bool, window: bool, cursor: bool, delay: i64) {
+      this.video = video;
+      this.area = area;
+      this.window = window;
+      this.cursor = cursor;
+      this.delay = delay;
+    }
+
+    /** Stops streaming before other resource owners are destroyed. */
+    deinit() {
+      this.pipeline.close();
+      this.selector.close();
+    }
+
+    /** Begins the first asynchronous permission step. */
+    public method begin() SystemResult<void> {
+      return this.portal.request(0, this.window, this.cursor);
+    }
+
+    /** Starts timing after permission and all selection have completed. */
+    public method countdown() void {
+      this.stage = 4;
+      this.clock = std.time.now();
+    }
+
+    /** Reports whether the complete post-selection delay has elapsed. */
+    public method countdown_ready() bool {
+      return this.clock.elapsed().as_millis() >= this.delay * 1000;
+    }
+
+    /** Selects encoding policy while retaining native caps guards for pixel-accurate cropping. */
+    public method description(source: ref String) String {
+      var encoding = String("pngenc snapshot=true");
+      if (this.video) {
+        var threads = desktop.encoder_threads();
+        encoding = `videorate drop-only=true max-rate=30 skip-to-first=true ! vp8enc name=encoder deadline=1 lag-in-frames=0 cpu-used=4 end-usage=cq cq-level=10 max-quantizer=24 threads=${threads} ! webmmux`;
+      }
+      var crop = this.width > 0 ? "videoconvert ! video/x-raw,format=RGB ! videocrop name=region ! " : "";
+      return `${source} ! queue name=capture_queue ! ${crop}videoconvert ! ${encoding} ! fdsink name=output`;
+    }
+
+    /** Starts a stream after timing; tests can supply a synthetic source and private output directory. */
+    public method start(
+      source: ref String,
+      directory: ref String,
+      synthetic: bool
+    ) SystemResult<void> {
+      if (this.area and this.width <= 0) {
+        return SystemResult.Error(Error(1, "Select an area before starting capture"));
+      }
+      this.synthetic = synthetic;
+      var remote: i32 = -1;
+      var target = String("");
+      var node = String("");
+      if (not synthetic) {
+        remote = try this.portal.remote();
+        target = this.portal.target(true);
+        node = this.portal.target(false);
+      }
+      try this.output.reserve(directory);
+      var stamp = desktop.filename_stamp();
+      var name = this.video ? "Screencast" : "Screenshot";
+      var extension = this.video ? ".webm" : ".png";
+      this.destination = `${directory}/${name} ${stamp}${extension}`;
+      var description = this.description(source);
+      try this.pipeline.configure(description, this.output, remote, target, node);
+      if (this.width > 0) {
+        try this.pipeline.crop(
+          this.x,
+          this.y,
+          this.width,
+          this.height,
+          this.logical_width,
+          this.logical_height
+        );
+      }
+      try this.pipeline.play();
+      this.stage = 5;
+      this.clock = std.time.now();
+      return SystemResult.Ok;
+    }
+
+    /** Finalizes an active recording; interruption before recording cancels instead. */
+    public method stop() SystemResult<void> {
+      if (this.finishing) {
+        return SystemResult.Ok;
+      }
+      if (not this.video or not this.recording) {
+        this.cancel();
+        return SystemResult.Ok;
+      }
+      this.finishing = true;
+      this.clock = std.time.now();
+      try this.pipeline.finish();
+      return SystemResult.Ok;
+    }
+
+    /** Discards incomplete output through the owned resources' cleanup paths. */
+    public method cancel() void {
+      this.cancelled = true;
+      this.pipeline.close();
+      this.selector.close();
+      println("Capture cancelled.");
+    }
+
+    /** Handles portal revocation and source failure consistently in either delivery order. */
+    public method sharing_ended() SystemResult<void> {
+      if (this.video and this.recording) {
+        return this.stop();
+      }
+      return SystemResult.Error(Error(1, "Desktop sharing ended before capture completed"));
+    }
+
+    /** Handles a polled pipeline event, including source failure during desktop revocation. */
+    public method pipeline_event(event: i32) SystemResult<void> {
+      if (event == 1) {
+        this.recording = true;
+        println(this.video ? "Recording…" : "Taking screenshot…");
+      } else if (event == 2) {
+        this.pipeline.close();
+        try this.output.publish(this.destination);
+        this.completed = true;
+        println(`Saved: ${this.destination}`);
+      } else if (event == 3) {
+        if (this.video and this.recording) {
+          try this.stop();
+        } else {
+          return SystemResult.Error(this.pipeline.error());
+        }
+      }
+      return SystemResult.Ok;
+    }
+
+    /** Advances the Sun state machine without blocking on frames or selection input. */
+    public method tick() SystemResult<void> {
+      if (this.completed or this.cancelled) {
+        return SystemResult.Ok;
+      }
+      if (not this.synthetic) {
+        var response = try this.portal.poll();
+        if (response == 2) {
+          this.cancel();
+          return SystemResult.Ok;
+        }
+        if (response == 3) {
+          try this.sharing_ended();
+        }
+        if (response == 1 and this.stage < 3) {
+          this.stage += 1;
+          if (this.stage < 3) {
+            try this.portal.request(this.stage, this.window, this.cursor);
+          } else if (this.area) {
+            var px = try this.portal.geometry(0);
+            var py = try this.portal.geometry(1);
+            this.logical_width = try this.portal.geometry(2);
+            this.logical_height = try this.portal.geometry(3);
+            println("Drag a rectangle on the screen. Release to confirm; Esc to cancel.");
+            try this.selector.open(px, py, this.logical_width, this.logical_height);
+          } else {
+            this.countdown();
+          }
+        }
+      }
+      if (this.stage == 3) {
+        var selected = try this.selector.poll();
+        if (selected == 2) {
+          this.cancel();
+          return SystemResult.Ok;
+        }
+        if (selected == 1) {
+          this.x = this.selector.x;
+          this.y = this.selector.y;
+          this.width = this.selector.width;
+          this.height = this.selector.height;
+          this.countdown();
+        }
+      }
+      if (this.stage == 4) {
+        var remaining = this.delay * 1000 - this.clock.elapsed().as_millis();
+        var seconds = remaining <= 0 ? 0 : (remaining + 999) / 1000;
+        if (seconds != this.previous_seconds) {
+          println(`Capture starts in ${seconds} seconds…`);
+          this.previous_seconds = seconds;
+        }
+        if (this.countdown_ready()) {
+          var root = desktop.media_directory(this.video);
+          var subdirectory = this.video ? "Screencasts" : "Screenshots";
+          var directory = `${root}/${subdirectory}`;
+          var source = String(
+            "pipewiresrc name=source do-timestamp=true keepalive-time=100 resend-last=true"
+          );
+          try this.start(source, directory, false);
+        }
+      }
+      if (this.stage == 5) {
+        var event = try this.pipeline.poll();
+        try this.pipeline_event(event);
+        if (not this.completed and this.finishing and this.clock.elapsed().as_secs() >= 10) {
+          return SystemResult.Error(Error(1, "The recording could not finish saving"));
+        }
+        if (not this.completed and not this.finishing and (not this.video or not this.recording) and
+          this.clock.elapsed().as_secs() >= 15) {
+          return SystemResult.Error(Error(1, "The desktop did not produce a capture frame"));
+        }
+      }
+      return SystemResult.Ok;
+    }
+  }
+}

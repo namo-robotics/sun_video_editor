@@ -81,6 +81,13 @@ for dependency in sun_ui sun_gobject; do
     native="$prefix/lib/sun/native/libsun_gobject_native.a"
     if [[ $platform == macos ]]; then native="$prefix/lib/libsun_gobject_native.a"; fi
     cp "$native" "$target/build/native/"
+    if [[ $platform == linux ]]; then
+      if [[ ! -f "$target/build/sun_capture.moon" || ! -f "$prefix/lib/sun/native/libsun_capture_native.a" ]]; then
+        echo 'The sun_gobject release lacks native capture support. Select a release containing sun_capture.moon and libsun_capture_native.a.' >&2
+        exit 1
+      fi
+      cp "$prefix/lib/sun/native/libsun_capture_native.a" "$target/build/native/"
+    fi
   fi
 done
 for dependency in sun_ui sun_gobject; do

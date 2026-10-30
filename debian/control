@@ -2,14 +2,14 @@ Source: sun-video-editor
 Section: video
 Priority: optional
 Maintainer: David Brown <davidwbrwn@gmail.com>
-Build-Depends: debhelper-compat (= 13), sun, pkg-config, libgtk-4-dev, librsvg2-2, ffmpeg (>= 7:8.0), gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, python3-gi, gir1.2-gstreamer-1.0, python3-tk, fonts-noto-core, libx11-6, libxext6, xvfb, xauth, dbus-x11
+Build-Depends: libgstreamer1.0-dev, libx11-dev, libxext-dev, debhelper-compat (= 13), sun, pkg-config, libgtk-4-dev, librsvg2-2, ffmpeg (>= 7:8.0), gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, fonts-noto-core, libx11-6, libxext6, xvfb, xauth, dbus-x11
 Standards-Version: 4.7.0
 Homepage: https://github.com/namo-robotics/sun_video_editor
 Rules-Requires-Root: no
 
 Package: sun-video-editor
 Architecture: amd64
-Depends: ${shlibs:Depends}, ${misc:Depends}, ffmpeg (>= 7:8.0), coreutils, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, python3-gi, gir1.2-gstreamer-1.0, python3-tk, fonts-noto-core, libx11-6, libxext6
+Depends: ${shlibs:Depends}, ${misc:Depends}, ffmpeg (>= 7:8.0), coreutils, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-pipewire, fonts-noto-core, libx11-6, libxext6
 Description: convert, compress, and trim local videos
  Native GTK video converter with preview, trim controls, and configurable
  export quality, resolution, container format, and audio retention.

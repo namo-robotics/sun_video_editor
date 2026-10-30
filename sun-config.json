@@ -28,6 +28,19 @@
       "path": "src/tools/package.sun",
       "type": "binary",
       "output_name": "build/editor-package-tool"
+    },
+    {
+      "name": "capture-helper",
+      "path": "src/tools/capture.sun",
+      "type": "binary",
+      "output_name": "build/sun_video_editor.capture"
+    },
+    {
+      "name": "capture-tests",
+      "path": "tests/capture_backend.sun",
+      "type": "binary",
+      "output_name": "build/capture-tests",
+      "test_binary_name": "build/capture-tests_test"
     }
   ]
 }

@@ -45,7 +45,9 @@ module editor_package {
     }
     var a = make_heap_allocator();
     var target = try build_targets.load("sun_video_editor");
-    if (not std.io.is_file(target.output)) {
+    var helper = try build_targets.load("capture-helper");
+    var helper_exists = std.io.is_file(helper.output);
+    if (not std.io.is_file(target.output) or not helper_exists) {
       return SystemResult.Error(Error(1, "Build and test the video target before packaging"));
     }
     var clear = std.process.Command(a, "rm");
@@ -55,9 +57,9 @@ module editor_package {
     var cleared = try capture(clear);
     try install_file(target.output.clone(a), `${destination}/usr/bin/sun_video_editor`, true);
     try install_file(
-      String("src/tools/capture.py"),
-      `${destination}/usr/bin/sun_video_editor.capture.py`,
-      false
+      helper.output.clone(a),
+      `${destination}/usr/bin/sun_video_editor.capture`,
+      true
     );
     try install_file(
       String("packaging/sun-video-editor.desktop"),
@@ -125,6 +127,9 @@ module editor_package {
     dependencies.add_arg("-O");
     dependencies.add_arg("-e");
     dependencies.add_arg(target.output);
+    dependencies.add_arg("-e");
+    var helper = try build_targets.load("capture-helper");
+    dependencies.add_arg(helper.output);
     var variables = try capture(dependencies);
     variables.append("misc:Depends=\n");
     var variables_path = String("build/editor-package/substvars");

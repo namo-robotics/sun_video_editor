@@ -1,0 +1,414 @@
+using std;
+
+/** Exercises real synthetic-frame encoding and the Sun capture lifecycle without desktop access. */
+module capture_tests {
+
+  /** Preserves system errors and assertion failures in capture tests. */
+  enum TestResult<T> { Ok(T), Assertion(std.test.AssertionError), System(Error) }
+
+  /** Runs a tool and returns its trimmed standard output, preserving diagnostics on failure. */
+  function command(command: ref std.process.Command) SystemResult<String> {
+    var output = try command.output();
+    if (output.status() != 0) {
+      return SystemResult.Error(
+        Error(output.status(), output.stderr().clone(make_heap_allocator()))
+      );
+    }
+    var result = output.stdout().clone(make_heap_allocator());
+    result.trim();
+    return SystemResult.Ok(result);
+  }
+
+  /** Runs one bounded capture, verifies codec and dimensions, and checks partial-file cleanup. */
+  function encode(
+    video: bool,
+    cancel: bool,
+    crop: bool,
+    scaled: bool,
+    revoked: bool,
+    width: i32,
+    height: i32
+  ) SystemResult<void> {
+    var a = make_heap_allocator();
+    var stamp = desktop.filename_stamp();
+    var directory = `build/capture-tests-output/${stamp}`;
+    var destination = String("");
+    if (true) {
+      var capture = capture_backend.Capture(video, crop, false, true, 0);
+      if (crop) {
+        capture.logical_width = scaled ? 160 : width;
+        capture.logical_height = scaled ? 120 : height;
+        capture.x = scaled ? 10 : 13;
+        capture.y = scaled ? 20 : 27;
+        capture.width = scaled ? 50 : 137;
+        capture.height = scaled ? 30 : 91;
+      }
+      var source = `videotestsrc is-live=true name=source ! video/x-raw,width=${width},height=${height},framerate=30/1`;
+      try capture.start(source, directory, true);
+      destination = capture.destination.clone(a);
+      var start = std.time.now();
+      while (not capture.completed and not capture.cancelled and start.elapsed().as_secs() < 8) {
+        try capture.tick();
+        if (video and capture.recording and start.elapsed().as_millis() > 600 and
+          not capture.finishing) {
+          if (cancel) {
+            capture.cancel();
+          } else if (revoked) {
+            try capture.sharing_ended();
+            try capture.sharing_ended();
+          } else {
+            try capture.stop();
+          }
+        }
+        std.time.sleep(std.time.create_duration_millis(2));
+      }
+      if (not cancel and not capture.completed) {
+        return SystemResult.Error(Error(1, "Synthetic capture did not finish"));
+      }
+    }
+    if (cancel) {
+      if (std.io.is_file(destination)) {
+        return SystemResult.Error(Error(1, "Cancellation published output"));
+      }
+    } else {
+      var probe = std.process.Command(a, "ffprobe");
+      probe.add_arg("-v");
+      probe.add_arg("error");
+      probe.add_arg("-show_entries");
+      probe.add_arg("stream=codec_name,width,height");
+      probe.add_arg("-of");
+      probe.add_arg("csv=p=0");
+      probe.add_arg(destination);
+      var actual = try command(probe);
+      var codec = video ? "vp8" : "png";
+      var expected_width = crop ? (scaled ? 100 : 137) : width;
+      var expected_height = crop ? (scaled ? 60 : 91) : height;
+      var expected = `${codec},${expected_width},${expected_height}`;
+      if (not actual.equals(expected)) {
+        return SystemResult.Error(Error(1, `Expected ${expected}, received ${actual}`));
+      }
+    }
+    var leftovers = std.process.Command(a, "find");
+    leftovers.add_arg(directory);
+    leftovers.add_arg("-name");
+    leftovers.add_arg(".sun-capture-*");
+    var found = try command(leftovers);
+    if (not found.is_empty()) {
+      return SystemResult.Error(Error(1, "Capture leaked a private output file"));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** A single frame produces a readable lossless screenshot. */
+  test_function screenshot() TestResult<void> {
+    try encode(false, false, false, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Stopping drains the encoder and writes a readable WebM trailer. */
+  test_function recording() TestResult<void> {
+    try encode(true, false, false, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Repeated portal revocation finalizes the recording only once. */
+  test_function revoked_recording() TestResult<void> {
+    try encode(true, false, false, false, true, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Cancellation never publishes a partial recording. */
+  test_function cancellation() TestResult<void> {
+    try encode(true, true, false, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Odd region dimensions survive PNG encoding without padding or scaling. */
+  test_function area_screenshot() TestResult<void> {
+    try encode(false, false, true, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Odd region dimensions survive video cropping. */
+  test_function area_recording() TestResult<void> {
+    try encode(true, false, true, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Logical monitor coordinates scale to physical stream pixels. */
+  test_function scaled_area() TestResult<void> {
+    try encode(false, false, true, true, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** Cancelling a cropped recording removes its private file. */
+  test_function area_cancellation() TestResult<void> {
+    try encode(true, true, true, false, false, 320, 240);
+    return TestResult.Ok;
+  }
+
+  /** High-resolution screenshots retain source dimensions. */
+  test_function screenshot_4k() TestResult<void> {
+    try encode(false, false, false, false, false, 3840, 2160);
+    return TestResult.Ok;
+  }
+
+  /** Full-HD recordings preserve the source resolution. */
+  test_function recording_full_hd() TestResult<void> {
+    try encode(true, false, false, false, false, 1920, 1080);
+    return TestResult.Ok;
+  }
+
+  /** Compares decoded captures against deterministic full-resolution reference pixels. */
+  test_function pixel_fidelity() TestResult<void> {
+    var a = make_heap_allocator();
+    for (var mode = 0; mode < 2; mode += 1) {
+      var stamp = desktop.filename_stamp();
+      var directory = `build/capture-tests-output/${stamp}`;
+      var width = mode == 0 ? 3840 : 1920;
+      var height = mode == 0 ? 2160 : 1080;
+      var reference = desktop.Output();
+      try reference.reserve(directory);
+      var raw = `${directory}/reference.raw`;
+      var conversion = mode == 0 ? "" : "videoconvert ! video/x-raw,format=I420 ! ";
+      var pipeline = desktop.Pipeline();
+      var empty = String("");
+      var description = `videotestsrc name=source pattern=checkers-8 num-buffers=1 ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1 ! ${conversion}fdsink name=output`;
+      try pipeline.configure(description, reference, -1, empty, empty);
+      try pipeline.play();
+      var start = std.time.now();
+      var done = false;
+      while (not done and start.elapsed().as_secs() < 8) {
+        done = try pipeline.poll() == 2;
+        std.time.sleep(std.time.create_duration_millis(2));
+      }
+      try std.test.assert(done);
+      pipeline.close();
+      try reference.publish(raw);
+      var capture = capture_backend.Capture(mode == 1, false, false, true, 0);
+      var source = `videotestsrc name=source pattern=checkers-8 is-live=true ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1`;
+      try capture.start(source, directory, true);
+      start = std.time.now();
+      while (not capture.completed and start.elapsed().as_secs() < 8) {
+        try capture.tick();
+        if (mode == 1 and capture.recording and start.elapsed().as_millis() > 600) {
+          try capture.stop();
+        }
+        std.time.sleep(std.time.create_duration_millis(2));
+      }
+      try std.test.assert(capture.completed);
+      var compare = std.process.Command(a, "ffmpeg");
+      compare.add_arg("-v");
+      compare.add_arg("info");
+      compare.add_arg("-f");
+      compare.add_arg("rawvideo");
+      compare.add_arg("-pixel_format");
+      compare.add_arg(mode == 0 ? "rgb24" : "yuv420p");
+      compare.add_arg("-video_size");
+      compare.add_arg(`${width}x${height}`);
+      compare.add_arg("-i");
+      compare.add_arg(raw);
+      compare.add_arg("-i");
+      compare.add_arg(capture.destination);
+      compare.add_arg("-filter_complex_threads");
+      compare.add_arg("1");
+      compare.add_arg("-lavfi");
+      compare.add_arg("ssim");
+      compare.add_arg("-frames:v");
+      compare.add_arg("1");
+      compare.add_arg("-threads");
+      compare.add_arg("1");
+      compare.add_arg("-f");
+      compare.add_arg("null");
+      compare.add_arg("-");
+      var result = try compare.output();
+      try std.test.assert_eq(result.status(), 0);
+      var diagnostic = result.stderr().clone(a);
+      if (mode == 0) {
+        var decoded = `${directory}/decoded.rgb`;
+        var decode = std.process.Command(a, "ffmpeg");
+        decode.add_arg("-v");
+        decode.add_arg("error");
+        decode.add_arg("-i");
+        decode.add_arg(capture.destination);
+        decode.add_arg("-frames:v");
+        decode.add_arg("1");
+        decode.add_arg("-pix_fmt");
+        decode.add_arg("rgb24");
+        decode.add_arg("-threads");
+        decode.add_arg("1");
+        decode.add_arg("-f");
+        decode.add_arg("rawvideo");
+        decode.add_arg(decoded);
+        try command(decode);
+        var identical = std.process.Command(a, "cmp");
+        identical.add_arg(raw);
+        identical.add_arg(decoded);
+        try command(identical);
+        try std.test.assert(diagnostic.contains("All:1.000000"), "PNG changed the source pixels");
+      } else {
+        // Checker edges expose ringing and lost detail without relying on changing desktop frames.
+        try std.test.assert(
+          diagnostic.contains("All:0.99") or diagnostic.contains("All:0.98") or
+            diagnostic.contains("All:0.97") or diagnostic.contains("All:1.000000"),
+          "Recording lost source detail"
+        );
+      }
+    }
+    return TestResult.Ok;
+  }
+
+  /** Finalizes a recording when source failure and portal closure arrive in either order. */
+  function interrupted_recording(error_first: bool) TestResult<void> {
+    var stamp = desktop.filename_stamp();
+    var directory = `build/capture-tests-output/${stamp}`;
+    var capture = capture_backend.Capture(true, false, false, true, 0);
+    var source = String("videotestsrc is-live=true name=source");
+    try capture.start(source, directory, true);
+    var start = std.time.now();
+    while (not capture.completed and start.elapsed().as_secs() < 8) {
+      try capture.tick();
+      if (capture.recording and not capture.finishing and start.elapsed().as_millis() > 500) {
+        if (error_first) {
+          try capture.pipeline_event(3);
+          try capture.sharing_ended();
+        } else {
+          try capture.sharing_ended();
+          try capture.pipeline_event(3);
+        }
+      }
+      std.time.sleep(std.time.create_duration_millis(2));
+    }
+    try std.test.assert(capture.completed);
+    return TestResult.Ok;
+  }
+
+  /** A source error before portal closure still drains the encoder. */
+  test_function source_error_before_close() TestResult<void> {
+    try interrupted_recording(true);
+    return TestResult.Ok;
+  }
+
+  /** A late source error cannot interrupt already requested finalization. */
+  test_function source_error_after_close() TestResult<void> {
+    try interrupted_recording(false);
+    return TestResult.Ok;
+  }
+
+  /** Runs until a native pipeline error propagates, bounding a broken test fixture. */
+  function await_error(capture: ref capture_backend.Capture) SystemResult<void> {
+    var start = std.time.now();
+    while (not capture.completed and start.elapsed().as_secs() < 8) {
+      try capture.tick();
+      std.time.sleep(std.time.create_duration_millis(2));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** An error downstream of the desktop source cannot publish incomplete output. */
+  test_function output_error() TestResult<void> {
+    var stamp = desktop.filename_stamp();
+    var directory = `build/capture-tests-output/${stamp}`;
+    var capture = capture_backend.Capture(true, false, false, true, 0);
+    var source = String("videotestsrc is-live=true name=source ! identity error-after=15");
+    try capture.start(source, directory, true);
+    match await_error(capture) {
+      SystemResult.Ok => {
+        try std.test.fail("Pipeline error did not propagate");
+      },
+      SystemResult.Error(_) => {}
+    };
+    try std.test.assert(not capture.completed);
+    var published = std.io.is_file(capture.destination);
+    try std.test.assert(not published);
+    return TestResult.Ok;
+  }
+
+  /** Delay validation rejects malformed, negative, and excessive arguments. */
+  test_function delays() TestResult<void> {
+    var invalid = String("-1");
+    match capture_backend.delay_seconds(invalid) {
+      SystemResult.Ok(_) => {
+        try std.test.fail("Accepted negative delay");
+      },
+      SystemResult.Error(_) => {}
+    };
+    invalid = String("3601");
+    match capture_backend.delay_seconds(invalid) {
+      SystemResult.Ok(_) => {
+        try std.test.fail("Accepted excessive delay");
+      },
+      SystemResult.Error(_) => {}
+    };
+    invalid = String("1;true");
+    match capture_backend.delay_seconds(invalid) {
+      SystemResult.Ok(_) => {
+        try std.test.fail("Accepted nonnumeric delay");
+      },
+      SystemResult.Error(_) => {}
+    };
+    var capture = capture_backend.Capture(false, false, false, true, 1);
+    capture.countdown();
+    if (capture.countdown_ready() or not capture.destination.is_empty()) {
+      try std.test.fail("Countdown started capture early");
+    }
+    std.time.sleep(std.time.create_duration_millis(1050));
+    if (not capture.countdown_ready()) {
+      try std.test.fail("Countdown did not expire");
+    }
+    return TestResult.Ok;
+  }
+
+  /** An area cannot start a pipeline or reserve a file before selection. */
+  test_function selection_required() TestResult<void> {
+    var capture = capture_backend.Capture(false, true, false, true, 0);
+    var source = String("videotestsrc name=source");
+    var directory = String("build/capture-unselected");
+    match capture.start(source, directory, true) {
+      SystemResult.Ok => {
+        try std.test.fail("Captured without selection");
+      },
+      SystemResult.Error(_) => {}
+    };
+    if (not capture.destination.is_empty()) {
+      try std.test.fail("Reserved output before selection");
+    }
+    return TestResult.Ok;
+  }
+
+  /** Publication cannot replace an existing destination and cleanup removes the private file. */
+  test_function publication_collision() TestResult<void> {
+    var stamp = desktop.filename_stamp();
+    var directory = `build/capture-tests-output/${stamp}`;
+    var output = desktop.Output();
+    try output.reserve(directory);
+    var destination = `${directory}/existing.png`;
+    var original = String("keep me");
+    try std.io.write_string(destination, original);
+    match output.publish(destination) {
+      SystemResult.Ok => {
+        try std.test.fail("Replaced existing output");
+      },
+      SystemResult.Error(_) => {}
+    };
+    var contents = try std.io.read_to_string(make_heap_allocator(), destination);
+    if (not contents.equals(original)) {
+      try std.test.fail("Existing output changed");
+    }
+    return TestResult.Ok;
+  }
+}
+
+/** Provides the executable whose companion runs the capture test functions. */
+function main() i32 {
+  return 0;
+}
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_capture.moon"
+  ],
+  source_files: [
+    "../src/tools/capture_backend.sun"
+  ]
+}

@@ -219,11 +219,19 @@ passed on the command line still opens directly in the editor. Returning home
 preserves the current editor settings and source; navigation is disabled during
 active conversion or capture.
 
-Capture settings and process ownership live in `src/capture.sun`. The companion
-`src/tools/capture.py` owns the asynchronous desktop portal connection, received
-PipeWire file descriptor, and GStreamer callbacks. Python GI is used for these
-native APIs because the published Sun UI bindings do not expose them. No GTK
-objects or callbacks are added to application code.
+Capture settings and process ownership live in `src/capture.sun`. The compiled
+`sun_video_editor.capture` companion is implemented in `src/tools/capture.sun`
+and `src/tools/capture_backend.sun`. Sun owns permission sequencing, selection,
+countdown, encoding policy, cancellation, and output publication. The Linux
+`sun_capture.moon` bundle from sun_gobject provides checked resource owners;
+`libsun_capture_native.a` handles D-Bus callbacks, descriptor transfer, GStreamer
+streaming callbacks, and X11 input. Python and Tk are not required for capture.
+
+Builds require a sun_gobject release containing both capture artifacts. For local
+validation before that release is published, use the explicit `SUN_GOBJECT_BUILD`
+override above. The dependency installer rejects older release packages rather
+than building dependency sources automatically. Ordinary sun_ui clients do not
+link the capture archive.
 
 Screenshots and recordings use the ScreenCast portal. The permission dialog selects
 one screen or window before the delay begins. Area selection also finishes before
@@ -259,17 +267,17 @@ without replacing existing paths. Cancellation and normal app shutdown discard
 unfinished output and close the portal session. Forced termination can leave a
 hidden `.sun-capture-*` file in the destination directory.
 
-Ubuntu capture dependencies are `python3-gi`, `gir1.2-gstreamer-1.0`,
-`fonts-noto-core`, `python3-tk`, `gstreamer1.0-pipewire`, and
-`gstreamer1.0-plugins-good`, plus a running desktop
+Ubuntu capture dependencies are GIO, GStreamer, `libx11-6`, `libxext6`,
+`gstreamer1.0-pipewire`, and `gstreamer1.0-plugins-good`, plus a running desktop
 portal with ScreenCast support. The installer and Debian/Snap payload declare
 the runtime packages. The helper is installed alongside the executable.
 Capture is Ubuntu-only for now; audio is not implemented. Areas are selected
 within a single authorized screen. Snap confinement and real portal capture require desktop validation.
 
 On Linux, `./build.sh --test` additionally runs synthetic PNG/WebM encoder,
-countdown, area selection, exact cropped dimensions, cancellation, and output-cleanup
-tests under a virtual display. GTK acceptance checks the
+countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup
+tests written in Sun. sun_gobject separately tests mock portal responses and live
+area selection under a virtual display. GTK acceptance checks the
 home tiles, navigation, and invalid delays without requesting desktop capture.
 For manual Ubuntu validation, test screen, window, and area captures with zero and
 nonzero delays, cancel the chooser and countdown, stop a recording, close the

@@ -38,6 +38,36 @@ module editor_build {
     var dependency = setting("SUN_GOBJECT_BUILD", "build/dependencies/sun_gobject/build");
     command.add_arg("--lib-path");
     command.add_arg(dependency);
+    if (String(name).starts_with("capture-")) {
+      var capture_bundle = std.io.is_file(`${dependency}/sun_capture.moon`);
+      var capture_native = std.io.is_file(`${dependency}/native/libsun_capture_native.a`);
+      if (not capture_bundle or not capture_native) {
+        return SystemResult.Error(
+          Error(
+            1,
+            "Capture requires a sun_gobject release containing sun_capture.moon and libsun_capture_native.a"
+          )
+        );
+      }
+      command.add_arg(`-L${dependency}/native`);
+      command.add_arg("-lsun_capture_native");
+      var pkg = std.process.Command(a, "pkg-config");
+      pkg.add_arg("--libs");
+      pkg.add_arg("gio-unix-2.0");
+      pkg.add_arg("gstreamer-1.0");
+      pkg.add_arg("x11");
+      pkg.add_arg("xext");
+      var output = try pkg.output();
+      if (output.status() != 0) {
+        return SystemResult.Error(
+          Error(1, "Install capture development libraries before building")
+        );
+      }
+      var flags = output.stdout().split_whitespace(a);
+      for (var flag: ref String in flags) {
+        command.add_arg(flag);
+      }
+    }
     if (gtk) {
       command.add_arg(`-L${dependency}/native`);
       command.add_arg("-lsun_gobject_native");
@@ -102,10 +132,13 @@ module editor_build {
     generate.add_arg("src/sun_video_editor.view.xml");
     generate.add_arg("build/generated/sun_video_editor.view.sun");
     try run(generate);
-    var helper = std.process.Command(a, "cp");
-    helper.add_arg("src/tools/capture.py");
-    helper.add_arg("build/sun_video_editor.capture.py");
-    try run(helper);
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var platform_output = try platform.output();
+    if (platform_output.stdout().starts_with("Linux")) {
+      try compile("capture-helper", false);
+      try compile("capture-tests", false);
+    }
     try compile("tests", false);
     return compile("sun_video_editor", true);
   }
@@ -133,9 +166,9 @@ module editor_build {
       capture_tests.add_arg("--");
       capture_tests.add_arg("xvfb-run");
       capture_tests.add_arg("-a");
-      capture_tests.add_arg("/usr/bin/python3");
-      capture_tests.add_arg("-B");
-      capture_tests.add_arg("tests/capture_backend.py");
+      var capture_target = try build_targets.load("capture-tests");
+      capture_tests.add_arg(capture_target.tests);
+      capture_tests.add_arg("--test-sequential");
       try run(capture_tests);
       // The virtual desktop has no portal services; keep GTK warnings fatal without activating host portals.
       acceptance.add_arg(
