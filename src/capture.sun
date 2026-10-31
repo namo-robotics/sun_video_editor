@@ -81,6 +81,12 @@ module screencast {
       };
       message.append("…");
     }
+    for (var line: ref String in lines) {
+      if (line.starts_with("Recovery:") and not message.contains(line)) {
+        message.append("\n");
+        message.append(line);
+      }
+    }
     return message;
   }
 
@@ -108,7 +114,7 @@ module screencast {
     public var preview_start: i64 = 0;
     public var preview_end: i64 = 0;
     var preview_path: String = String("");
-    var stopping_at: std.time.Instant = std.time.now();
+    var cancelled: bool = false;
     var observed: i64 = 0;
 
     /** Cancels an owned capture and gives it time to close its portal and remove partial output. */
@@ -143,7 +149,7 @@ module screencast {
       }
       var a = make_heap_allocator();
       this.copy_destination = destination.clone(a);
-      var suffix = source.ends_with(".png") ? ".png" : ".webm";
+      var suffix = source.ends_with(".png") ? ".png" : (source.ends_with(".mp4") ? ".mp4" : ".webm");
       if (not this.copy_destination.ends_with(suffix)) {
         return SystemResult.Error(
           Error(1, `Keep the ${suffix} extension when saving this capture`)
@@ -230,6 +236,7 @@ module screencast {
       this.observed = 0;
       this.recording = false;
       this.stopping = false;
+      this.cancelled = false;
       this.saved = String("");
       this.preview = video.Job();
       this.preview_path = String("");
@@ -245,7 +252,7 @@ module screencast {
       if (this.recording and not this.stopping) {
         this.process.interrupt();
         this.stopping = true;
-        this.stopping_at = std.time.now();
+
         this.message = String("Saving recording…");
       }
     }
@@ -253,9 +260,11 @@ module screencast {
     /** Cancels selection, countdown, or capture and discards unfinished output. */
     public method cancel() void {
       this.process.cancel();
+      this.message = String(
+        this.stopping ? "Stopping saving; retaining partial recording…" : "Capture cancelled."
+      );
       this.stopping = true;
-      this.stopping_at = std.time.now();
-      this.message = String("Capture cancelled.");
+      this.cancelled = true;
     }
 
     /** Probes a completed recording for inline playback without changing the editor state. */
@@ -323,13 +332,9 @@ module screencast {
         }
         changed = true;
       }
-      if (this.stopping and this.stopping_at.elapsed().as_secs() > 300) {
-        this.process.stop();
-        this.message = String("Capture did not finish saving in time.");
-      }
       if (not this.process.running) {
         this.recording = false;
-        if (this.process.status != 0 and not this.stopping) {
+        if (this.process.status != 0 and not this.cancelled) {
           this.message = helper_failure(
             this.process.status,
             this.process.text,

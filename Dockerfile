@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libzstd-dev zlib1g-dev libxml2-dev libedit-dev libncurses-dev libcurl4-openssl-dev \
     libgtest-dev protobuf-compiler libprotobuf-dev libprotoc-dev \
     libgtk-4-dev librsvg2-2 fonts-dejavu-core fonts-noto-core libgirepository1.0-dev gobject-introspection pkg-config \
-    libgstreamer1.0-dev libx11-dev libxext-dev gstreamer1.0-pipewire ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good xvfb xauth dbus-x11 ccache gdb sudo locales curl bash-completion \
+    libgstreamer1.0-dev libx11-dev libxext-dev gstreamer1.0-pipewire ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly xvfb xauth dbus-x11 ccache gdb sudo locales curl bash-completion \
     && locale-gen en_US.UTF-8 && rm -rf /var/lib/apt/lists/*
 RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
     && update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 100 \

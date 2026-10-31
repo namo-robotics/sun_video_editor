@@ -295,7 +295,7 @@ module sun_video_editor {
     if (not session.state.job.cancelled or std.io.exists(output)) {
       return SystemResult.Error(Error(1, "UI cancel failed"));
     }
-    var recording = fixture.path("recording-preview.webm");
+    var recording = fixture.path("recording-preview.mp4");
     var encode = std.process.Command(make_heap_allocator(), "ffmpeg");
     var flags = String("-hide_banner -loglevel error -y -i").split_whitespace(
       make_heap_allocator()
@@ -304,7 +304,7 @@ module sun_video_editor {
       encode.add_arg(flag);
     }
     encode.add_arg(fixture.input);
-    var output_flags = String("-t 2 -c:v libvpx -deadline realtime -threads 1 -an").split_whitespace(
+    var output_flags = String("-t 2 -c:v libx264 -preset ultrafast -threads 1 -c:a aac").split_whitespace(
       make_heap_allocator()
     );
     for (var flag: ref String in output_flags) {

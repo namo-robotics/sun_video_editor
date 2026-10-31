@@ -27,7 +27,7 @@ module capture_backend {
 
   /** Owns one capture; member order ensures pipelines stop before output and session cleanup. */
   public class Capture {
-    public var presenter: presenter.Recording = presenter.Recording();
+    public var presenter: presenter.Options = presenter.Options();
     var portal: desktop.Portal = desktop.Portal();
     var output: desktop.Output = desktop.Output();
     var pipeline: desktop.Pipeline = desktop.Pipeline();
@@ -64,8 +64,13 @@ module capture_backend {
 
     /** Stops streaming before other resource owners are destroyed. */
     deinit() {
-      this.presenter.close();
       this.pipeline.close();
+      if (this.video and not this.completed and not this.cancelled) {
+        var recovery = this.output.preserve();
+        if (not recovery.is_empty()) {
+          println(`Recovery: ${recovery}`);
+        }
+      }
       this.selector.close();
     }
 
@@ -85,15 +90,28 @@ module capture_backend {
       return this.clock.elapsed().as_millis() >= this.delay * 1000;
     }
 
-    /** Selects encoding policy while retaining native caps guards for pixel-accurate cropping. */
+    /** Builds a bounded live compositor and fragmented MP4 writer, or a lossless screenshot pipeline. */
     public method description(source: ref String) String {
-      var encoding = String("pngenc snapshot=true");
-      if (this.video) {
-        var threads = desktop.encoder_threads();
-        encoding = `videorate drop-only=true max-rate=30 skip-to-first=true ! vp8enc name=encoder deadline=1 lag-in-frames=0 cpu-used=4 end-usage=cq cq-level=10 max-quantizer=24 threads=${threads} ! webmmux`;
-      }
       var crop = this.width > 0 ? "videoconvert ! video/x-raw,format=RGB ! videocrop name=region ! " : "";
-      return `${source} ! queue name=capture_queue ! ${crop}videoconvert ! ${encoding} ! fdsink name=output`;
+      var screen = `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(crop)}videoconvert`;
+      if (not this.video) {
+        return `${screen} ! pngenc snapshot=true ! fdsink name=output`;
+      }
+      var threads = desktop.encoder_threads();
+      var result = `${screen} ! identity name=screen_geometry ! presenter.sink_0 compositor name=presenter background=black sink_0::zorder=0 ! capsfilter name=canvas ! videoconvert ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=30 ! x264enc name=encoder tune=zerolatency speed-preset=veryfast pass=qual quantizer=20 key-int-max=30 threads=${threads} ! video/x-h264,stream-format=avc,alignment=au ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! mux.video_0 mp4mux name=mux fragment-duration=1000 streamable=true ! fdsink name=output`;
+      if (this.presenter.camera) {
+        var camera = this.synthetic ? "videotestsrc is-live=true pattern=red ! video/x-raw,width=160,height=120,framerate=30/1" : "v4l2src device=/dev/video0 do-timestamp=true";
+        result.append(
+          ` ${String(camera)} ! queue name=camera_queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! identity name=camera_geometry ! presenter.sink_1`
+        );
+      }
+      if (this.presenter.microphone) {
+        var audio = this.synthetic ? "audiotestsrc is-live=true wave=sine" : "pulsesrc do-timestamp=true";
+        result.append(
+          ` ${String(audio)} ! queue name=microphone_queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! avenc_aac bitrate=128000 ! queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! mux.audio_0`
+        );
+      }
+      return result;
     }
 
     /** Starts a stream after timing; tests can supply a synthetic source and private output directory. */
@@ -117,7 +135,7 @@ module capture_backend {
       try this.output.reserve(directory);
       var stamp = desktop.filename_stamp();
       var name = this.video ? "Screencast" : "Screenshot";
-      var extension = this.video ? ".webm" : ".png";
+      var extension = this.video ? ".mp4" : ".png";
       this.destination = `${directory}/${name} ${stamp}${extension}`;
       var description = this.description(source);
       try this.pipeline.configure(description, this.output, remote, target, node);
@@ -129,6 +147,12 @@ module capture_backend {
           this.height,
           this.logical_width,
           this.logical_height
+        );
+      }
+      if (this.video) {
+        try this.pipeline.presenter(
+          _convert<i32>(this.presenter.corner),
+          _convert<i32>(this.presenter.size)
         );
       }
       try this.pipeline.play();
@@ -146,7 +170,6 @@ module capture_backend {
         this.cancel();
         return SystemResult.Ok;
       }
-      this.presenter.stop();
       this.finishing = true;
       this.clock = std.time.now();
       try this.pipeline.finish();
@@ -155,8 +178,18 @@ module capture_backend {
 
     /** Discards incomplete output through the owned resources' cleanup paths. */
     public method cancel() void {
+      if (this.finishing) {
+        this.pipeline.close();
+        var recovery = this.output.preserve();
+        this.cancelled = true;
+        this.selector.close();
+        println("Saving interrupted; retaining the recording for recovery.");
+        if (not recovery.is_empty()) {
+          println(`Recovery: ${recovery}`);
+        }
+        return;
+      }
       this.cancelled = true;
-      this.presenter.close();
       this.pipeline.close();
       this.selector.close();
       println("Capture cancelled.");
@@ -174,16 +207,9 @@ module capture_backend {
     public method pipeline_event(event: i32) SystemResult<void> {
       if (event == 1) {
         this.recording = true;
-        this.presenter.mark_screen();
         println(this.video ? "Recording…" : "Taking screenshot…");
       } else if (event == 2) {
         this.pipeline.close();
-        if (this.presenter.settings.enabled()) {
-          this.presenter.stop();
-          try this.output.publish(this.presenter.screen);
-          this.stage = 6;
-          return SystemResult.Ok;
-        }
         try this.output.publish(this.destination);
         this.completed = true;
         println(`Saved: ${this.destination}`);
@@ -200,21 +226,6 @@ module capture_backend {
     /** Advances the Sun state machine without blocking on frames or selection input. */
     public method tick() SystemResult<void> {
       if (this.completed or this.cancelled) {
-        return SystemResult.Ok;
-      }
-      try this.presenter.poll();
-      if (this.stage == 6) {
-        try this.presenter.compose(this.presenter.screen);
-        if (this.presenter.completed) {
-          var publish = std.process.Command(make_heap_allocator(), "ln");
-          publish.add_arg("-T");
-          publish.add_arg("--");
-          publish.add_arg(this.presenter.result);
-          publish.add_arg(this.destination);
-          try video.capture(publish);
-          this.completed = true;
-          println(`Saved: ${this.destination}`);
-        }
         return SystemResult.Ok;
       }
       if (not this.synthetic) {
@@ -267,10 +278,6 @@ module capture_backend {
           var root = desktop.media_directory(this.video);
           var subdirectory = this.video ? "Screencasts" : "Screenshots";
           var directory = `${root}/${subdirectory}`;
-          try this.presenter.prepare(directory, false, false);
-          if (not this.presenter.ready()) {
-            return SystemResult.Ok;
-          }
           var source = String(
             "pipewiresrc name=source do-timestamp=true keepalive-time=100 resend-last=true"
           );
@@ -280,7 +287,7 @@ module capture_backend {
       if (this.stage == 5) {
         var event = try this.pipeline.poll();
         try this.pipeline_event(event);
-        if (not this.completed and this.finishing and this.clock.elapsed().as_secs() >= 10) {
+        if (not this.completed and this.finishing and this.clock.elapsed().as_secs() >= 120) {
           return SystemResult.Error(Error(1, "The recording could not finish saving"));
         }
         if (not this.completed and not this.finishing and (not this.video or not this.recording) and

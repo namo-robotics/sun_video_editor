@@ -31,6 +31,7 @@ parts:
       - coreutils
       - gstreamer1.0-libav
       - gstreamer1.0-plugins-good
+      - gstreamer1.0-plugins-ugly
       - gstreamer1.0-pipewire
       - libx11-6
       - libxext6

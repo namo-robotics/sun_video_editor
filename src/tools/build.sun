@@ -133,7 +133,7 @@ module editor_build {
     link.add_arg(native_path);
     link.add_arg("-lobjc");
     var frameworks = String(
-      "Foundation AppKit ScreenCaptureKit AVFoundation CoreMedia CoreFoundation CoreGraphics ImageIO"
+      "Foundation AppKit ScreenCaptureKit AVFoundation CoreMedia CoreFoundation CoreGraphics CoreImage CoreVideo ImageIO"
     ).split_whitespace(
       a
     );
@@ -143,6 +143,7 @@ module editor_build {
     }
     link.add_arg("-o");
     link.add_arg(target.output);
+    link.add_arg("-Wl,-sectcreate,__TEXT,__info_plist,packaging/capture-info.plist");
     try run(link);
     var sign = std.process.Command(a, "codesign");
     sign.add_arg("--force");

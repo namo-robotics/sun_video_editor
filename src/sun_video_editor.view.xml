@@ -113,7 +113,7 @@
             </Column>
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;record&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-video" text="Recording · WebM" action="112" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
+              <Button key="capture-video" text="Recording · MP4" action="112" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
             </Column>
           </Row>
           <Label text="Source" horizontal="Start" />
@@ -153,7 +153,7 @@
           <Row spacing="12">
             <Button text="Choose source and start" action="114" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="primary" />
             <Button visible="{state.capture.kind == 1}" text="Stop and save" action="115" enabled="{state.capture.recording and not state.capture.stopping}" />
-            <Button text="Cancel" action="116" enabled="{state.capture.process.running and not state.capture.stopping}" />
+            <Button text="{String(state.capture.stopping ? &quot;Keep partial and stop&quot; : &quot;Cancel&quot;)}" action="116" enabled="{state.capture.process.running}" />
           </Row>
           <Label text="{state.capture.message.clone(a)}" horizontal="Start" />
           <If test="{not state.capture.saved.is_empty() and state.capture.kind == 0 and not state.capture.process.running}">

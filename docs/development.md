@@ -236,7 +236,7 @@ link the capture archive.
 On Linux, screenshots and recordings use the ScreenCast portal. The permission dialog selects
 one screen or window before the delay begins. Area selection also finishes before
 the countdown; no frame is captured until that countdown expires.
-Screenshot and Recording icon buttons select PNG or WebM capture, with the current
+Screenshot and Recording icon buttons select PNG or MP4 capture, with the current
 mode highlighted. The Screen, Window, and Selection icon buttons highlight the current source.
 For **Selection**, the helper grabs the pointer and displays a small instruction
 bar plus one hollow outline window on the live authorized screen using the
@@ -253,9 +253,11 @@ change during capture stops the operation rather than silently moving the crop.
 Live selection requires an Ubuntu desktop with XWayland and portal
 screen geometry; unsupported or out-of-bounds layouts fail explicitly.
 Screenshots retain the portal stream's full pixel resolution as lossless PNG;
-screen-only recordings retain that resolution as VP8 WebM, capped at 30 fps. Recording uses
-constrained quality with a resolution-scaled bitrate budget (about 15.6 Mb/s for
-1080p and 62.2 Mb/s for 4K) instead of the encoder's low default bitrate.
+recordings use H.264/AAC MP4, capped at 30 fps. The native GStreamer pipeline
+combines screen, camera, and microphone while capturing and writes short MP4
+fragments. The x264 encoder uses constrained quality with a bounded thread count.
+Odd recording dimensions receive at most one black padding pixel on the right
+or bottom to satisfy H.264's chroma layout; screenshots keep exact dimensions.
 Small selected areas retain their actual pixel dimensions; captures are never
 upscaled to pretend to add detail. PipeWire repeats a still
 frame periodically, and frame-rate conversion drops excess frames without waiting
@@ -271,7 +273,7 @@ Ubuntu capture dependencies are GIO, GStreamer, `libx11-6`, `libxext6`,
 `gstreamer1.0-pipewire`, and `gstreamer1.0-plugins-good`, plus a running desktop
 portal with ScreenCast support. The installer and Debian/Snap payload declare
 the runtime packages. The helper is installed alongside the executable.
-Optional microphone capture uses FFmpeg's PulseAudio input (including PipeWire's
+Optional microphone capture uses GStreamer's PulseAudio input (including PipeWire's
 PulseAudio compatibility service); camera capture uses V4L2 at `/dev/video0`.
 Areas are selected within a single authorized screen.
 Snap confinement and real portal capture require desktop validation.
@@ -279,9 +281,10 @@ Snap confinement and real portal capture require desktop validation.
 On Apple Silicon macOS, `build.sh` builds the Sun capture helper with Xcode Command
 Line Tools and the `sun_apple` bindings. It uses ScreenCaptureKit's system sharing picker for screens and
 windows, then an Escape-cancellable overlay for area selection. The countdown
-starts after selection. Screenshots are PNG; recordings are captured natively,
-then converted to WebM with FFmpeg when stopped. Optional camera and microphone
-inputs use FFmpeg AVFoundation with the system default devices. The helper is packaged
+starts after selection. Screenshots are PNG. Recordings use ScreenCaptureKit,
+Core Image, and AVAssetWriter to combine the camera and microphone during capture
+and write H.264/AAC MP4 fragments directly. Default AVFoundation camera and
+ScreenCaptureKit microphone devices are used. The helper is packaged
 beside the application. Allow the system sharing prompt; if access is denied,
 check **System Settings > Privacy & Security > Screen & System Audio Recording**.
 Captures are saved under **Pictures/Sun Captures** or **Movies/Sun Captures**.
@@ -300,16 +303,36 @@ frame dimensions while preserving the camera aspect ratio. These settings apply
 to the finished recording and its playback preview; there is no live camera overlay
 on the desktop. Screenshot mode never opens either device.
 
-`src/tools/recording.sun` owns the shared presenter workflow. Devices open only
-after screen authorization, area selection, and the countdown. Screen capture
-waits for presenter media to arrive; the presenter timeline is trimmed to the
-start of the desktop recording. Device startup timing is polled, so real-device
-synchronization should be checked manually. The helper records presenter media
-privately, stops it alongside screen capture, and composes a VP9/Opus WebM before
-publishing. Saving therefore takes longer when either input is enabled. Cancellation,
-permission failures, and encoding failures remove unpublished files. Forced termination
-can leave a `.sun-presenter-*` directory beside the destination (inside the private
-capture directory on macOS).
+`src/tools/recording.sun` validates shared options. Native frame callbacks stay in
+`sun_apple` on macOS and `sun_gobject` on Linux; no video frames cross into Sun.
+Devices open only after screen authorization, area selection, and the countdown.
+The camera is combined with screen frames while recording, including when the
+desktop is still. There is no full-video re-encode after stopping.
+
+macOS retains the newest camera and desktop frames, caps its render pool, and
+uses a serial writer queue. Linux queues have explicit buffer limits. Both write
+fragmented MP4 so long captures primarily consume disk space rather than retaining
+all frames or all packet metadata in RAM. Encoding backpressure can drop video
+frames; microphone write failures are reported instead of silently dropping audio.
+This is bounded buffering, not a guarantee against OS or driver memory leaks.
+
+Stopping reports finalization and publishes only after the native muxer finishes.
+The previous five-minute total saving deadline has been removed. A stalled native
+shutdown can still fail, but failed finalization or publication keeps partial
+output and reports a `Recovery:` path. On macOS this is the private `.capture-*`
+directory containing `recovery.mp4`; on Linux it is the private `.sun-capture-*`
+file, which can be copied to a `.mp4` filename. Recovery may omit the last fragment
+or be impossible if the disk failed before any fragment was written. Explicit
+cancellation during recording discards its output. Closing during finalization
+retains it. Successful publication removes owned temporary files.
+
+Live capture requires the updated `sun_apple` and `sun_capture` bundles and native
+archives. When developing these bindings, build each in its own repository and
+select its artifacts explicitly with `SUN_APPLE_BUILD` on macOS or
+`SUN_GOBJECT_BUILD` on Linux. Published dependencies remain the default; the editor
+does not build dependency source checkouts automatically. Linux additionally
+requires `gstreamer1.0-plugins-ugly` for x264, alongside the existing libav plugins
+for AAC. macOS embeds camera and microphone purpose strings in the helper.
 
 On macOS, grant Camera and Microphone access when prompted; check the corresponding
 entries in System Settings > Privacy & Security if capture fails. On Ubuntu,
@@ -319,9 +342,10 @@ audio capture are not included. The Snap declares `camera` and `audio-record` pl
 connect them with `sudo snap connect sun-video-editor:camera` and
 `sudo snap connect sun-video-editor:audio-record` before using those inputs.
 
-The platform-independent tests generate a colored camera feed and a microphone tone,
-then decode the composed video to check inset position, dimensions, audio presence,
-and private-file cleanup. Manually test both platforms with camera only, microphone
+The native Apple writer tests use colored pixel buffers and a generated microphone
+tone, then decode the MP4 to verify camera motion over a still desktop, placement,
+and audio presence. Linux capture tests use GStreamer test sources to check live
+encoding, dimensions, audio presence, cancellation, and recovery. Manually test both platforms with camera only, microphone
 only, and both; check permissions denied, missing/busy devices, cancellation during
 startup and saving, stopping screen sharing, audio synchronization, and playback.
 
@@ -330,7 +354,7 @@ Their padded canvases account for the toolkit image preview minimum size, with
 extra raster resolution for Retina displays.
 The adjacent `sun_video_editor.capture.icons` directory must travel with the executable.
 
-On Linux, `./build.sh --test` additionally runs synthetic PNG/WebM encoder,
+On Linux, `./build.sh --test` additionally runs synthetic PNG/MP4 encoder,
 countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup
 tests written in Sun. sun_gobject separately tests mock portal responses and live
 area selection under a virtual display. GTK acceptance checks the

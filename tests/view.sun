@@ -80,6 +80,11 @@ module sun_video_editor {
 
   /** Displays abnormal helper exits and keeps multiline device errors instead of blaming permissions. */
   test_function capture_failure_diagnostics() ViewResult {
+    var recovery = String("Recovery: /recordings/private.mp4\nCapture failed: disk full\n");
+    var preserved = screencast.helper_failure(1, recovery, String(""));
+    try std.test.assert(
+      preserved.contains("Recovery: /recordings/private.mp4") and preserved.contains("disk full")
+    );
     var empty = String("");
     var crash = String("pointer being freed was not allocated\n");
     var message = screencast.helper_failure(134, empty, crash);
@@ -98,6 +103,25 @@ module sun_video_editor {
     }
     message = screencast.helper_failure(1, empty, verbose);
     try std.test.assert(message.length() < 2100);
+  }
+
+  /** Allows an interrupted finalization to retain its partial recording instead of trapping the user. */
+  test_function capture_finalization_controls() ViewResult {
+    var state = State();
+    state.page = 2;
+    state.capture.process.running = true;
+    state.capture.stopping = true;
+    var description = view(state);
+    state.capture.process.running = false;
+    var found = false;
+    for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+      var node = description.elements[i];
+      if (node.action == 116) {
+        try std.test.assert(node.enabled and node.text.equals_literal("Keep partial and stop"));
+        found = true;
+      }
+    }
+    try std.test.assert(found);
   }
 
   /** Accepts whole-second delays and rejects malformed or unbounded countdowns. */
@@ -120,10 +144,14 @@ module sun_video_editor {
   test_function capture_save_copy() ViewResult {
     var fixture = try video_fixtures.Fixture();
     var a = make_heap_allocator();
-    for (var kind: i64 = 0; kind < 2; kind += 1) {
+    for (var kind: i64 = 0; kind < 3; kind += 1) {
       var capture = screencast.Capture();
-      var source = fixture.path(kind == 0 ? "original.png" : "original.webm");
-      var target = fixture.path(kind == 0 ? "copy with spaces.png" : "copy with spaces.webm");
+      var source = fixture.path(
+        kind == 0 ? "original.png" : (kind == 1 ? "original.webm" : "original.mp4")
+      );
+      var target = fixture.path(
+        kind == 0 ? "copy with spaces.png" : (kind == 1 ? "copy with spaces.webm" : "copy with spaces.mp4")
+      );
       var contents = String("capture bytes");
       try std.io.write_string(source, contents);
       capture.saved = source.clone(a);

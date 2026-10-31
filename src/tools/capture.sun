@@ -23,7 +23,7 @@ function run(argc: i32, argv: raw_ptr<raw_ptr<i8>>) SystemResult<void> {
     args[4].equals_literal("cursor"),
     delay
   );
-  capture.presenter.settings = try presenter.options(args);
+  capture.presenter = try presenter.options(args);
   try capture.begin();
   while (not capture.completed and not capture.cancelled) {
     var signal = desktop.signal_request();

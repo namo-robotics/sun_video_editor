@@ -80,9 +80,13 @@ module capture_tests {
       probe.add_arg("csv=p=0");
       probe.add_arg(destination);
       var actual = try command(probe);
-      var codec = video ? "vp8" : "png";
+      var codec = video ? "h264" : "png";
       var expected_width = crop ? (scaled ? 100 : 137) : width;
       var expected_height = crop ? (scaled ? 60 : 91) : height;
+      if (video) {
+        expected_width = (expected_width + 1) / 2 * 2;
+        expected_height = (expected_height + 1) / 2 * 2;
+      }
       var expected = `${codec},${expected_width},${expected_height}`;
       if (not actual.equals(expected)) {
         return SystemResult.Error(Error(1, `Expected ${expected}, received ${actual}`));
@@ -114,16 +118,10 @@ module capture_tests {
   /** The Linux pipeline publishes the combined recording only after both encoders finish. */
   test_function presenter_recording() TestResult<void> {
     var capture = capture_backend.Capture(true, false, false, true, 0);
-    capture.presenter.settings.camera = true;
-    capture.presenter.settings.microphone = true;
+    capture.presenter.camera = true;
+    capture.presenter.microphone = true;
     var directory = String("build/capture-presenter-tests");
-    try capture.presenter.prepare(directory, false, true);
     var clock = std.time.now();
-    while (not capture.presenter.ready() and clock.elapsed().as_secs() < 15) {
-      try capture.presenter.poll();
-      std.time.sleep(std.time.create_duration_millis(5));
-    }
-    try std.test.assert(capture.presenter.ready());
     var source = String(
       "videotestsrc is-live=true name=source ! video/x-raw,width=320,height=240,framerate=30/1"
     );
@@ -147,7 +145,7 @@ module capture_tests {
     probe.add_arg("csv=p=0");
     probe.add_arg(capture.destination);
     var streams = try command(probe);
-    try std.test.assert(streams.contains("vp9,320,240") and streams.contains("opus"));
+    try std.test.assert(streams.contains("h264,320,240") and streams.contains("aac"));
     return TestResult.Ok;
   }
 
@@ -169,7 +167,7 @@ module capture_tests {
     return TestResult.Ok;
   }
 
-  /** Odd region dimensions survive video cropping. */
+  /** Odd video regions receive at most one padding pixel for H.264 encoding. */
   test_function area_recording() TestResult<void> {
     try encode(true, false, true, false, false, 320, 240);
     return TestResult.Ok;
@@ -413,6 +411,23 @@ module capture_tests {
     if (not capture.destination.is_empty()) {
       try std.test.fail("Reserved output before selection");
     }
+    return TestResult.Ok;
+  }
+
+  /** Error recovery retains an owned partial file while ordinary cancellation still removes it. */
+  test_function recovery_retains_partial_output() TestResult<void> {
+    var path = String("");
+    if (true) {
+      var output = desktop.Output();
+      var directory = String("build/capture-recovery-tests");
+      try output.reserve(directory);
+      path = output.preserve();
+      var content = String("recoverable fragments");
+      try std.io.write_string(path, content);
+    }
+    var saved = try std.io.read_to_string(make_heap_allocator(), path);
+    try std.test.assert(saved.equals_literal("recoverable fragments"));
+    try std.io.remove_file(path);
     return TestResult.Ok;
   }
 

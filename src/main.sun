@@ -20,7 +20,9 @@ module sun_video_editor {
     if (state.capture_save_requested) {
       state.capture_save_requested = false;
       state.capture_save_source = state.capture.saved.clone(make_heap_allocator());
-      var filename = String(state.capture.kind == 0 ? "Screenshot.png" : "Recording.webm");
+      var filename = String(
+        state.capture.kind == 0 ? "Screenshot.png" : (state.capture.saved.ends_with(".mp4") ? "Recording.mp4" : "Recording.webm")
+      );
       match renderer.choose_output(filename) {
         SystemResult.Ok => {},
         SystemResult.Error(error) => {

@@ -7,7 +7,7 @@ case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)
     command -v apt-get >/dev/null || { echo 'System setup requires Ubuntu 26.04 with apt-get.' >&2; exit 1; }
     packages=(ca-certificates curl build-essential pkg-config libgtk-4-dev librsvg2-2
-      fonts-dejavu-core fonts-noto-core ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-pipewire libgstreamer1.0-dev libx11-dev libxext-dev
+      fonts-dejavu-core fonts-noto-core ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-pipewire libgstreamer1.0-dev libx11-dev libxext-dev
       xvfb xauth dbus-x11 dpkg-dev)
     missing=()
     for package in "${packages[@]}"; do

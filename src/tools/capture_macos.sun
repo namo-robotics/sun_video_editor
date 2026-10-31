@@ -131,16 +131,15 @@ module macos_capture {
     return SystemResult.Ok(result);
   }
 
-  /** Owns private files, the native session, and a cancellable encoder for one capture. */
+  /** Owns the native live recorder and private files until publication or explicit cancellation. */
   class Capture {
     var settings: Options;
-    var presenter: presenter.Recording = presenter.Recording();
     var session: apple_screen_capture.Session = apple_screen_capture.Session();
-    var encoder: video.Process = video.Process();
     var stage: String = String("");
     var output: String = String("");
     var native_file: String = String("");
-    var encoded_file: String = String("");
+    var recovery_file: String = String("");
+    var published: bool = false;
     var state: i32 = 0;
     var clock: std.time.Instant = std.time.now();
     var last_seconds: i64 = -1;
@@ -151,19 +150,21 @@ module macos_capture {
 
     /** Takes ownership of the validated capture options. */
     init(settings: Options) {
-      this.presenter.settings = settings.presenter;
-      settings.presenter = presenter.Options();
       this.settings = settings;
     }
 
-    /** Stops owned work and removes only this session's unpublished files. */
+    /** Preserves failed recordings before closing native writers, which may remove their output paths. */
     deinit() {
-      this.encoder.stop();
-      this.presenter.close();
+      var preserve = this.settings.recording and not this.published and not this.cancelled and
+        not this.stage.is_empty() and std.io.is_file(this.native_file);
+      if (preserve) {
+        ignore_error(publish_file(this.native_file, this.recovery_file));
+        report(`Recovery: ${this.stage}`);
+      }
       this.session.close();
-      if (not this.stage.is_empty()) {
+      if (not this.stage.is_empty() and not preserve) {
         ignore_error(std.io.remove_file(this.native_file));
-        ignore_error(std.io.remove_file(this.encoded_file));
+        ignore_error(std.io.remove_file(this.recovery_file));
         ignore_error(std.io.remove_dir(this.stage));
       }
     }
@@ -192,14 +193,14 @@ module macos_capture {
       var private_dir = `${directory}/.capture-${identifier}`;
       try std.io.make_dir(private_dir, 448);
       this.stage = private_dir;
-      var suffix = this.settings.recording ? "webm" : "png";
+      var suffix = this.settings.recording ? "mp4" : "png";
       this.output = `${directory}/Capture-${identifier}.${suffix}`;
       if (this.settings.recording) {
         this.native_file = `${this.stage}/capture.mp4`;
       } else {
         this.native_file = `${this.stage}/capture.png`;
       }
-      this.encoded_file = `${this.stage}/capture.webm`;
+      this.recovery_file = `${this.stage}/recovery.mp4`;
       return SystemResult.Ok;
     }
 
@@ -210,67 +211,26 @@ module macos_capture {
         return SystemResult.Ok;
       }
       try publish_file(path, this.output);
+      this.published = true;
       this.done = true;
       report(`Saved: ${this.output}`);
       return SystemResult.Ok;
     }
 
-    /** Starts WebM encoding only after ScreenCaptureKit finalized the MP4. */
-    method encode() SystemResult<void> {
-      this.session.close();
-      if (this.presenter.settings.enabled()) {
-        this.presenter.stop();
-        this.state = 4;
-        return SystemResult.Ok;
-      }
-      var command = std.process.Command(make_heap_allocator(), "ffmpeg");
-      command.add_arg("-nostdin");
-      command.add_arg("-hide_banner");
-      command.add_arg("-loglevel");
-      command.add_arg("error");
-      command.add_arg("-n");
-      command.add_arg("-i");
-      command.add_arg(this.native_file);
-      command.add_arg("-an");
-      command.add_arg("-c:v");
-      command.add_arg("libvpx-vp9");
-      command.add_arg("-deadline");
-      command.add_arg("realtime");
-      command.add_arg("-cpu-used");
-      command.add_arg("6");
-      command.add_arg("-threads");
-      command.add_arg("2");
-      command.add_arg("-pix_fmt");
-      command.add_arg("yuv420p");
-      command.add_arg(this.encoded_file);
-      try this.encoder.start(command);
-      this.state = 3;
-      this.clock = std.time.now();
-      return SystemResult.Ok;
-    }
-
-    /** Requests stop for a running recording, or cancellation before it starts. */
+    /** Stops capture; closing during finalization retains partial output instead of discarding it. */
     public method interrupt(cancel: bool) void {
       if (cancel or not this.active) {
-        if (not this.cancelled) {
-          report(String("Capture cancelled."));
-        }
-        this.cancelled = true;
-        if (this.state == 3) {
-          this.encoder.cancel();
-        } else if (this.active) {
-          this.presenter.stop();
-          this.session.stop();
-          this.stopping = true;
-          this.clock = std.time.now();
-        } else {
-          this.done = true;
-        }
+        this.cancelled = not this.stopping;
+        this.done = true;
+        report(
+          String(
+            this.cancelled ? "Capture cancelled." : "Saving interrupted; retaining the recording for recovery."
+          )
+        );
       } else if (not this.stopping) {
         this.stopping = true;
         this.clock = std.time.now();
-        report(String("Saving recording…"));
-        this.presenter.stop();
+        report(String("Finalizing MP4…"));
         this.session.stop();
       }
     }
@@ -278,36 +238,6 @@ module macos_capture {
     /** Advances selection, countdown, capture, and encoding while preserving cancellation. */
     public method tick() SystemResult<void> {
       if (this.done) {
-        return SystemResult.Ok;
-      }
-      if (this.state == 4) {
-        if (this.cancelled) {
-          this.done = true;
-          return SystemResult.Ok;
-        }
-        try this.presenter.compose(this.native_file);
-        if (this.presenter.completed) {
-          try this.publish(this.presenter.result);
-        }
-        return SystemResult.Ok;
-      }
-      try this.presenter.poll();
-      if (this.state == 3) {
-        try this.encoder.tick();
-        if (not this.encoder.running) {
-          if (this.cancelled) {
-            this.done = true;
-            return SystemResult.Ok;
-          }
-          if (this.encoder.status != 0) {
-            return SystemResult.Error(
-              Error(1, `FFmpeg could not encode the recording: ${this.encoder.diagnostics}`)
-            );
-          }
-          try this.publish(this.encoded_file);
-        } else if (this.clock.elapsed().as_secs() > 300) {
-          return SystemResult.Error(Error(1, "Recording encoding timed out"));
-        }
         return SystemResult.Ok;
       }
       match try this.session.poll() {
@@ -320,14 +250,13 @@ module macos_capture {
         },
         apple_screen_capture.Event.Recording => {
           this.active = true;
-          this.presenter.mark_screen();
           report(String("Recording…"));
         },
         apple_screen_capture.Event.Finished => {
           if (this.cancelled) {
             this.done = true;
           } else {
-            try this.encode();
+            try this.publish(this.native_file);
           }
         },
         apple_screen_capture.Event.Screenshot => {
@@ -352,17 +281,27 @@ module macos_capture {
           if (this.stage.is_empty()) {
             try this.prepare_output();
           }
-          try this.presenter.prepare(this.stage, true, false);
-          if (not this.presenter.ready()) {
-            return SystemResult.Ok;
+          if (this.settings.recording) {
+            try this.session.start_live(
+              this.settings.cursor,
+              this.native_file,
+              this.settings.presenter.camera,
+              this.settings.presenter.microphone,
+              _convert<i32>(this.settings.presenter.corner),
+              _convert<i32>(this.settings.presenter.size)
+            );
+            report(
+              String("Starting recording; allow camera and microphone access when prompted…")
+            );
+          } else {
+            try this.session.start(false, this.settings.cursor, this.native_file);
           }
-          try this.session.start(this.settings.recording, this.settings.cursor, this.native_file);
           this.state = 2;
           this.clock = std.time.now();
         }
       }
       if (this.state == 2 and (not this.active or this.stopping) and
-        this.clock.elapsed().as_secs() > 15) {
+        this.clock.elapsed().as_secs() > 120) {
         return SystemResult.Error(Error(1, "Native capture timed out"));
       }
       return SystemResult.Ok;
