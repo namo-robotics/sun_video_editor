@@ -16,6 +16,36 @@ SPEC.loader.exec_module(BUNDLER)
 class BundleTests(unittest.TestCase):
     """Check portability and fail-closed behavior before packaging release artifacts."""
 
+    def test_library_trace_allows_only_the_relocated_app(self):
+        """Allow bundled libraries under the runner home while still rejecting external paths."""
+        app = "/Users/runner/work/editor/build/Moved [test] App.app"
+        bundled = f"dyld[123]: <UUID> {app}/Contents/Frameworks/libfixture.dylib\n"
+        with tempfile.TemporaryDirectory(dir="build", prefix="trace-test-") as temporary:
+            log = pathlib.Path(temporary) / "trace.log"
+            missing = subprocess.run([
+                "bash", "scripts/check-macos-library-trace.sh", app, str(log),
+            ], capture_output=True, text=True)
+            self.assertNotEqual(missing.returncode, 0)
+            for external in (
+                None,
+                "/opt/homebrew/lib/libfixture.dylib",
+                "/usr/local/lib/libfixture.dylib",
+                "/Users/runner/work/editor/build/original/libfixture.dylib",
+                f"{app}/Contents-other/libfixture.dylib",
+                f"{app}.other/Contents/Frameworks/libfixture.dylib",
+            ):
+                with self.subTest(external=external):
+                    log.write_text(
+                        bundled + "dyld[123]: <UUID> /usr/lib/libSystem.B.dylib\n"
+                        + (f"dyld[123]: <UUID> {external}\n" if external else "")
+                    )
+                    result = subprocess.run([
+                        "bash", "scripts/check-macos-library-trace.sh", app, str(log),
+                    ], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1 if external else 0, result.stderr)
+                    if external:
+                        self.assertIn(external, result.stdout)
+
     def test_relocated_dependency_without_original_files(self):
         """Run an rpath-linked fixture after deleting its original executable and library."""
         with tempfile.TemporaryDirectory(dir="build", prefix="bundle-test-") as temporary:

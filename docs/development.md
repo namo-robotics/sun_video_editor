@@ -422,7 +422,7 @@ the app. Upstream notices, build recipes, and a native inventory are included.
 `scripts/test-macos-app.sh` tests a relocated copy with spaces in its path, checks
 native links and signatures, and runs dependency, capture-helper, and GTK checks
 with a clean environment. It records loaded libraries and rejects Homebrew or
-runner paths. CI skips the oversized-window assertion as described below. Test
+runner libraries outside the relocated app. CI skips the oversized-window assertion as described below. Test
 real capture permissions and a quarantined download on a fresh Mac manually.
 
 The default development app is ad-hoc signed, without notarization. For trusted
