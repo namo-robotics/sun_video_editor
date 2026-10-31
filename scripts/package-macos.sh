@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package a tested Apple Silicon executable for installation through Homebrew.
+# Package tested Apple Silicon products for Homebrew and a standalone macOS app.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || { echo 'Requires Apple Silicon macOS' >&2; exit 1; }
@@ -25,3 +25,5 @@ codesign --force --sign - build/macos/bin/sun_video_editor
 archive="build/sun-video-editor-${GITHUB_SHA:-local}-arm64-apple-darwin.tar.gz"
 tar -C build/macos -czf "$archive" .
 shasum -a 256 "$archive" > "$archive.sha256"
+
+./scripts/package-macos-app.sh

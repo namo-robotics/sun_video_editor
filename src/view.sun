@@ -113,6 +113,58 @@ module sun_video_editor {
     return `${state.job.media.width} × ${state.job.media.height}   ·   ${length}   ·   ${state.job.media.size / 1024} KB`;
   }
 
+  /** Copies stable section identifiers for keyed selector controls without moving application state. */
+  function section_keys(state: const ref State) Vec<i64> {
+    var ids = Vec<i64>(make_heap_allocator(), state.settings.sections.size());
+    for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+      ids.push(state.settings.sections[i].id);
+    }
+    return ids;
+  }
+
+  /** Enables splitting only inside a valid kept interval with room on both sides. */
+  function can_split(state: const ref State) bool {
+    if (not state.job.ready or state.job.mode != 0 or state.settings.sections.size() >= 64) {
+      return false;
+    }
+    match video.trim_length(state.settings, state.job.media) {
+      SystemResult.Error(_) => {
+        return false;
+      },
+      SystemResult.Ok(_) => {}
+    };
+    return state.position >= start_us(state) + 1000 and state.position <= end_us(state) - 1000;
+  }
+
+  /** Supplies ordered handle pairs for the native timeline while invalid text remains editable. */
+  function timeline_ranges(state: const ref State) Vec<ui.TrimRange> {
+    var a = make_heap_allocator();
+    var ranges = Vec<ui.TrimRange>(a, 4);
+    match video.kept_intervals(state.settings, state.job.media) {
+      SystemResult.Error(_) => {
+        return ranges;
+      },
+      SystemResult.Ok(_) => {}
+    };
+    for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+      var first = time_us(state.settings.sections[i].start, 0, duration_us(state));
+      var last = time_us(state.settings.sections[i].end, duration_us(state), duration_us(state));
+      ranges.push(ui.TrimRange(state.settings.sections[i].id, first, last));
+      for (var j = ranges.size() - 1; j > 0 and ranges[j].start < ranges[j - 1].start; j -= 1) {
+        var id = ranges[j].id;
+        var start = ranges[j].start;
+        var end = ranges[j].end;
+        ranges[j].id = ranges[j - 1].id;
+        ranges[j].start = ranges[j - 1].start;
+        ranges[j].end = ranges[j - 1].end;
+        ranges[j - 1].id = id;
+        ranges[j - 1].start = start;
+        ranges[j - 1].end = end;
+      }
+    }
+    return ranges;
+  }
+
   /** Reports exactly the selected interval's length, or flags invalid manual times. */
   function selection_summary(state: const ref State) String {
     if (not state.job.ready) {
@@ -121,11 +173,16 @@ module sun_video_editor {
     var length = match video.trim_length(state.settings, state.job.media) {
       SystemResult.Ok(value) => value,
       SystemResult.Error(_) => {
-        return String("Check the start and end times before exporting.");
+        return String(
+          "Check section times: kept sections must be within the video and must not overlap."
+        );
       }
     };
     var time = timestamp(_convert<i64>(length * 1000000.0));
-    return `Selected clip: ${time}`;
+    if (state.settings.sections.size() == 0) {
+      return `Selected clip: ${time}`;
+    }
+    return `${state.settings.sections.size()} kept sections · Export length: ${time}`;
   }
 
   /** Shows export progress without implying completion before the file is published. */

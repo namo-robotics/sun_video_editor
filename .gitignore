@@ -12,3 +12,4 @@ __pycache__/
 /debian/*.substvars
 /debian/debhelper-build-stamp
 /*.snap
+.DS_Store

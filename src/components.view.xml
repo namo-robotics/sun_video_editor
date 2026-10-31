@@ -1,4 +1,14 @@
 <Views module="editor_parts">
+  <!-- A capture choice keeps selection colors and interaction states in the shared theme. -->
+  <Component name="ChoiceButton">
+    <Param name="text" type="String" />
+    <Param name="action" type="i64" />
+    <Param name="enabled" type="bool" />
+    <Param name="selected" type="bool" />
+    <Param name="width" type="i32" />
+    <Param name="fontSize" type="i32" />
+    <Button text="{text}" action="{action}" enabled="{enabled}" width="{width}" height="64" fontSize="{fontSize}" styleResource="{String(selected ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
+  </Component>
   <Component name="Panel">
     <Param name="column" type="i32" />
     <Param name="expandX" type="bool" />

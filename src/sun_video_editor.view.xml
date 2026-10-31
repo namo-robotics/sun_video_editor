@@ -21,19 +21,28 @@
             <Panel.body>
               <Label text="{source_name(state)}" horizontal="Start" />
               <Label text="{metadata(state)}" styleResource="muted" horizontal="Start" />
-              <Video text="{preview_source(state)}" duration="{duration_us(state)}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
+              <Video text="{preview_source(state)}" duration="{duration_us(state)}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" trimRanges="{timeline_ranges(state)}" activeRange="{state.active_section}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
               <Row spacing="12">
                 <Section text="02   TRIM YOUR CLIP" expandX="{true}" />
+                <Button key="split-section" icon="{capture_icon(state, &quot;cut&quot;)}" tooltip="Split section at playhead" action="17" width="40" height="36" enabled="{can_split(state)}" />
+                <Button key="remove-section" icon="{capture_icon(state, &quot;delete&quot;)}" tooltip="Remove selected kept section" action="19" width="40" height="36" enabled="{state.job.mode == 0 and state.settings.sections.size() > 1}" />
                 <Button text="Reset trim" action="16" enabled="{state.job.ready and state.job.mode == 0}" />
               </Row>
-              <Label text="Drag the mint handles to keep a section. Click the track to seek." styleResource="muted" horizontal="Start" />
+              <Label text="Keep what lies between inward-facing trim bars. Seek, split, then move the inner bars apart to cut out a gap." styleResource="muted" horizontal="Start" />
+              <If test="{state.settings.sections.size() > 0}">
+                <Row spacing="8">
+                  <For each="section" in="{section_keys(state)}" key="{section}">
+                    <Button text="{`Section ${section}`}" action="18" payload="{section}" enabled="{state.job.mode == 0}" styleResource="{String(state.active_section == section ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
+                  </For>
+                </Row>
+              </If>
               <Grid spacing="8" expandX="true">
                 <Grid.Columns><Track kind="Weight" value="1" /><Track kind="Weight" value="1" /></Grid.Columns>
                 <Grid.Rows><Track kind="Auto" /><Track kind="Auto" /></Grid.Rows>
                 <Label text="Start time" horizontal="Start" styleResource="muted" />
                 <Label column="1" text="End time" horizontal="Start" styleResource="muted" />
-                <TextInput row="1" value="{state.settings.start.clone(a)}" changeAction="3" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
-                <TextInput row="1" column="1" value="{state.settings.end.clone(a)}" changeAction="4" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+                <TextInput row="1" value="{state.settings.start.clone(a)}" changeAction="3" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+                <TextInput row="1" column="1" value="{state.settings.end.clone(a)}" changeAction="4" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
               </Grid>
               <Label text="{selection_summary(state)}" foregroundResource="accent" horizontal="Start" />
             </Panel.body>
@@ -109,26 +118,26 @@
           <Row spacing="12">
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;camera&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-photo" text="Screenshot · PNG" action="111" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 0 ? 0x082b2a : 0xeaf2ff}" />
+              <ChoiceButton key="capture-photo" text="Screenshot · PNG" action="111" width="240" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.kind == 0}" fontSize="18" />
             </Column>
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;record&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-video" text="Recording · MP4" action="112" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
+              <ChoiceButton key="capture-video" text="Recording · MP4" action="112" width="240" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.kind == 1}" fontSize="18" />
             </Column>
           </Row>
           <Label text="Source" horizontal="Start" />
           <Row spacing="12">
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-screen" text="Screen" action="120" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 0 ? 0x082b2a : 0xeaf2ff}" />
+              <ChoiceButton key="capture-screen" text="Screen" action="120" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 0}" fontSize="24" />
             </Column>
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;window&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-window" text="Window" action="121" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 1 ? 0x082b2a : 0xeaf2ff}" />
+              <ChoiceButton key="capture-window" text="Window" action="121" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 1}" fontSize="24" />
             </Column>
             <Column spacing="12">
               <Image text="{capture_icon(state, &quot;selection&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
-              <Button key="capture-selection" text="Selection" action="122" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 2 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 2 ? 0x082b2a : 0xeaf2ff}" />
+              <ChoiceButton key="capture-selection" text="Selection" action="122" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 2}" fontSize="24" />
             </Column>
           </Row>
           <Label text="Share a screen, then drag directly on it. Release to confirm; Esc to cancel." visible="{state.capture.source == 2}" horizontal="Start" styleResource="muted" />

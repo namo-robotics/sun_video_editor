@@ -79,6 +79,129 @@ module video_tests {
     return TestResult.Ok;
   }
 
+  /** Rejects overlapping kept sections and totals valid sections in source order. */
+  test_function kept_section_validation() TestResult<void> {
+    var settings = video.Settings();
+    var media = video.Media();
+    media.duration = 4.0;
+    settings.sections.push(video.Section(2, String("3"), String("4")));
+    settings.sections.push(video.Section(1, String("0"), String("1")));
+    try std.test.assert_eq(try video.trim_length(settings, media), 2.0);
+    var ordered = try video.kept_intervals(settings, media);
+    try std.test.assert_eq(ordered[0].start, 0.0);
+    try std.test.assert_eq(ordered[1].start, 3.0);
+    settings.sections[1].end = String("3.5");
+    match video.trim_length(settings, media) {
+      SystemResult.Error(_) => {},
+      SystemResult.Ok(_) => {
+        try std.test.assert(false, "overlapping sections accepted");
+      }
+    };
+    settings.sections[1].end = String("0");
+    match video.trim_length(settings, media) {
+      SystemResult.Error(_) => {},
+      SystemResult.Ok(_) => {
+        try std.test.assert(false, "empty section accepted");
+      }
+    };
+    return TestResult.Ok;
+  }
+
+  /** Decodes one tiny RGB frame so an export can be checked for the correct source section. */
+  function sample_color(path: const ref String, time: static_ptr<u8>) SystemResult<String> {
+    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
+    var flags = String("-v error -ss").split_whitespace(make_heap_allocator());
+    for (var flag: ref String in flags) {
+      command.add_arg(flag);
+    }
+    command.add_arg(time);
+    command.add_arg("-i");
+    command.add_arg(path);
+    command.add_arg("-frames:v");
+    command.add_arg("1");
+    command.add_arg("-vf");
+    command.add_arg("scale=2:2,format=rgb24");
+    command.add_arg("-threads");
+    command.add_arg("1");
+    command.add_arg("-f");
+    command.add_arg("rawvideo");
+    command.add_arg("pipe:1");
+    var output = try command.output();
+    if (output.status() != 0) {
+      return SystemResult.Error(Error(1, "Cannot sample exported frame"));
+    }
+    return SystemResult.Ok(output.stdout().clone(make_heap_allocator()));
+  }
+
+  /** Exports nonadjacent colored sections across all formats and checks video order and audio duration. */
+  test_function joined_sections_export() TestResult<void> {
+    var a = make_heap_allocator();
+    var fixture = try video_fixtures.Fixture();
+    var source = fixture.path("colored.mp4");
+    var generate = std.process.Command(a, "ffmpeg");
+    var flags = String("-v error -f lavfi -i").split_whitespace(a);
+    for (var flag: ref String in flags) {
+      generate.add_arg(flag);
+    }
+    generate.add_arg(
+      "color=red:s=64x64:r=24:d=2[r];color=blue:s=64x64:r=24:d=2[b];[r][b]concat=n=2:v=1:a=0"
+    );
+    generate.add_arg("-f");
+    generate.add_arg("lavfi");
+    generate.add_arg("-i");
+    generate.add_arg("sine=frequency=440:duration=4");
+    generate.add_arg("-c:v");
+    generate.add_arg("libx264");
+    generate.add_arg("-threads");
+    generate.add_arg("2");
+    generate.add_arg("-c:a");
+    generate.add_arg("aac");
+    generate.add_arg(source);
+    try video.capture(generate);
+    var job = video.Job();
+    try job.probe(source);
+    try video_fixtures.finish(job);
+    var settings = video.Settings();
+    settings.input = source.clone(a);
+    settings.sections.push(video.Section(2, String("3"), String("4")));
+    settings.sections.push(video.Section(1, String("0"), String("1")));
+    for (var format: i64 = 0; format < 6; format += 1) {
+      settings.format = format;
+      settings.output = `${fixture.directory}/joined${String(video.extension(format))}`;
+      try job.convert(settings);
+      try video_fixtures.finish(job);
+      try std.test.assert_eq(job.percent, 100);
+      var probe = video.probe_command(settings.output);
+      var result = try video.parse_probe(try video.capture(probe));
+      try std.test.assert(result.duration >= 1.9 and result.duration <= 2.2);
+      try std.test.assert(result.audio.equals_literal("none") == (format == 5));
+      var first = try sample_color(settings.output, "0.5");
+      var last = try sample_color(settings.output, "1.5");
+      try std.test.assert(first.length() >= 3 and last.length() >= 3);
+      var red = match first.at(0) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => 0
+      };
+      var blue = match last.at(2) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => 0
+      };
+      try std.test.assert(
+        red > 200 and blue > 200,
+        "export did not join kept source sections in order"
+      );
+    }
+    settings.format = 0;
+    settings.audio = false;
+    settings.output = fixture.path("joined-silent.mp4");
+    try job.convert(settings);
+    try video_fixtures.finish(job);
+    var silent = video.probe_command(settings.output);
+    var result = try video.parse_probe(try video.capture(silent));
+    try std.test.assert(result.audio.equals_literal("none"));
+    return TestResult.Ok;
+  }
+
   /** Rejects HDR and missing metadata rather than producing an incorrect SDR conversion. */
   test_function metadata_validation() TestResult<void> {
     var hdr = String(

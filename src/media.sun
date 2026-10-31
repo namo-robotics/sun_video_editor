@@ -47,6 +47,32 @@ module video {
     public var hdr: bool = false;
   }
 
+  /** Owns one kept section with a stable identity and editable source timestamps. */
+  public class Section {
+    public var id: i64;
+    public var start: String;
+    public var end: String;
+
+    /** Takes ownership of the section's identity and time fields. */
+    init(id: i64, start: String, end: String) {
+      this.id = id;
+      this.start = start;
+      this.end = end;
+    }
+  }
+
+  /** Holds one validated source interval in seconds. */
+  public class Interval {
+    public var start: f64;
+    public var end: f64;
+
+    /** Stores a positive source interval for chronological export. */
+    init(start: f64, end: f64) {
+      this.start = start;
+      this.end = end;
+    }
+  }
+
   /** Owns editable export settings, independent of platform widgets and processes. */
   public class Settings {
     public var input: String = String("");
@@ -58,6 +84,13 @@ module video {
     public var resolution: i64 = 0;
     public var audio: bool = true;
     public var overwrite: bool = false;
+    public var sections: Vec<Section>;
+
+    /** Allocates owned section storage for this export configuration. */
+    init() {
+      var a = make_heap_allocator();
+      this.sections = Vec<Section>(a, 4);
+    }
   }
 
   /** Returns the filename suffix for a validated format index. */
@@ -279,21 +312,91 @@ module video {
     return command;
   }
 
-  /** Validates trim bounds and all preset indices before starting an export. */
+  /** Validates kept sections and orders them without duplicating overlapping source material. */
+  public function kept_intervals(
+    settings: const ref Settings,
+    media: const ref Media
+  ) SystemResult<Vec<Interval>> {
+    var a = make_heap_allocator();
+    var result = Vec<Interval>(a, 4);
+    if (settings.sections.size() > 64) {
+      return SystemResult.Error(Error(1, "A clip can contain at most 64 kept sections"));
+    }
+    var count = settings.sections.size() == 0 ? 1 : settings.sections.size();
+    for (var i: i64 = 0; i < count; i += 1) {
+      var first_text = settings.start.clone(a);
+      var text = settings.end.clone(a);
+      if (settings.sections.size() > 0) {
+        first_text = settings.sections[i].start.clone(a);
+        text = settings.sections[i].end.clone(a);
+      }
+      var start = try seconds(first_text);
+      var end = text.is_empty() ? media.duration : try seconds(text);
+      if (start >= end or end > media.duration + 0.001) {
+        return SystemResult.Error(
+          Error(1, "Each kept section must satisfy 0 <= start < end <= video duration")
+        );
+      }
+      result.push(Interval(start, end));
+      for (var j = result.size() - 1; j > 0 and result[j].start < result[j - 1].start; j -= 1) {
+        var first = result[j].start;
+        var last = result[j].end;
+        result[j].start = result[j - 1].start;
+        result[j].end = result[j - 1].end;
+        result[j - 1].start = first;
+        result[j - 1].end = last;
+      }
+    }
+    for (var i: i64 = 1; i < result.size(); i += 1) {
+      if (result[i].start < result[i - 1].end) {
+        return SystemResult.Error(Error(1, "Kept sections must not overlap"));
+      }
+    }
+    return SystemResult.Ok(result);
+  }
+
+  /** Totals kept duration and validates presets before starting an export. */
   public function trim_length(
     settings: const ref Settings,
     media: const ref Media
   ) SystemResult<f64> {
-    var start = try seconds(settings.start);
-    var end = settings.end.is_empty() ? media.duration : try seconds(settings.end);
-    if (start >= end or end > media.duration + 0.001) {
-      return SystemResult.Error(Error(1, "Trim must satisfy 0 <= start < end <= video duration"));
-    }
+    var intervals = try kept_intervals(settings, media);
     if (settings.format < 0 or settings.format > 5 or settings.quality < 0 or settings.quality > 4 or
       settings.resolution < 0 or settings.resolution > 4) {
       return SystemResult.Error(Error(1, "Invalid export preset"));
     }
-    return SystemResult.Ok(end - start);
+    var duration: f64 = 0.0;
+    for (var interval: ref Interval in intervals) {
+      duration += interval.end - interval.start;
+    }
+    return SystemResult.Ok(duration);
+  }
+
+  /** Joins frame-accurate kept video and optional audio intervals with timestamps reset per section. */
+  function section_filter(
+    settings: const ref Settings,
+    media: const ref Media
+  ) SystemResult<String> {
+    var intervals = try kept_intervals(settings, media);
+    var audio = settings.audio and settings.format != 5 and not media.audio.equals_literal("none");
+    var graph = String("");
+    var inputs = String("");
+    for (var i: i64 = 0; i < intervals.size(); i += 1) {
+      var first = intervals[i].start;
+      var last = intervals[i].end;
+      graph.append(`[0:v:0]trim=start=${first}:end=${last},setpts=PTS-STARTPTS[v${i}];`);
+      inputs.append(`[v${i}]`);
+      if (audio) {
+        graph.append(`[0:a:0]atrim=start=${first}:end=${last},asetpts=PTS-STARTPTS[a${i}];`);
+        inputs.append(`[a${i}]`);
+      }
+    }
+    graph.append(`${inputs}concat=n=${intervals.size()}:v=1:a=${audio ? 1 : 0}[joined]`);
+    if (audio) {
+      graph.append("[audio]");
+    }
+    graph.append(";");
+    return SystemResult.Ok(graph);
   }
 
   /** Shares aspect-preserving resolution limits between video and animation exports. */
@@ -322,8 +425,11 @@ module video {
     command.add_arg("-n");
     command.add_arg("-progress");
     command.add_arg("pipe:1");
-    command.add_arg("-ss");
-    command.add_arg(`${start}`);
+    var multiple = settings.sections.size() > 0;
+    if (not multiple) {
+      command.add_arg("-ss");
+      command.add_arg(`${start}`);
+    }
     command.add_arg("-i");
     command.add_arg(settings.input);
     command.add_arg("-t");
@@ -337,9 +443,15 @@ module video {
       command.add_arg("-filter_complex_threads");
       command.add_arg("1");
       command.add_arg("-filter_complex");
-      command.add_arg(
-        `[0:v:0]trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`
+      var graph = String("");
+      if (multiple) {
+        graph = try section_filter(settings, media);
+      }
+      var source = String(multiple ? "[joined]" : "[0:v:0]");
+      graph.append(
+        `${source}trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`
       );
+      command.add_arg(graph);
       command.add_arg("-map");
       command.add_arg("[gif]");
       command.add_arg("-an");
@@ -356,11 +468,19 @@ module video {
       command.add_arg(temporary);
       return SystemResult.Ok(command);
     }
+    if (multiple) {
+      var graph = try section_filter(settings, media);
+      graph.append(`[joined]${scale_filter(settings.resolution)}[video]`);
+      command.add_arg("-filter_complex_threads");
+      command.add_arg("1");
+      command.add_arg("-filter_complex");
+      command.add_arg(graph);
+    }
     command.add_arg("-map");
-    command.add_arg("0:v:0");
-    if (settings.audio) {
+    command.add_arg(multiple ? "[video]" : "0:v:0");
+    if (settings.audio and (not multiple or not media.audio.equals_literal("none"))) {
       command.add_arg("-map");
-      command.add_arg("0:a:0?");
+      command.add_arg(multiple ? "[audio]" : "0:a:0?");
     }
     command.add_arg("-c:v");
     command.add_arg(
@@ -394,8 +514,10 @@ module video {
     }
     command.add_arg("-pix_fmt");
     command.add_arg("yuv420p");
-    command.add_arg("-vf");
-    command.add_arg(scale_filter(settings.resolution));
+    if (not multiple) {
+      command.add_arg("-vf");
+      command.add_arg(scale_filter(settings.resolution));
+    }
     if (settings.audio) {
       command.add_arg("-c:a");
       command.add_arg(

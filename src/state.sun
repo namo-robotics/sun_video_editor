@@ -14,6 +14,8 @@ module sun_video_editor {
     var capture_save_requested: bool = false;
     var capture_save_source: String = String("");
     var position: i64 = 0;
+    var active_section: i64 = 0;
+    var next_section: i64 = 1;
   }
 
   /** Accepts an operation failure without closing the application or abandoning a child. */
@@ -32,7 +34,78 @@ module sun_video_editor {
     state.page = 1;
     state.settings.input = path.clone(make_heap_allocator());
     state.position = 0;
+    state.settings.sections.clear();
+    state.active_section = 0;
     return state.job.probe(state.settings.input);
+  }
+
+  /** Persists the selected section's editable fields without borrowing UI storage. */
+  function store_section(state: ref State) void {
+    var a = make_heap_allocator();
+    for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+      if (state.settings.sections[i].id == state.active_section) {
+        state.settings.sections[i].start = state.settings.start.clone(a);
+        state.settings.sections[i].end = state.settings.end.clone(a);
+      }
+    }
+  }
+
+  /** Selects a kept section for exact field edits and moves the playhead to its start. */
+  function select_section(state: ref State, id: i64) void {
+    var a = make_heap_allocator();
+    for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+      if (state.settings.sections[i].id == id) {
+        state.active_section = id;
+        state.settings.start = state.settings.sections[i].start.clone(a);
+        state.settings.end = state.settings.sections[i].end.clone(a);
+        state.position = start_us(state);
+      }
+    }
+  }
+
+  /** Splits a kept section at the playhead, initially preserving both sides without a gap. */
+  function split_section(state: ref State) SystemResult<void> {
+    if (not can_split(state)) {
+      return SystemResult.Ok;
+    }
+    var a = make_heap_allocator();
+    var end = state.settings.end.clone(a);
+    var boundary = timestamp(state.position);
+    if (state.settings.sections.size() == 0) {
+      state.active_section = state.next_section;
+      state.next_section += 1;
+      state.settings.sections.push(
+        video.Section(state.active_section, state.settings.start.clone(a), end.clone(a))
+      );
+    }
+    state.settings.end = boundary.clone(a);
+    store_section(state);
+    var id = state.next_section;
+    state.next_section += 1;
+    state.settings.sections.push(video.Section(id, boundary, end));
+    select_section(state, id);
+    return SystemResult.Ok;
+  }
+
+  /** Deletes the selected kept section while preserving at least one editable interval. */
+  function remove_section(state: ref State) void {
+    if (state.settings.sections.size() < 2) {
+      return;
+    }
+    for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+      if (state.settings.sections[i].id == state.active_section) {
+        match state.settings.sections.remove(i) {
+          AccessResult.Ok(_) => {},
+          AccessResult.OutOfBounds(_) => {}
+        };
+        break;
+      }
+    }
+    select_section(state, state.settings.sections[0].id);
+    if (state.settings.sections.size() == 1) {
+      state.settings.sections.clear();
+      state.active_section = 0;
+    }
   }
 
   /** Applies captured events while rejecting edits during probing or conversion. */
@@ -137,20 +210,31 @@ module sun_video_editor {
       if (event.value.range_start >= 0 and event.value.range_end > event.value.range_start and
         event.value.range_end <= duration and event.value.position >= 0 and
         event.value.position <= duration) {
+        var known = state.settings.sections.size() == 0 and event.value.range_id == 0;
+        for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
+          known = known or state.settings.sections[i].id == event.value.range_id;
+        }
+        if (not known) {
+          return SystemResult.Ok;
+        }
+        state.active_section = event.value.range_id;
         state.settings.start = timestamp(event.value.range_start);
         state.settings.end = timestamp(event.value.range_end);
         state.position = event.value.position;
+        store_section(state);
       }
     } else if (event.value.kind == ui.ValueKind.Text) {
       if (event.action == 2) {
         state.settings.output = event.value.text.clone(a);
         state.settings.overwrite = false;
       }
-      if (event.action == 3) {
+      if (event.action == 3 and event.payload == state.active_section) {
         state.settings.start = event.value.text.clone(a);
+        store_section(state);
       }
-      if (event.action == 4) {
+      if (event.action == 4 and event.payload == state.active_section) {
         state.settings.end = event.value.text.clone(a);
+        store_section(state);
       }
     } else if (event.value.kind == ui.ValueKind.Selection) {
       var value: i64 = -1;
@@ -188,7 +272,18 @@ module sun_video_editor {
       if (event.action == 13) {
         state.open_requested = true;
       }
+      if (event.action == 17) {
+        try split_section(state);
+      }
+      if (event.action == 18) {
+        select_section(state, event.payload);
+      }
+      if (event.action == 19) {
+        remove_section(state);
+      }
       if (event.action == 16) {
+        state.settings.sections.clear();
+        state.active_section = 0;
         state.settings.start = String("0");
         state.settings.end = String("");
         state.position = 0;

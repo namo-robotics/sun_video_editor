@@ -40,6 +40,9 @@ module sun_video_editor {
         if (node.action == 3 or node.action == 4 or node.action == 11 or node.action == 16) {
           enabled = enabled and state.job.ready;
         }
+        if (node.action == 17 or node.action == 19) {
+          enabled = false;
+        }
         if (node.action == 12) {
           enabled = state.job.mode != 0;
           try std.test.assert(node.visible == enabled);
@@ -49,13 +52,50 @@ module sun_video_editor {
           try std.test.assert(description.elements[previous].action != node.action);
         }
       }
-      try std.test.assert_eq(controls, 15);
+      try std.test.assert_eq(controls, 17);
       var again = view(state);
       try std.test.assert_eq(description.elements.size(), again.elements.size());
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
         try std.test.assert(description.elements[i].key.equals(again.elements[i].key));
       }
     }
+  }
+
+  /** Splits and removes kept sections without reusing deleted identities or leaking edits to another file. */
+  test_function section_editing() ViewResult {
+    var state = State();
+    state.page = 1;
+    state.job.ready = true;
+    state.job.media.duration = 4.0;
+    state.settings.end = String("4");
+    state.position = 2000000;
+    try split_section(state);
+    try std.test.assert_eq(state.settings.sections.size(), 2);
+    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 4.0);
+    var id = state.active_section;
+    state.settings.start = String("3");
+    store_section(state);
+    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 3.0);
+    var description = view(state);
+    try std.test.assert(description.construction_error.is_empty());
+    for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+      var node = description.elements[i];
+      if (node.action == 17) {
+        try std.test.assert(
+          node.tooltip.equals_literal("Split section at playhead") and
+            node.icon.ends_with("cut.svg")
+        );
+      }
+      if (node.action == 15) {
+        try std.test.assert_eq(node.trim_ranges.size(), 2);
+      }
+    }
+    remove_section(state);
+    try std.test.assert_eq(state.settings.sections.size(), 0);
+    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 2.0);
+    state.position = 1000000;
+    try split_section(state);
+    try std.test.assert(state.active_section > id);
   }
 
   /** Disables GIF audio without losing the user's video audio preference. */

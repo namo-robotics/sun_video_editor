@@ -414,6 +414,77 @@ module sun_video_editor {
     if (control(session, -1, false) != 0 or not std.io.exists(screenshot)) {
       return SystemResult.Error(Error(1, "Clearing the preview removed the saved screenshot"));
     }
+    // Exercise additional handle pairs and gap-skipping through the native timeline.
+    try open_source(session.state, fixture.input);
+    try session.render(renderer);
+    try wait_job(renderer, session);
+    renderer.click(control(session, 16, false));
+    try turn(renderer, session);
+    preview = control(session, 15, false);
+    for (var i: i64 = 0; i < 100 and renderer.media_status(preview) != 1; i += 1) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+    }
+    for (var i: i64 = 0; i < 25; i += 1) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+    }
+    try renderer.drag_media(preview, 0.375, 0.375);
+    try turn(renderer, session);
+
+    renderer.click(control(session, 17, false));
+    try turn(renderer, session);
+    if (session.state.settings.sections.size() != 2) {
+      return SystemResult.Error(Error(1, "Scissors button did not split the kept section"));
+    }
+    try renderer.drag_media(preview, 0.375, 0.625);
+    try turn(renderer, session);
+    var kept = try video.trim_length(session.state.settings, session.state.job.media);
+    if (kept < 2.99 or kept > 3.01) {
+      return SystemResult.Error(Error(1, "Inner trim bars did not remove the gap"));
+    }
+    try renderer.drag_media(preview, 0.2, 0.2);
+    try turn(renderer, session);
+    renderer.toggle_media(preview);
+    deadline = std.time.now();
+    var skipped = false;
+    while (deadline.elapsed().as_millis() < 2000) {
+      try turn(renderer, session);
+      std.time.sleep(delay);
+      var position = renderer.media_timestamp(preview);
+      if (position > 1650000 and position < 2400000) {
+        return SystemResult.Error(Error(1, "Preview played the removed gap"));
+      }
+      if (position >= 2500000) {
+        skipped = true;
+        break;
+      }
+    }
+    renderer.toggle_media(preview);
+    if (not skipped) {
+      return SystemResult.Error(Error(1, "Preview did not continue into the next kept section"));
+    }
+    var joined_path = fixture.path("joined-ui.mp4");
+    try renderer.edit(control(session, 2, false), joined_path, 0);
+    try turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    try turn(renderer, session);
+    try wait_job(renderer, session);
+    try exported.probe(joined_path);
+    try video_fixtures.finish(exported);
+    if (exported.media.duration < 2.9 or exported.media.duration > 3.1) {
+      return SystemResult.Error(Error(1, "Export did not join the native kept sections"));
+    }
+    renderer.click(control(session, 19, false));
+    try turn(renderer, session);
+    if (session.state.settings.sections.size() != 0) {
+      return SystemResult.Error(Error(1, "Removing a kept section left stale timeline handles"));
+    }
+    renderer.click(control(session, 16, false));
+    try turn(renderer, session);
+    if (start_us(session.state) != 0 or end_us(session.state) != 4000000) {
+      return SystemResult.Error(Error(1, "Reset did not restore the full clip"));
+    }
     session.tree.shutdown(renderer);
     if (renderer.creates != renderer.removals) {
       return SystemResult.Error(Error(1, "Video controls survived shutdown"));

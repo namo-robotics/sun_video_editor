@@ -10,6 +10,11 @@
     <Color name="primaryText" value="0x082b2a" />
     <Color name="primaryDisabled" value="0x476b70" />
     <Color name="secondaryBackground" value="0x293d55" />
+    <Color name="buttonHover" value="0x36516f" />
+    <Color name="buttonFocus" value="0x405f80" />
+    <Color name="accentHover" value="0x98efdc" />
+    <Color name="accentFocus" value="0xb5f6e8" />
+    <Color name="disabledBackground" value="0x1c2b3e" />
     <Color name="canvas" value="0x0b1220" />
     <Color name="text" value="0xdce6f4" />
     <Font name="bodyFont" value="Sans" />
@@ -20,13 +25,25 @@
     <Style name="panel"><Normal backgroundResource="panelBackground" radius="0" padding="18" /></Style>
     <Style name="muted"><Normal foregroundResource="mutedText" fontSize="12" /></Style>
     <Style name="title"><Normal foregroundResource="titleText" fontSize="28" /></Style>
-    <Style name="homeTile" basedOn="control"><Normal foregroundResource="accent" backgroundResource="panelBackground" fontSize="22" padding="16" radius="12" /></Style>
     <Style name="section"><Normal foregroundResource="accent" fontSize="12" /></Style>
     <Style name="field" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="fieldBackground" /><Disabled foregroundResource="disabledText" /></Style>
-    <Style name="primary" basedOn="control"><Normal foregroundResource="primaryText" backgroundResource="accent" fontSize="15" borderWidth="0" radius="0" padding="10" /><Disabled foregroundResource="primaryDisabled" /></Style>
-    <Style name="secondary" basedOn="control"><Normal foregroundResource="fieldText" backgroundResource="secondaryBackground" /><Disabled foregroundResource="disabledText" /></Style>
-    <Style name="captureMode" basedOn="secondary"><Normal fontSize="18" /></Style>
-    <Style name="captureSource" basedOn="secondary"><Normal fontSize="24" /></Style>
+    <!-- Button variants share square corners, spacing, and interaction feedback. -->
+    <Style name="button" basedOn="control">
+      <Normal foregroundResource="fieldText" backgroundResource="secondaryBackground" />
+      <Hover backgroundResource="buttonHover" />
+      <Focus backgroundResource="buttonFocus" />
+      <Disabled foregroundResource="disabledText" backgroundResource="disabledBackground" />
+    </Style>
+    <Style name="secondary" basedOn="button" />
+    <Style name="primary" basedOn="button">
+      <Normal foregroundResource="primaryText" backgroundResource="accent" fontSize="15" padding="10" />
+      <Hover backgroundResource="accentHover" />
+      <Focus backgroundResource="accentFocus" />
+      <Disabled foregroundResource="primaryDisabled" />
+    </Style>
+    <Style name="homeTile" basedOn="button"><Normal foregroundResource="accent" backgroundResource="panelBackground" fontSize="22" padding="16" /></Style>
+    <Style name="choice" basedOn="button" />
+    <Style name="selectedChoice" basedOn="primary"><Normal paddingResource="fieldPadding" /><Disabled foregroundResource="primaryText" backgroundResource="primaryDisabled" /></Style>
     <Theme name="studio" basedOn="base">
       <Default kind="TextInput" styleResource="field" />
       <Default kind="Select" styleResource="field" />
