@@ -98,7 +98,7 @@ module capture_backend {
         return `${screen} ! pngenc snapshot=true ! fdsink name=output`;
       }
       var threads = desktop.encoder_threads();
-      var result = `${screen} ! identity name=screen_geometry ! presenter.sink_0 compositor name=presenter background=black sink_0::zorder=0 ! capsfilter name=canvas ! videoconvert ! video/x-raw,format=I420 ! videorate drop-only=true max-rate=30 ! x264enc name=encoder tune=zerolatency speed-preset=veryfast pass=qual quantizer=20 key-int-max=30 threads=${threads} ! video/x-h264,stream-format=avc,alignment=au ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! mux.video_0 mp4mux name=mux fragment-duration=1000 streamable=true ! fdsink name=output`;
+      var result = `${screen} ! identity name=screen_geometry ! presenter.sink_0 compositor name=presenter background=black sink_0::zorder=0 ! capsfilter name=canvas ! videoconvert ! video/x-raw,format=I420,colorimetry=bt709 ! videorate drop-only=true max-rate=30 ! x264enc name=encoder tune=zerolatency speed-preset=veryfast pass=qual quantizer=20 key-int-max=30 threads=${threads} ! video/x-h264,stream-format=avc,alignment=au ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! mux.video_0 mp4mux name=mux fragment-duration=1000 streamable=true ! fdsink name=output`;
       if (this.presenter.camera) {
         var camera = this.synthetic ? "videotestsrc is-live=true pattern=red ! video/x-raw,width=160,height=120,framerate=30/1" : "v4l2src device=/dev/video0 do-timestamp=true";
         result.append(

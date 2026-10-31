@@ -367,6 +367,9 @@ countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cl
 tests written in Sun. sun_gobject separately tests mock portal responses and live
 area selection under a virtual display. GTK acceptance checks the
 home tiles, navigation, and invalid delays without requesting desktop capture.
+PNG fidelity is checked against the original RGB pixels. H.264 fidelity is
+measured in BT.709 YUV 4:2:0 after the format's intentional chroma subsampling,
+so the test measures encoding damage without requiring lossless RGB output.
 For manual Ubuntu validation, test screen, window, and area captures with zero and
 nonzero delays, cancel the chooser and countdown, stop a recording, close the
 app during capture, and play the completed recording inline on the Screencast screen.

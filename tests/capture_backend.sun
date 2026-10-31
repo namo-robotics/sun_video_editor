@@ -242,6 +242,8 @@ module capture_tests {
       compare.add_arg("rawvideo");
       compare.add_arg("-pixel_format");
       compare.add_arg("rgb24");
+      compare.add_arg("-framerate");
+      compare.add_arg("30");
       compare.add_arg("-video_size");
       compare.add_arg(`${width}x${height}`);
       compare.add_arg("-i");
@@ -251,8 +253,9 @@ module capture_tests {
       compare.add_arg("-filter_complex_threads");
       compare.add_arg("1");
       compare.add_arg("-lavfi");
+      // Compare recordings after their intentional chroma subsampling, using the encoder's matrix.
       compare.add_arg(
-        "[0:v]format=gbrp[reference];[1:v]format=gbrp[captured];[reference][captured]ssim"
+        mode == 0 ? "[0:v]format=gbrp[reference];[1:v]format=gbrp[captured];[reference][captured]ssim" : "[0:v]scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[reference];[1:v]format=yuv420p[captured];[reference][captured]ssim"
       );
       compare.add_arg("-frames:v");
       compare.add_arg("1");
@@ -287,12 +290,12 @@ module capture_tests {
         try command(identical);
         try std.test.assert(diagnostic.contains("All:1.000000"), "PNG changed the source pixels");
       } else {
-        // Compare decoded RGB so correctly tagged YUV matrices do not look like lost detail.
-        try std.test.assert(
-          diagnostic.contains("All:0.99") or diagnostic.contains("All:0.98") or
-            diagnostic.contains("All:0.97") or diagnostic.contains("All:1.000000"),
-          "Recording lost source detail"
-        );
+        var faithful = diagnostic.contains("All:0.99") or diagnostic.contains("All:0.98") or
+          diagnostic.contains("All:0.97") or diagnostic.contains("All:1.000000");
+        if (not faithful) {
+          eprintln(diagnostic);
+        }
+        try std.test.assert(faithful, "Recording lost source detail");
       }
     }
     return TestResult.Ok;
