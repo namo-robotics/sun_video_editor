@@ -148,7 +148,8 @@ module sun_video_editor {
     var preview = control(session, 15, false);
     var deadline = std.time.now();
     var delay = std.time.create_duration_millis(10);
-    while (renderer.media_status(preview) == 0 and deadline.elapsed().as_secs() < 10) {
+    while ((renderer.media_status(preview) == 0 or renderer.media_status(preview) == 3) and
+      deadline.elapsed().as_secs() < 10) {
       try turn(renderer, session);
       std.time.sleep(delay);
     }
@@ -333,7 +334,8 @@ module sun_video_editor {
     }
     var recorded_preview = control(session, 123, false);
     deadline = std.time.now();
-    while (renderer.media_status(recorded_preview) == 0 and deadline.elapsed().as_secs() < 10) {
+    while ((renderer.media_status(recorded_preview) == 0 or
+      renderer.media_status(recorded_preview) == 3) and deadline.elapsed().as_secs() < 10) {
       try turn(renderer, session);
       std.time.sleep(delay);
     }
