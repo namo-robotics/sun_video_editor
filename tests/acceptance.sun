@@ -451,6 +451,10 @@ module sun_video_editor {
     while (deadline.elapsed().as_millis() < 2000) {
       try turn(renderer, session);
       std.time.sleep(delay);
+      // GTK retains the old decoder timestamp until an asynchronous seek completes.
+      if (renderer.media_status(preview) == 3) {
+        continue;
+      }
       var position = renderer.media_timestamp(preview);
       if (position > 1650000 and position < 2400000) {
         return SystemResult.Error(Error(1, "Preview played the removed gap"));
