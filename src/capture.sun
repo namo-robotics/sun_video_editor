@@ -165,14 +165,14 @@ module screencast {
       return SystemResult.Ok(false);
     }
 
-    /** Starts a portal request; the helper counts down only after source selection. */
+    /** Starts native source selection; the helper counts down after selection. */
     public method start() SystemResult<void> {
       var seconds = try delay_seconds(this.delay);
       if (not std.io.is_file(this.helper)) {
         return SystemResult.Error(
           Error(
             1,
-            "Screencast requires the Ubuntu capture helper installed alongside the application"
+            "Capture helper is missing. Rebuild or reinstall Sun Video Editor."
           )
         );
       }
@@ -279,7 +279,7 @@ module screencast {
         }
         changed = true;
       }
-      if (this.stopping and this.stopping_at.elapsed().as_secs() > 15) {
+      if (this.stopping and this.stopping_at.elapsed().as_secs() > 300) {
         this.process.stop();
         this.message = String("Capture did not finish saving in time.");
       }

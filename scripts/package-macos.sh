@@ -7,6 +7,9 @@ export PATH="$(brew --prefix coreutils)/libexec/gnubin:$PATH"
 ./build.sh
 mkdir -p build/macos/bin build/macos/share/sun-video-editor
 install -m 755 build/sun_video_editor build/macos/bin/sun_video_editor
+install -m 755 build/sun_video_editor.capture build/macos/bin/sun_video_editor.capture
+mkdir -p build/macos/bin/sun_video_editor.capture.icons
+cp -R packaging/icons/. build/macos/bin/sun_video_editor.capture.icons/
 install -m 644 LICENSE build/sun-version.txt packaging/sun-video-editor.png build/macos/share/sun-video-editor/
 install -m 644 build/dependencies/sun_ui/LICENSE build/macos/share/sun-video-editor/LICENSE.sun_ui
 install -m 644 build/dependencies/sun_gobject/LICENSE build/macos/share/sun-video-editor/LICENSE.sun_gobject

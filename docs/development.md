@@ -227,13 +227,13 @@ countdown, encoding policy, cancellation, and output publication. The Linux
 `libsun_capture_native.a` handles D-Bus callbacks, descriptor transfer, GStreamer
 streaming callbacks, and X11 input. Python and Tk are not required for capture.
 
-Builds require a sun_gobject release containing both capture artifacts. For local
+Linux builds require a sun_gobject release containing both capture artifacts. For local
 validation before that release is published, use the explicit `SUN_GOBJECT_BUILD`
 override above. The dependency installer rejects older release packages rather
 than building dependency sources automatically. Ordinary sun_ui clients do not
 link the capture archive.
 
-Screenshots and recordings use the ScreenCast portal. The permission dialog selects
+On Linux, screenshots and recordings use the ScreenCast portal. The permission dialog selects
 one screen or window before the delay begins. Area selection also finishes before
 the countdown; no frame is captured until that countdown expires.
 Screenshot and Recording icon buttons select PNG or WebM capture, with the current
@@ -271,8 +271,26 @@ Ubuntu capture dependencies are GIO, GStreamer, `libx11-6`, `libxext6`,
 `gstreamer1.0-pipewire`, and `gstreamer1.0-plugins-good`, plus a running desktop
 portal with ScreenCast support. The installer and Debian/Snap payload declare
 the runtime packages. The helper is installed alongside the executable.
-Capture is Ubuntu-only for now; audio is not implemented. Areas are selected
-within a single authorized screen. Snap confinement and real portal capture require desktop validation.
+Audio is not implemented. Areas are selected within a single authorized screen.
+Snap confinement and real portal capture require desktop validation.
+
+On Apple Silicon macOS, `build.sh` builds a Swift companion with the Xcode Command
+Line Tools. It uses ScreenCaptureKit's system sharing picker for screens and
+windows, then an Escape-cancellable overlay for area selection. The countdown
+starts after selection. Screenshots are PNG; recordings are captured natively,
+then converted to silent WebM with FFmpeg when stopped. The helper is packaged
+beside the application. Allow the system sharing prompt; if access is denied,
+check **System Settings > Privacy & Security > Screen & System Audio Recording**.
+Captures are saved under **Pictures/Sun Captures** or **Movies/Sun Captures**.
+Cancelling discards private partial output. Forced termination can leave a hidden
+`.capture-*` directory. Screen, window, and area capture need manual permission
+and multi-monitor checks on macOS; `sun_video_editor.capture --self-test` checks
+argument validation and region coordinates without capturing the desktop.
+
+Home and capture controls use packaged SVG icons rather than font glyphs.
+Their padded canvases account for the toolkit image preview minimum size, with
+extra raster resolution for Retina displays.
+The adjacent `sun_video_editor.capture.icons` directory must travel with the executable.
 
 On Linux, `./build.sh --test` additionally runs synthetic PNG/WebM encoder,
 countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup

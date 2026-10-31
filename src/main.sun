@@ -170,7 +170,7 @@ module sun_video_editor {
     if (previous_page != session.state.page) {
       try renderer.set_default_size(
         session.state.page == 0 ? 544 : 1160,
-        session.state.page == 0 ? 216 : 860
+        session.state.page == 0 ? 288 : 860
       );
     }
     return SystemResult.Ok;
@@ -190,7 +190,7 @@ module sun_video_editor {
     if (not initial.is_empty()) {
       report(state, open_source(state, initial));
     }
-    try renderer.set_default_size(state.page == 0 ? 544 : 1160, state.page == 0 ? 216 : 860);
+    try renderer.set_default_size(state.page == 0 ? 544 : 1160, state.page == 0 ? 288 : 860);
     var session = ui.Session<State>(state, view, handle);
     try session.render(renderer);
     if (automated) {

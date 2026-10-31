@@ -3,6 +3,11 @@ using std;
 /** Supplies presentation values for the generated XML view without constructing widgets. */
 module sun_video_editor {
 
+  /** Finds packaged vector icons beside the capture helper, independent of fonts. */
+  function capture_icon(state: const ref State, name: static_ptr<u8>) String {
+    return `${state.capture.helper}.icons/${String(name)}.svg`;
+  }
+
   /** Selects the active screen while preserving the editor's owned state. */
   function view(state: const ref State) ui.View {
     if (state.page == 0) {

@@ -9,7 +9,9 @@ module sun_video_editor {
     var description = view(session.state);
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       if ((action != -1 and description.elements[i].action != action) or
-        (action == -1 and description.elements[i].kind != ui.Kind.Image)) {
+        (action == -1 and
+          (description.elements[i].kind != ui.Kind.Image or
+            description.elements[i].text.ends_with(".svg")))) {
         continue;
       }
       var index = i;

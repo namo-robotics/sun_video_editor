@@ -88,8 +88,14 @@
       <Grid margin="24" spacing="16" expandX="true">
         <Grid.Columns><Track kind="Weight" value="1" /><Track kind="Weight" value="1" /></Grid.Columns>
         <Grid.Rows><Track kind="Auto" /></Grid.Rows>
-        <Button text="✂&#10;Video Editor" action="101" width="240" height="168" expandX="true" styleResource="homeTile" />
-        <Button text="🖵&#10;Screencast" action="102" column="1" width="240" height="168" expandX="true" styleResource="homeTile" />
+        <Column spacing="12">
+          <Image text="{capture_icon(state, &quot;editor&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+          <Button text="Video Editor" action="101" width="240" height="72" expandX="true" styleResource="homeTile" />
+        </Column>
+        <Column spacing="12" column="1">
+          <Image text="{capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+          <Button text="Screencast" action="102" width="240" height="72" expandX="true" styleResource="homeTile" />
+        </Column>
       </Grid>
     </Scroll>
   </View>
@@ -101,14 +107,29 @@
         <Column styleResource="panel" spacing="16">
           <Label text="Capture" horizontal="Start" />
           <Row spacing="12">
-            <Button key="capture-photo" text="📷&#10;Screenshot · PNG" action="111" width="240" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 0 ? 0x082b2a : 0xeaf2ff}" />
-            <Button key="capture-video" text="●&#10;Recording · WebM" action="112" width="240" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
+            <Column spacing="12">
+              <Image text="{capture_icon(state, &quot;camera&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Button key="capture-photo" text="Screenshot · PNG" action="111" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 0 ? 0x082b2a : 0xeaf2ff}" />
+            </Column>
+            <Column spacing="12">
+              <Image text="{capture_icon(state, &quot;record&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Button key="capture-video" text="Recording · WebM" action="112" width="240" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureMode" background="{state.capture.kind == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.kind == 1 ? 0x082b2a : 0xeaf2ff}" />
+            </Column>
           </Row>
           <Label text="Source" horizontal="Start" />
           <Row spacing="12">
-            <Button key="capture-screen" text="🖵&#10;Screen" action="120" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 0 ? 0x082b2a : 0xeaf2ff}" />
-            <Button key="capture-window" text="🗗&#10;Window" action="121" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 1 ? 0x082b2a : 0xeaf2ff}" />
-            <Button key="capture-selection" text="⬚&#10;Selection" action="122" width="160" height="104" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 2 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 2 ? 0x082b2a : 0xeaf2ff}" />
+            <Column spacing="12">
+              <Image text="{capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Button key="capture-screen" text="Screen" action="120" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 0 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 0 ? 0x082b2a : 0xeaf2ff}" />
+            </Column>
+            <Column spacing="12">
+              <Image text="{capture_icon(state, &quot;window&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Button key="capture-window" text="Window" action="121" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 1 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 1 ? 0x082b2a : 0xeaf2ff}" />
+            </Column>
+            <Column spacing="12">
+              <Image text="{capture_icon(state, &quot;selection&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Button key="capture-selection" text="Selection" action="122" width="160" height="64" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="captureSource" background="{state.capture.source == 2 ? 0x73e2cb : 0x293d55}" foreground="{state.capture.source == 2 ? 0x082b2a : 0xeaf2ff}" />
+            </Column>
           </Row>
           <Label text="Share a screen, then drag directly on it. Release to confirm; Esc to cancel." visible="{state.capture.source == 2}" horizontal="Start" styleResource="muted" />
           <Label text="Delay in seconds" horizontal="Start" />
@@ -138,7 +159,7 @@
             </If>
           </If>
         </Column>
-        <Label text="Ubuntu desktop required. Recordings are silent. Captures are saved in Pictures or Videos." styleResource="muted" horizontal="Start" />
+        <Label text="Allow screen sharing when prompted. Recordings are silent. Captures are saved in Pictures or Videos." styleResource="muted" horizontal="Start" />
       </Column>
     </Scroll>
   </View>

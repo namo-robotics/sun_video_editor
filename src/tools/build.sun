@@ -103,6 +103,35 @@ module editor_build {
     return run(command);
   }
 
+  /** Builds the small native bridge to Apple's screen-sharing and recording APIs. */
+  function macos_capture() SystemResult<void> {
+    var a = make_heap_allocator();
+    var target = try build_targets.load("capture-helper");
+    var command = std.process.Command(a, "swiftc");
+    command.add_arg("-parse-as-library");
+    command.add_arg("-swift-version");
+    command.add_arg("5");
+    command.add_arg("-target");
+    command.add_arg("arm64-apple-macosx15.2");
+    command.add_arg("-module-cache-path");
+    command.add_arg("build/swift-cache");
+    command.add_arg("src/native/macos/capture.swift");
+    command.add_arg("-o");
+    command.add_arg(target.output);
+    try run(command);
+    var sign = std.process.Command(a, "codesign");
+    sign.add_arg("--force");
+    sign.add_arg("--sign");
+    sign.add_arg("-");
+    sign.add_arg("--identifier");
+    sign.add_arg("org.namo_robotics.VideoEditor.capture");
+    sign.add_arg(target.output);
+    try run(sign);
+    var check = std.process.Command(a, target.output);
+    check.add_arg("--self-test");
+    return run(check);
+  }
+
   /** Generates the XML screen and builds the app and platform-independent tests. */
   public function build() SystemResult<void> {
     var a = make_heap_allocator();
@@ -111,6 +140,15 @@ module editor_build {
     mkdir.add_arg("build");
     mkdir.add_arg("tmp");
     try run(mkdir);
+    var icons = std.process.Command(a, "mkdir");
+    icons.add_arg("-p");
+    icons.add_arg("build/sun_video_editor.capture.icons");
+    try run(icons);
+    var copy_icons = std.process.Command(a, "cp");
+    copy_icons.add_arg("-R");
+    copy_icons.add_arg("packaging/icons/.");
+    copy_icons.add_arg("build/sun_video_editor.capture.icons/");
+    try run(copy_icons);
     var ui = setting("SUN_UI_BUILD", "build/dependencies/sun_ui/build");
     var generator = `${ui}/sun-viewc`;
     if (not std.io.is_file(generator)) {
@@ -138,6 +176,8 @@ module editor_build {
     if (platform_output.stdout().starts_with("Linux")) {
       try compile("capture-helper", false);
       try compile("capture-tests", false);
+    } else if (platform_output.stdout().starts_with("Darwin")) {
+      try macos_capture();
     }
     try compile("tests", false);
     return compile("sun_video_editor", true);

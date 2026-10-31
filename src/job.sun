@@ -73,7 +73,9 @@ module video {
         return SystemResult.Error(Error(1, "Output is a directory"));
       }
       if (std.io.exists(this.destination) and not this.overwrite) {
-        return SystemResult.Error(Error(1, "Destination exists. Check Replace existing output to confirm."));
+        return SystemResult.Error(
+          Error(1, "Destination exists. Check Replace existing output to confirm.")
+        );
       }
       return SystemResult.Ok;
     }
@@ -203,7 +205,7 @@ module video {
           try std.io.rename_file(this.temporary, this.destination);
         } else {
           // A hard link fails atomically if another file appeared at the destination.
-          var publish = std.process.Command(make_heap_allocator(), "ln");
+          var publish = try coreutils_command("ln");
           publish.add_arg("-T");
           publish.add_arg("--");
           publish.add_arg(this.temporary);

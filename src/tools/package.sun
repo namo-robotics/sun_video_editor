@@ -56,6 +56,14 @@ module editor_package {
     clear.add_arg(destination);
     var cleared = try capture(clear);
     try install_file(target.output.clone(a), `${destination}/usr/bin/sun_video_editor`, true);
+    var icon_names = String("editor screen window selection camera record").split_whitespace(a);
+    for (var icon: ref String in icon_names) {
+      try install_file(
+        `packaging/icons/${icon}.svg`,
+        `${destination}/usr/bin/sun_video_editor.capture.icons/${icon}.svg`,
+        false
+      );
+    }
     try install_file(
       helper.output.clone(a),
       `${destination}/usr/bin/sun_video_editor.capture`,

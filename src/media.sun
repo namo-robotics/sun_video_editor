@@ -205,7 +205,8 @@ module video {
         result.codec = field(stream, "codec_name");
         var transfer = field(stream, "color_transfer");
         var primaries = field(stream, "color_primaries");
-        result.hdr = transfer.equals_literal("smpte2084") or transfer.equals_literal("arib-std-b67") or primaries.equals_literal("bt2020");
+        result.hdr = transfer.equals_literal("smpte2084") or
+          transfer.equals_literal("arib-std-b67") or primaries.equals_literal("bt2020");
       } else if (kind.equals_literal("audio") and result.audio.equals_literal("none")) {
         result.audio = field(stream, "codec_name");
       }
@@ -228,21 +229,35 @@ module video {
         return SystemResult.Error(Error(1, "Input has no readable video metadata"));
       }
     };
-    if (media.width < 2 or media.height < 2 or media.duration <= 0.0 or media.duration != media.duration or media.duration > 1000000000.0) {
+    if (media.width < 2 or media.height < 2 or media.duration <= 0.0 or
+      media.duration != media.duration or media.duration > 1000000000.0) {
       return SystemResult.Error(Error(1, "Input must contain a video with a finite duration"));
     }
     if (media.hdr) {
-      return SystemResult.Error(Error(1, "HDR / BT.2020 conversion is not supported yet; use an SDR source"));
+      return SystemResult.Error(
+        Error(1, "HDR / BT.2020 conversion is not supported yet; use an SDR source")
+      );
     }
     return SystemResult.Ok(media);
   }
 
-  /** Makes a local path absolute and resolves symlinks without interpreting shell syntax. */
+  /** Selects GNU coreutils by their Homebrew-prefixed names on macOS. */
+  public function coreutils_command(tool: static_ptr<u8>) SystemResult<std.process.Command> {
+    var a = make_heap_allocator();
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var name = try capture(platform);
+    var executable = String(name.equals_literal("Darwin") ? "g" : "");
+    executable.append(tool);
+    return SystemResult.Ok(std.process.Command(a, executable));
+  }
+
+  /** Resolves local paths, including missing outputs, with GNU coreutils and literal arguments. */
   public function absolute(path: ref String) SystemResult<String> {
     if (path.is_empty() or path.contains("\0")) {
       return SystemResult.Error(Error(1, "Choose a local file path"));
     }
-    var command = std.process.Command(make_heap_allocator(), "realpath");
+    var command = try coreutils_command("realpath");
     command.add_arg("-m");
     command.add_arg("--");
     command.add_arg(path);
@@ -255,7 +270,9 @@ module video {
     command.add_arg("-v");
     command.add_arg("error");
     command.add_arg("-show_entries");
-    command.add_arg("format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries");
+    command.add_arg(
+      "format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries"
+    );
     command.add_arg("-of");
     command.add_arg("json");
     command.add_arg(input);
@@ -263,13 +280,17 @@ module video {
   }
 
   /** Validates trim bounds and all preset indices before starting an export. */
-  public function trim_length(settings: const ref Settings, media: const ref Media) SystemResult<f64> {
+  public function trim_length(
+    settings: const ref Settings,
+    media: const ref Media
+  ) SystemResult<f64> {
     var start = try seconds(settings.start);
     var end = settings.end.is_empty() ? media.duration : try seconds(settings.end);
     if (start >= end or end > media.duration + 0.001) {
       return SystemResult.Error(Error(1, "Trim must satisfy 0 <= start < end <= video duration"));
     }
-    if (settings.format < 0 or settings.format > 5 or settings.quality < 0 or settings.quality > 4 or settings.resolution < 0 or settings.resolution > 4) {
+    if (settings.format < 0 or settings.format > 5 or settings.quality < 0 or settings.quality > 4 or
+      settings.resolution < 0 or settings.resolution > 4) {
       return SystemResult.Error(Error(1, "Invalid export preset"));
     }
     return SystemResult.Ok(end - start);
@@ -285,7 +306,11 @@ module video {
   }
 
   /** Constructs a container-compatible export with frame-accurate transcoding and bounded CPU use. */
-  public function export_command(settings: const ref Settings, media: const ref Media, temporary: const ref String) SystemResult<std.process.Command> {
+  public function export_command(
+    settings: const ref Settings,
+    media: const ref Media,
+    temporary: const ref String
+  ) SystemResult<std.process.Command> {
     var duration = try trim_length(settings, media);
     var start = try seconds(settings.start);
     var command = std.process.Command(make_heap_allocator(), "ffmpeg");
@@ -304,13 +329,17 @@ module video {
     command.add_arg("-t");
     command.add_arg(`${duration}`);
     if (settings.format == 5) {
-      var fps = settings.quality == 0 ? 30 : (settings.quality == 1 ? 24 : (settings.quality == 2 ? 20 : (settings.quality == 3 ? 15 : 10)));
-      var colors = settings.quality < 2 ? 256 : (settings.quality == 2 ? 128 : (settings.quality == 3 ? 96 : 64));
+      var fps = settings.quality == 0 ? 30 : (settings.quality == 1 ? 24 : (settings.quality == 2 ? 20 : (settings.quality ==
+        3 ? 15 : 10)));
+      var colors = settings.quality < 2 ? 256 : (settings.quality == 2 ? 128 : (settings.quality ==
+        3 ? 96 : 64));
       var scale = scale_filter(settings.resolution);
       command.add_arg("-filter_complex_threads");
       command.add_arg("1");
       command.add_arg("-filter_complex");
-      command.add_arg(`[0:v:0]trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`);
+      command.add_arg(
+        `[0:v:0]trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`
+      );
       command.add_arg("-map");
       command.add_arg("[gif]");
       command.add_arg("-an");
@@ -334,7 +363,9 @@ module video {
       command.add_arg("0:a:0?");
     }
     command.add_arg("-c:v");
-    command.add_arg(settings.format == 2 ? "libvpx-vp9" : (settings.format == 4 ? "mpeg4" : "libx264"));
+    command.add_arg(
+      settings.format == 2 ? "libvpx-vp9" : (settings.format == 4 ? "mpeg4" : "libx264")
+    );
     command.add_arg("-threads");
     command.add_arg("2");
     command.add_arg("-filter_threads");
@@ -350,13 +381,15 @@ module video {
       command.add_arg(`${24 + settings.quality * 4}`);
     } else if (settings.format == 4) {
       command.add_arg("-q:v");
-      var quality = settings.quality == 0 ? 2 : (settings.quality == 1 ? 3 : (settings.quality == 2 ? 5 : (settings.quality == 3 ? 8 : 12)));
+      var quality = settings.quality == 0 ? 2 : (settings.quality == 1 ? 3 : (settings.quality ==
+        2 ? 5 : (settings.quality == 3 ? 8 : 12)));
       command.add_arg(`${quality}`);
     } else {
       command.add_arg("-preset");
       command.add_arg("medium");
       command.add_arg("-crf");
-      var quality = settings.quality == 0 ? 18 : (settings.quality == 1 ? 21 : (settings.quality == 2 ? 23 : (settings.quality == 3 ? 26 : 30)));
+      var quality = settings.quality == 0 ? 18 : (settings.quality == 1 ? 21 : (settings.quality ==
+        2 ? 23 : (settings.quality == 3 ? 26 : 30)));
       command.add_arg(`${quality}`);
     }
     command.add_arg("-pix_fmt");
@@ -365,7 +398,9 @@ module video {
     command.add_arg(scale_filter(settings.resolution));
     if (settings.audio) {
       command.add_arg("-c:a");
-      command.add_arg(settings.format == 2 ? "libopus" : (settings.format == 4 ? "libmp3lame" : "aac"));
+      command.add_arg(
+        settings.format == 2 ? "libopus" : (settings.format == 4 ? "libmp3lame" : "aac")
+      );
       command.add_arg("-b:a");
       command.add_arg("128k");
     } else {
@@ -378,7 +413,10 @@ module video {
       command.add_arg("+faststart");
     }
     command.add_arg("-f");
-    command.add_arg(settings.format == 0 ? "mp4" : (settings.format == 1 ? "mov" : (settings.format == 2 ? "webm" : (settings.format == 3 ? "matroska" : "avi"))));
+    command.add_arg(
+      settings.format == 0 ? "mp4" : (settings.format == 1 ? "mov" : (settings.format == 2 ? "webm" : (settings.format ==
+        3 ? "matroska" : "avi")))
+    );
     command.add_arg(temporary);
     return SystemResult.Ok(command);
   }
