@@ -103,22 +103,47 @@ module editor_build {
     return run(command);
   }
 
-  /** Builds the small native bridge to Apple's screen-sharing and recording APIs. */
+  /** Compiles the Sun capture helper and links its reusable Apple framework bindings. */
   function macos_capture() SystemResult<void> {
     var a = make_heap_allocator();
-    var target = try build_targets.load("capture-helper");
-    var command = std.process.Command(a, "swiftc");
-    command.add_arg("-parse-as-library");
-    command.add_arg("-swift-version");
-    command.add_arg("5");
-    command.add_arg("-target");
-    command.add_arg("arm64-apple-macosx15.2");
-    command.add_arg("-module-cache-path");
-    command.add_arg("build/swift-cache");
-    command.add_arg("src/native/macos/capture.swift");
+    var target = try build_targets.load("capture-helper-macos");
+    var dependency = setting("SUN_APPLE_BUILD", "build/dependencies/sun_apple/build");
+    var bundle_path = `${dependency}/sun_apple.moon`;
+    var native_path = `${dependency}/native/libsun_apple_native.a`;
+    if (not std.io.is_file(bundle_path) or not std.io.is_file(native_path)) {
+      return SystemResult.Error(
+        Error(
+          1,
+          "Run ./scripts/install-dependencies.sh --only sun_apple, or set SUN_APPLE_BUILD to its built artifacts"
+        )
+      );
+    }
+    var command = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
+    command.add_arg("--emit-obj");
+    command.add_arg("--lib-path");
+    command.add_arg(dependency);
     command.add_arg("-o");
-    command.add_arg(target.output);
+    command.add_arg("build/capture-macos.o");
+    command.add_arg(target.source);
     try run(command);
+    var link = std.process.Command(a, "xcrun");
+    link.add_arg("clang++");
+    link.add_arg("-mmacosx-version-min=26.0");
+    link.add_arg("build/capture-macos.o");
+    link.add_arg(native_path);
+    link.add_arg("-lobjc");
+    var frameworks = String(
+      "Foundation AppKit ScreenCaptureKit AVFoundation CoreMedia CoreFoundation CoreGraphics ImageIO"
+    ).split_whitespace(
+      a
+    );
+    for (var framework: ref String in frameworks) {
+      link.add_arg("-framework");
+      link.add_arg(framework);
+    }
+    link.add_arg("-o");
+    link.add_arg(target.output);
+    try run(link);
     var sign = std.process.Command(a, "codesign");
     sign.add_arg("--force");
     sign.add_arg("--sign");

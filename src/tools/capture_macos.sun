@@ -1,0 +1,415 @@
+using std;
+
+/** Implements the editor's macOS capture protocol using reusable Apple bindings. */
+module macos_capture {
+
+  /** Atomically publishes a completed file without replacing an existing destination. */
+  extern "C" function publish_link(source: raw_ptr<u8>, destination: raw_ptr<u8>) i32 as "link";
+
+  /** Flushes progress promptly when the helper's stdout is a pipe. */
+  extern "C" function flush_streams(stream: raw_ptr<u8>) i32 as "fflush";
+
+  /** Adds a final name for a complete file, refusing to overwrite any existing destination. */
+  function publish_file(source: ref String, destination: ref String) SystemResult<void> {
+    if (unsafe { publish_link(source.c_str(), destination.c_str()); } != 0) {
+      return SystemResult.Error(
+        Error(1, "Cannot publish capture without replacing an existing file")
+      );
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Owns isolated publication-test files in the project's temporary directory. */
+  class PublicationFixture {
+    public var directory: String;
+    public var source: String;
+    public var destination: String;
+
+    /** Creates private paths and an empty directory without modifying user media. */
+    init() SystemResult<void> {
+      var id = try apple_foundation.uuid();
+      this.directory = `tmp/capture-publication-${id}`;
+      this.source = `${this.directory}/source`;
+      this.destination = `${this.directory}/destination`;
+      if (not std.io.is_dir("tmp")) {
+        try std.io.make_dir("tmp", 448);
+      }
+      try std.io.make_dir(this.directory, 448);
+    }
+
+    /** Removes only this test's owned files and directory. */
+    deinit() {
+      ignore_error(std.io.remove_file(this.source));
+      ignore_error(std.io.remove_file(this.destination));
+      ignore_error(std.io.remove_dir(this.directory));
+    }
+  }
+
+  /** Verifies collision protection and successful publication using real filesystem operations. */
+  function test_publication() SystemResult<void> {
+    var files = try PublicationFixture();
+    var payload = String("completed capture");
+    var original = String("existing capture");
+    try std.io.write_string(files.source, payload);
+    try std.io.write_string(files.destination, original);
+    match publish_file(files.source, files.destination) {
+      SystemResult.Ok => {
+        return SystemResult.Error(Error(1, "Publication replaced an existing capture"));
+      },
+      SystemResult.Error(_) => {}
+    };
+    var contents = try std.io.read_to_string(make_heap_allocator(), files.destination);
+    if (not contents.equals(original)) {
+      return SystemResult.Error(Error(1, "Existing capture changed"));
+    }
+    try std.io.remove_file(files.destination);
+    try publish_file(files.source, files.destination);
+    var published = try std.io.read_to_string(make_heap_allocator(), files.destination);
+    if (not published.equals(payload)) {
+      return SystemResult.Error(Error(1, "Published capture differs"));
+    }
+    return SystemResult.Ok;
+  }
+
+  /** Prints a protocol message immediately. */
+  function report(message: String) void {
+    println(message);
+    unsafe { flush_streams(null); };
+  }
+
+  /** Validated capture settings independent of native UI. */
+  public class Options {
+    public var recording: bool = false;
+    public var source: i32 = 0;
+    public var cursor: bool = true;
+    public var delay: i64 = 0;
+
+    /** Initializes default screenshot settings. */
+    init() {}
+  }
+
+  /** Rejects malformed helper arguments before touching native capture APIs. */
+  public function options(args: ref Vec<String>) SystemResult<Options> {
+    if (args.size() != 5) {
+      return SystemResult.Error(Error(1, "Invalid capture arguments"));
+    }
+    var result = Options();
+    if (not args[1].equals_literal("screenshot") and not args[1].equals_literal("record")) {
+      return SystemResult.Error(Error(1, "Invalid capture kind"));
+    }
+    result.recording = args[1].equals_literal("record");
+    if (args[2].equals_literal("window")) {
+      result.source = 1;
+    } else if (args[2].equals_literal("area")) {
+      result.source = 2;
+    } else if (not args[2].equals_literal("screen")) {
+      return SystemResult.Error(Error(1, "Invalid capture source"));
+    }
+    if (not args[4].equals_literal("cursor") and not args[4].equals_literal("hidden")) {
+      return SystemResult.Error(Error(1, "Invalid cursor setting"));
+    }
+    result.cursor = args[4].equals_literal("cursor");
+    var text = args[3];
+    if (text.is_empty() or text.length() > 4) {
+      return SystemResult.Error(Error(1, "Invalid capture delay"));
+    }
+    for (var i: i64 = 0; i < text.length(); i += 1) {
+      var digit = match text.at(i) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => b' '
+      };
+      if (digit < b'0' or digit > b'9') {
+        return SystemResult.Error(Error(1, "Invalid capture delay"));
+      }
+      result.delay = result.delay * 10 + _convert<i64>(digit - b'0');
+    }
+    if (result.delay > 3600) {
+      return SystemResult.Error(Error(1, "Capture delay exceeds one hour"));
+    }
+    return SystemResult.Ok(result);
+  }
+
+  /** Owns private files, the native session, and a cancellable encoder for one capture. */
+  class Capture {
+    var settings: Options;
+    var session: apple_screen_capture.Session = apple_screen_capture.Session();
+    var encoder: video.Process = video.Process();
+    var stage: String = String("");
+    var output: String = String("");
+    var native_file: String = String("");
+    var encoded_file: String = String("");
+    var state: i32 = 0;
+    var clock: std.time.Instant = std.time.now();
+    var last_seconds: i64 = -1;
+    var active: bool = false;
+    var stopping: bool = false;
+    var cancelled: bool = false;
+    public var done: bool = false;
+
+    /** Takes ownership of the validated capture options. */
+    init(settings: Options) {
+      this.settings = settings;
+    }
+
+    /** Stops owned work and removes only this session's unpublished files. */
+    deinit() {
+      this.encoder.stop();
+      this.session.close();
+      if (not this.stage.is_empty()) {
+        ignore_error(std.io.remove_file(this.native_file));
+        ignore_error(std.io.remove_file(this.encoded_file));
+        ignore_error(std.io.remove_dir(this.stage));
+      }
+    }
+
+    /** Shows the source picker; no output file exists yet. */
+    public method begin() SystemResult<void> {
+      try this.session.select(this.settings.source);
+      report(String("Choose a source in the macOS sharing picker…"));
+      return SystemResult.Ok;
+    }
+
+    /** Reserves a private directory and a unique final name. */
+    method prepare_output() SystemResult<void> {
+      var root = try apple_foundation.media_directory(this.settings.recording);
+      var directory = `${root}/Sun Captures`;
+      var mkdir = std.process.Command(make_heap_allocator(), "mkdir");
+      mkdir.add_arg("-p");
+      mkdir.add_arg(directory);
+      var created = try video.capture(mkdir);
+      var identifier = try apple_foundation.uuid();
+      var private_dir = `${directory}/.capture-${identifier}`;
+      try std.io.make_dir(private_dir, 448);
+      this.stage = private_dir;
+      var suffix = this.settings.recording ? "webm" : "png";
+      this.output = `${directory}/Capture-${identifier}.${suffix}`;
+      this.native_file = this.settings.recording ? `${this.stage}/capture.mp4` : `${this.stage}/capture.png`;
+      this.encoded_file = `${this.stage}/capture.webm`;
+      return SystemResult.Ok;
+    }
+
+    /** Publishes a completed file atomically without overwriting an existing capture. */
+    method publish(path: ref String) SystemResult<void> {
+      if (this.cancelled) {
+        this.done = true;
+        return SystemResult.Ok;
+      }
+      try publish_file(path, this.output);
+      this.done = true;
+      report(`Saved: ${this.output}`);
+      return SystemResult.Ok;
+    }
+
+    /** Starts WebM encoding only after ScreenCaptureKit finalized the MP4. */
+    method encode() SystemResult<void> {
+      this.session.close();
+      var command = std.process.Command(make_heap_allocator(), "ffmpeg");
+      command.add_arg("-nostdin");
+      command.add_arg("-hide_banner");
+      command.add_arg("-loglevel");
+      command.add_arg("error");
+      command.add_arg("-n");
+      command.add_arg("-i");
+      command.add_arg(this.native_file);
+      command.add_arg("-an");
+      command.add_arg("-c:v");
+      command.add_arg("libvpx-vp9");
+      command.add_arg("-deadline");
+      command.add_arg("realtime");
+      command.add_arg("-cpu-used");
+      command.add_arg("6");
+      command.add_arg("-threads");
+      command.add_arg("2");
+      command.add_arg("-pix_fmt");
+      command.add_arg("yuv420p");
+      command.add_arg(this.encoded_file);
+      try this.encoder.start(command);
+      this.state = 3;
+      this.clock = std.time.now();
+      return SystemResult.Ok;
+    }
+
+    /** Requests stop for a running recording, or cancellation before it starts. */
+    public method interrupt(cancel: bool) void {
+      if (cancel or not this.active) {
+        if (not this.cancelled) {
+          report(String("Capture cancelled."));
+        }
+        this.cancelled = true;
+        if (this.state == 3) {
+          this.encoder.cancel();
+        } else if (this.active) {
+          this.session.stop();
+          this.stopping = true;
+          this.clock = std.time.now();
+        } else {
+          this.done = true;
+        }
+      } else if (not this.stopping) {
+        this.stopping = true;
+        this.clock = std.time.now();
+        report(String("Saving recording…"));
+        this.session.stop();
+      }
+    }
+
+    /** Advances selection, countdown, capture, and encoding while preserving cancellation. */
+    public method tick() SystemResult<void> {
+      if (this.done) {
+        return SystemResult.Ok;
+      }
+      if (this.state == 3) {
+        try this.encoder.tick();
+        if (not this.encoder.running) {
+          if (this.cancelled) {
+            this.done = true;
+            return SystemResult.Ok;
+          }
+          if (this.encoder.status != 0) {
+            return SystemResult.Error(
+              Error(1, `FFmpeg could not encode the recording: ${this.encoder.diagnostics}`)
+            );
+          }
+          try this.publish(this.encoded_file);
+        } else if (this.clock.elapsed().as_secs() > 300) {
+          return SystemResult.Error(Error(1, "Recording encoding timed out"));
+        }
+        return SystemResult.Ok;
+      }
+      match try this.session.poll() {
+        apple_screen_capture.Event.Selected => {
+          this.state = 1;
+          this.clock = std.time.now();
+        },
+        apple_screen_capture.Event.Cancelled => {
+          this.interrupt(true);
+        },
+        apple_screen_capture.Event.Recording => {
+          this.active = true;
+          report(String("Recording…"));
+        },
+        apple_screen_capture.Event.Finished => {
+          if (this.cancelled) {
+            this.done = true;
+          } else {
+            try this.encode();
+          }
+        },
+        apple_screen_capture.Event.Screenshot => {
+          try this.publish(this.native_file);
+        },
+        apple_screen_capture.Event.Region => {
+          report(String("Drag to select an area. Press Escape to cancel."));
+        },
+        apple_screen_capture.Event.Idle => {}
+      };
+      if (this.done) {
+        return SystemResult.Ok;
+      }
+      if (this.state == 1) {
+        var remaining = this.settings.delay * 1000 + 250 - this.clock.elapsed().as_millis();
+        var seconds = remaining <= 250 ? 0 : (remaining - 250 + 999) / 1000;
+        if (seconds > 0 and seconds != this.last_seconds) {
+          this.last_seconds = seconds;
+          report(`Starting in ${seconds}…`);
+        }
+        if (remaining <= 0) {
+          try this.prepare_output();
+          try this.session.start(this.settings.recording, this.settings.cursor, this.native_file);
+          this.state = 2;
+          this.clock = std.time.now();
+        }
+      }
+      if (this.state == 2 and (not this.active or this.stopping) and
+        this.clock.elapsed().as_secs() > 15) {
+        return SystemResult.Error(Error(1, "Native capture timed out"));
+      }
+      return SystemResult.Ok;
+    }
+  }
+
+  /** Checks parsing, publication, and session guards without presenting native capture UI. */
+  public function self_test() SystemResult<void> {
+    var a = make_heap_allocator();
+    var args = Vec<String>(a, 5);
+    args.push(String("capture"));
+    args.push(String("record"));
+    args.push(String("area"));
+    args.push(String("3600"));
+    args.push(String("hidden"));
+    var valid = try options(args);
+    if (not valid.recording or valid.source != 2 or valid.delay != 3600 or valid.cursor) {
+      return SystemResult.Error(Error(1, "Capture options failed"));
+    }
+    args = Vec<String>(a, 5);
+    args.push(String("capture"));
+    args.push(String("record"));
+    args.push(String("area"));
+    args.push(String("3601"));
+    args.push(String("hidden"));
+    match options(args) {
+      SystemResult.Ok(_) => {
+        return SystemResult.Error(Error(1, "Invalid delay accepted"));
+      },
+      SystemResult.Error(_) => {}
+    };
+    var session = apple_screen_capture.Session();
+    var path = String("unused.png");
+    match session.start(false, true, path) {
+      SystemResult.Ok => {
+        return SystemResult.Error(Error(1, "Capture started before selection"));
+      },
+      SystemResult.Error(_) => {}
+    };
+    try test_publication();
+    report(String("PASS macOS capture options, session guards, and publication"));
+    return SystemResult.Ok;
+  }
+
+  /** Runs the helper with scoped signal handling on the native UI thread. */
+  public function run(args: ref Vec<String>) SystemResult<void> {
+    var settings = try options(args);
+    var signals = try std.signal.SignalSubscription();
+    var capture = Capture(settings);
+    try capture.begin();
+    while (not capture.done) {
+      var pending = try signals.take_pending();
+      if (pending.any()) {
+        capture.interrupt(pending.terminated());
+      }
+      try capture.tick();
+      std.time.sleep(std.time.create_duration_millis(5));
+    }
+    return SystemResult.Ok;
+  }
+}
+
+/** Dispatches self-tests or the private capture protocol and reports actionable failures. */
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+  var env = std.env.Env(make_heap_allocator());
+  var args = env.args(argc, argv);
+  var result: SystemResult<void> = SystemResult.Ok;
+  if (args.size() == 2 and args[1].equals_literal("--self-test")) {
+    result = macos_capture.self_test();
+  } else {
+    result = macos_capture.run(args);
+  }
+  return match result {
+    SystemResult.Ok => 0,
+    SystemResult.Error(error) => {
+      println(
+        `Capture failed: ${error.message()}. Check macOS System Settings > Privacy & Security > Screen & System Audio Recording.`
+      );
+      return 1;
+    }
+  };
+}
+manifest {
+  libraries: [
+    "stdlib.moon",
+    "sun_apple.moon"
+  ]
+  source_files: [
+    "../process.sun"
+  ]
+}

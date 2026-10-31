@@ -274,8 +274,8 @@ the runtime packages. The helper is installed alongside the executable.
 Audio is not implemented. Areas are selected within a single authorized screen.
 Snap confinement and real portal capture require desktop validation.
 
-On Apple Silicon macOS, `build.sh` builds a Swift companion with the Xcode Command
-Line Tools. It uses ScreenCaptureKit's system sharing picker for screens and
+On Apple Silicon macOS, `build.sh` builds the Sun capture helper with Xcode Command
+Line Tools and the `sun_apple` bindings. It uses ScreenCaptureKit's system sharing picker for screens and
 windows, then an Escape-cancellable overlay for area selection. The countdown
 starts after selection. Screenshots are PNG; recordings are captured natively,
 then converted to silent WebM with FFmpeg when stopped. The helper is packaged
@@ -285,7 +285,8 @@ Captures are saved under **Pictures/Sun Captures** or **Movies/Sun Captures**.
 Cancelling discards private partial output. Forced termination can leave a hidden
 `.capture-*` directory. Screen, window, and area capture need manual permission
 and multi-monitor checks on macOS; `sun_video_editor.capture --self-test` checks
-argument validation and region coordinates without capturing the desktop.
+argument validation, publication, and session guards without capturing the desktop.
+The `sun_apple` tests check region coordinates.
 
 Home and capture controls use packaged SVG icons rather than font glyphs.
 Their padded canvases account for the toolkit image preview minimum size, with
@@ -353,3 +354,17 @@ and reports that the tap update was skipped.
 The hosted macOS display cannot fit the resize acceptance test's large window,
 so that assertion remains covered by Linux CI. macOS CI runs the media tests,
 preview, trim, export, cancellation, and Homebrew installation checks.
+
+For local Apple binding development, build `sun_apple` separately, then run:
+
+```sh
+SUN_APPLE_BUILD=../sun_apple/build ./build.sh --build
+```
+
+The default is `build/dependencies/sun_apple/build`. The helper's application
+logic is in `src/tools/capture_macos.sun`; reusable native delegate and overlay
+interop lives in `sun_apple`. Its `--self-test` does not request screen access.
+
+To add the Apple bindings to an existing checkout without replacing its UI or GTK
+dependencies, run `./scripts/install-dependencies.sh --only sun_apple`. Then
+`./build.sh` uses the published artifacts without a `SUN_APPLE_BUILD` override.

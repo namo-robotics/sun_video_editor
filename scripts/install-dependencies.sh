@@ -3,12 +3,24 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 asset_directory=
-if [[ ${1:-} == --from-directory && $# == 2 ]]; then
-  asset_directory=$(realpath "$2")
-elif [[ $# != 0 ]]; then
-  echo 'Usage: install-dependencies.sh [--from-directory DIRECTORY]' >&2
-  exit 1
-fi
+only_dependency=
+# Parse optional source and package selection before changing installed dependencies.
+while (($#)); do
+  case "$1" in
+    --from-directory)
+      [[ $# -ge 2 ]] || { echo 'Missing directory after --from-directory' >&2; exit 1; }
+      asset_directory=$(realpath "$2")
+      shift 2 ;;
+    --only)
+      [[ $# -ge 2 ]] || { echo 'Missing dependency after --only' >&2; exit 1; }
+      case "$2" in
+        sun_ui|sun_gobject|sun_apple) only_dependency=$2 ;;
+        *) echo 'Expected sun_ui, sun_gobject, or sun_apple after --only' >&2; exit 1 ;;
+      esac
+      shift 2 ;;
+    *) echo 'Usage: install-dependencies.sh [--from-directory DIRECTORY] [--only DEPENDENCY]' >&2; exit 1 ;;
+  esac
+done
 mkdir -p tmp build/dependencies
 staging=$(mktemp -d "$PWD/tmp/releases.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
@@ -18,15 +30,24 @@ case "$(uname -s)-$(uname -m)" in
   *) echo 'Release dependencies support Linux x86_64 and macOS arm64.' >&2; exit 1 ;;
 esac
 
+if [[ $only_dependency == sun_apple && $platform != macos ]]; then
+  echo 'sun_apple is only available for macOS.' >&2
+  exit 1
+fi
 ./scripts/install-system-dependencies.sh
 ./scripts/bootstrap-sun.sh
 compiler_version=$("${SUN_EXECUTABLE:-sun}" --version 2>&1)
 
-# Keep both installations staged until all required assets have been checked.
-for dependency in sun_ui sun_gobject; do
+# Stage all platform dependencies before replacing installed artifacts.
+dependencies=(sun_ui sun_gobject)
+if [[ $platform == macos ]]; then dependencies+=(sun_apple); fi
+if [[ -n $only_dependency ]]; then dependencies=("$only_dependency"); fi
+for dependency in "${dependencies[@]}"; do
   package=${dependency//_/-}
   if [[ $dependency == sun_ui ]]; then
     release=${SUN_UI_RELEASE:-dev}
+  elif [[ $dependency == sun_apple ]]; then
+    release=${SUN_APPLE_RELEASE:-dev}
   else
     release=${SUN_GOBJECT_RELEASE:-dev}
   fi
@@ -74,6 +95,10 @@ for dependency in sun_ui sun_gobject; do
     test -f "$target/build/sun_ui.moon"
     test -f "$target/build/sun_ui_gtk.moon"
     install -m 755 "$prefix/bin/sun-viewc" "$target/build/sun-viewc"
+  elif [[ $dependency == sun_apple ]]; then
+    test -f "$target/build/sun_apple.moon"
+    mkdir -p "$target/build/native"
+    cp "$prefix/lib/libsun_apple_native.a" "$prefix/lib/libsun_apple_native.dylib" "$target/build/native/"
   else
     test -f "$target/build/sun_gobject.moon"
     test -f "$target/build/sun_gtk.moon"
@@ -90,8 +115,8 @@ for dependency in sun_ui sun_gobject; do
     fi
   fi
 done
-for dependency in sun_ui sun_gobject; do
+for dependency in "${dependencies[@]}"; do
   rm -rf "build/dependencies/$dependency"
   mv "$staging/$dependency" "build/dependencies/$dependency"
 done
-echo 'Published dependency bundles, native library, and sun-viewc are ready.'
+echo 'Published dependency artifacts are ready.'

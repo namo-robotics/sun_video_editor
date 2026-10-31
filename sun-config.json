@@ -41,6 +41,12 @@
       "type": "binary",
       "output_name": "build/capture-tests",
       "test_binary_name": "build/capture-tests_test"
+    },
+    {
+      "name": "capture-helper-macos",
+      "path": "src/tools/capture_macos.sun",
+      "type": "binary",
+      "output_name": "build/sun_video_editor.capture"
     }
   ]
 }
