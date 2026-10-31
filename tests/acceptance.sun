@@ -71,6 +71,17 @@ module sun_video_editor {
     if (session.state.capture.kind != 1) {
       return SystemResult.Error(Error(1, "Recording icon did not select WebM capture"));
     }
+    var presenter_choice = String("");
+    try renderer.edit(control(session, 126, false), presenter_choice, 1);
+    try renderer.edit(control(session, 127, false), presenter_choice, 1);
+    try turn(renderer, session);
+    try renderer.edit(control(session, 128, false), presenter_choice, 3);
+    try renderer.edit(control(session, 129, false), presenter_choice, 2);
+    try turn(renderer, session);
+    if (not session.state.capture.camera or not session.state.capture.microphone or
+      session.state.capture.corner != 3 or session.state.capture.camera_size != 2) {
+      return SystemResult.Error(Error(1, "Presenter controls did not update capture settings"));
+    }
     renderer.click(control(session, 111, false));
     try turn(renderer, session);
     if (session.state.capture.kind != 0) {

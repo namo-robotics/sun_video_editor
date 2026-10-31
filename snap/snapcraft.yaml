@@ -19,7 +19,7 @@ apps:
     command: usr/bin/sun_video_editor
     desktop: usr/share/applications/sun-video-editor.desktop
     extensions: [gnome]
-    plugs: [home, removable-media, audio-playback]
+    plugs: [home, removable-media, audio-playback, audio-record, camera]
     slots: [ui-application]
 parts:
   converter:

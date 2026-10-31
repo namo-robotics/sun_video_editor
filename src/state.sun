@@ -86,6 +86,24 @@ module sun_video_editor {
       if (event.action == 113 and event.value.kind == ui.ValueKind.Boolean) {
         state.capture.cursor = event.value.boolean;
       }
+      if (event.action == 126 and event.value.kind == ui.ValueKind.Boolean) {
+        state.capture.camera = event.value.boolean;
+      }
+      if (event.action == 127 and event.value.kind == ui.ValueKind.Boolean) {
+        state.capture.microphone = event.value.boolean;
+      }
+      if ((event.action == 128 or event.action == 129) and
+        event.value.kind == ui.ValueKind.Selection) {
+        for (var i: i64 = 0; i < (event.action == 128 ? 4 : 3); i += 1) {
+          if (event.value.selection.equals(ui.Key(i))) {
+            if (event.action == 128) {
+              state.capture.corner = i;
+            } else {
+              state.capture.camera_size = i;
+            }
+          }
+        }
+      }
       if (event.action == 114) {
         match state.capture.start() {
           SystemResult.Ok => {},

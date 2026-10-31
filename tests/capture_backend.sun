@@ -111,6 +111,46 @@ module capture_tests {
     return TestResult.Ok;
   }
 
+  /** The Linux pipeline publishes the combined recording only after both encoders finish. */
+  test_function presenter_recording() TestResult<void> {
+    var capture = capture_backend.Capture(true, false, false, true, 0);
+    capture.presenter.settings.camera = true;
+    capture.presenter.settings.microphone = true;
+    var directory = String("build/capture-presenter-tests");
+    try capture.presenter.prepare(directory, false, true);
+    var clock = std.time.now();
+    while (not capture.presenter.ready() and clock.elapsed().as_secs() < 15) {
+      try capture.presenter.poll();
+      std.time.sleep(std.time.create_duration_millis(5));
+    }
+    try std.test.assert(capture.presenter.ready());
+    var source = String(
+      "videotestsrc is-live=true name=source ! video/x-raw,width=320,height=240,framerate=30/1"
+    );
+    try capture.start(source, directory, true);
+    clock = std.time.now();
+    while (not capture.completed and clock.elapsed().as_secs() < 20) {
+      try capture.tick();
+      if (capture.recording and not capture.finishing and clock.elapsed().as_millis() > 800) {
+        try capture.stop();
+        try std.test.assert(not std.io.is_file(capture.destination));
+      }
+      std.time.sleep(std.time.create_duration_millis(5));
+    }
+    try std.test.assert(capture.completed);
+    var probe = std.process.Command(make_heap_allocator(), "ffprobe");
+    probe.add_arg("-v");
+    probe.add_arg("error");
+    probe.add_arg("-show_entries");
+    probe.add_arg("stream=codec_name,width,height");
+    probe.add_arg("-of");
+    probe.add_arg("csv=p=0");
+    probe.add_arg(capture.destination);
+    var streams = try command(probe);
+    try std.test.assert(streams.contains("vp9,320,240") and streams.contains("opus"));
+    return TestResult.Ok;
+  }
+
   /** Repeated portal revocation finalizes the recording only once. */
   test_function revoked_recording() TestResult<void> {
     try encode(true, false, false, false, true, 320, 240);
@@ -409,6 +449,8 @@ manifest {
     "sun_capture.moon"
   ],
   source_files: [
-    "../src/tools/capture_backend.sun"
+    "../src/tools/capture_backend.sun",
+    "../src/tools/recording.sun",
+    "../src/process.sun"
   ]
 }

@@ -1,0 +1,176 @@
+using std;
+
+/** Tests presenter composition with generated media, without requesting camera or microphone access. */
+module presenter_tests {
+
+  /** Preserves both assertions and process failures. */
+  enum TestResult { Ok, Assertion(std.test.AssertionError), System(Error) }
+
+  /** Decodes one output pixel to verify placement independently of filter-string construction. */
+  function pixel(path: ref String, x: i64, y: i64, red: bool) TestResult {
+    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
+    command.add_arg("-v");
+    command.add_arg("error");
+    command.add_arg("-i");
+    command.add_arg(path);
+    command.add_arg("-vf");
+    command.add_arg(`format=rgb24,crop=1:1:${x}:${y}`);
+    command.add_arg("-frames:v");
+    command.add_arg("1");
+    command.add_arg("-threads");
+    command.add_arg("1");
+    command.add_arg("-f");
+    command.add_arg("rawvideo");
+    command.add_arg("pipe:1");
+    var output = try command.output();
+    try std.test.assert_eq(output.status(), 0);
+    var bytes = output.stdout();
+    try std.test.assert_eq(bytes.length(), 3);
+    var r = match bytes.at(0) {
+      AccessResult.Ok(value) => value,
+      AccessResult.OutOfBounds(_) => 0
+    };
+    var b = match bytes.at(2) {
+      AccessResult.Ok(value) => value,
+      AccessResult.OutOfBounds(_) => 0
+    };
+    if (not (red ? (r > 200 and b < 40) : (b > 200 and r < 40))) {
+      eprintln(`Unexpected pixel at ${x},${y}: red=${r}, blue=${b}, expected red=${red}`);
+    }
+    try std.test.assert(red ? (r > 200 and b < 40) : (b > 200 and r < 40));
+    return TestResult.Ok;
+  }
+
+  /** Records synthetic presenter inputs and verifies their final tracks, geometry, and cleanup. */
+  function composition(camera: bool, microphone: bool, corner: i64, size: i64) TestResult {
+    var root = String("build/presenter-tests");
+    var directory = String("");
+    if (true) {
+      var recording = presenter.Recording();
+      recording.settings.camera = camera;
+      recording.settings.microphone = microphone;
+      recording.settings.corner = corner;
+      recording.settings.size = size;
+      try recording.prepare(root, false, true);
+      directory = recording.directory.clone(make_heap_allocator());
+      var clock = std.time.now();
+      while (not recording.ready() and clock.elapsed().as_secs() < 10) {
+        try recording.poll();
+        std.time.sleep(std.time.create_duration_millis(5));
+      }
+      try std.test.assert(recording.ready(), "Presenter inputs did not become ready");
+      recording.mark_screen();
+      clock = std.time.now();
+      while (clock.elapsed().as_millis() < 800) {
+        try recording.poll();
+        std.time.sleep(std.time.create_duration_millis(5));
+      }
+      recording.stop();
+      var command = std.process.Command(make_heap_allocator(), "ffmpeg");
+      command.add_arg("-v");
+      command.add_arg("error");
+      command.add_arg("-f");
+      command.add_arg("lavfi");
+      command.add_arg("-i");
+      command.add_arg("color=c=blue:s=320x240:r=30");
+      command.add_arg("-t");
+      command.add_arg("0.6");
+      presenter.video_encoding(command);
+      command.add_arg(recording.screen);
+      try video.capture(command);
+      clock = std.time.now();
+      while (not recording.completed and clock.elapsed().as_secs() < 15) {
+        try recording.compose(recording.screen);
+        std.time.sleep(std.time.create_duration_millis(5));
+      }
+      try std.test.assert(recording.completed, "Composition did not finish");
+      var probe = std.process.Command(make_heap_allocator(), "ffprobe");
+      probe.add_arg("-v");
+      probe.add_arg("error");
+      probe.add_arg("-show_entries");
+      probe.add_arg("stream=codec_name,width,height");
+      probe.add_arg("-of");
+      probe.add_arg("csv=p=0");
+      probe.add_arg(recording.result);
+      var streams = try video.capture(probe);
+      try std.test.assert(streams.contains("vp9,320,240"), "Output dimensions or codec changed");
+      try std.test.assert(
+        streams.contains("opus") == microphone,
+        "Output audio does not match the microphone setting"
+      );
+      try pixel(recording.result, 160, 120, false);
+      if (camera) {
+        var right = corner == 0 or corner == 2;
+        var bottom = corner < 2;
+        var w: i64 = size == 0 ? 64 : (size == 1 ? 96 : 128);
+        var h: i64 = size == 0 ? 48 : (size == 1 ? 72 : 96);
+        try pixel(recording.result, right ? 318 : 2, bottom ? 238 : 2, true);
+        try pixel(
+          recording.result,
+          right ? 320 - w + 4 : w - 4,
+          bottom ? 240 - h + 4 : h - 4,
+          true
+        );
+        try pixel(recording.result, right ? 320 - w - 4 : w + 4, bottom ? 238 : 2, false);
+      }
+    }
+    try std.test.assert(not std.io.is_dir(directory), "Private presenter directory leaked");
+    return TestResult.Ok;
+  }
+
+  /** All corners and sizes produce an inset with audio when requested. */
+  test_function camera_and_microphone() TestResult {
+    for (var corner: i64 = 0; corner < 4; corner += 1) {
+      try composition(true, true, corner, corner % 3);
+    }
+    return TestResult.Ok;
+  }
+
+  /** Each optional input works independently. */
+  test_function independent_inputs() TestResult {
+    try composition(true, false, 0, 1);
+    try composition(false, true, 0, 1);
+    return TestResult.Ok;
+  }
+
+  /** Cancellation closes the device process and removes all owned partial files. */
+  test_function cancellation() TestResult {
+    var directory = String("");
+    if (true) {
+      var recording = presenter.Recording();
+      recording.settings.camera = true;
+      recording.settings.microphone = true;
+      var root = String("build/presenter-tests");
+      try recording.prepare(root, false, true);
+      directory = recording.directory.clone(make_heap_allocator());
+      try recording.poll();
+    }
+    try std.test.assert(not std.io.is_dir(directory), "Private presenter directory leaked");
+    return TestResult.Ok;
+  }
+
+  /** Rejects invalid positions, sizes, and screenshot device requests before device access. */
+  test_function arguments() TestResult {
+    var args = String("capture record screen 0 cursor camera microphone 0 1").split_whitespace(
+      make_heap_allocator()
+    );
+    var settings = try presenter.options(args);
+    try std.test.assert(
+      settings.camera and settings.microphone and settings.corner == 0 and settings.size == 1
+    );
+    for (var field: i64 = 0; field < 3; field += 1) {
+      var invalid = String(
+        field == 0 ? "capture record screen 0 cursor camera microphone 4 1" : (field == 1 ? "capture record screen 0 cursor camera microphone 0 3" : "capture screenshot screen 0 cursor camera microphone 0 1")
+      ).split_whitespace(
+        make_heap_allocator()
+      );
+      match presenter.options(invalid) {
+        SystemResult.Ok(_) => {
+          try std.test.fail("Accepted invalid presenter options");
+        },
+        SystemResult.Error(_) => {}
+      };
+    }
+    return TestResult.Ok;
+  }
+}

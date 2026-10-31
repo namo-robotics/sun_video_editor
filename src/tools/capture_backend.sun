@@ -27,6 +27,7 @@ module capture_backend {
 
   /** Owns one capture; member order ensures pipelines stop before output and session cleanup. */
   public class Capture {
+    public var presenter: presenter.Recording = presenter.Recording();
     var portal: desktop.Portal = desktop.Portal();
     var output: desktop.Output = desktop.Output();
     var pipeline: desktop.Pipeline = desktop.Pipeline();
@@ -63,6 +64,7 @@ module capture_backend {
 
     /** Stops streaming before other resource owners are destroyed. */
     deinit() {
+      this.presenter.close();
       this.pipeline.close();
       this.selector.close();
     }
@@ -144,6 +146,7 @@ module capture_backend {
         this.cancel();
         return SystemResult.Ok;
       }
+      this.presenter.stop();
       this.finishing = true;
       this.clock = std.time.now();
       try this.pipeline.finish();
@@ -153,6 +156,7 @@ module capture_backend {
     /** Discards incomplete output through the owned resources' cleanup paths. */
     public method cancel() void {
       this.cancelled = true;
+      this.presenter.close();
       this.pipeline.close();
       this.selector.close();
       println("Capture cancelled.");
@@ -170,9 +174,16 @@ module capture_backend {
     public method pipeline_event(event: i32) SystemResult<void> {
       if (event == 1) {
         this.recording = true;
+        this.presenter.mark_screen();
         println(this.video ? "Recording…" : "Taking screenshot…");
       } else if (event == 2) {
         this.pipeline.close();
+        if (this.presenter.settings.enabled()) {
+          this.presenter.stop();
+          try this.output.publish(this.presenter.screen);
+          this.stage = 6;
+          return SystemResult.Ok;
+        }
         try this.output.publish(this.destination);
         this.completed = true;
         println(`Saved: ${this.destination}`);
@@ -189,6 +200,21 @@ module capture_backend {
     /** Advances the Sun state machine without blocking on frames or selection input. */
     public method tick() SystemResult<void> {
       if (this.completed or this.cancelled) {
+        return SystemResult.Ok;
+      }
+      try this.presenter.poll();
+      if (this.stage == 6) {
+        try this.presenter.compose(this.presenter.screen);
+        if (this.presenter.completed) {
+          var publish = std.process.Command(make_heap_allocator(), "ln");
+          publish.add_arg("-T");
+          publish.add_arg("--");
+          publish.add_arg(this.presenter.result);
+          publish.add_arg(this.destination);
+          try video.capture(publish);
+          this.completed = true;
+          println(`Saved: ${this.destination}`);
+        }
         return SystemResult.Ok;
       }
       if (not this.synthetic) {
@@ -241,6 +267,10 @@ module capture_backend {
           var root = desktop.media_directory(this.video);
           var subdirectory = this.video ? "Screencasts" : "Screenshots";
           var directory = `${root}/${subdirectory}`;
+          try this.presenter.prepare(directory, false, false);
+          if (not this.presenter.ready()) {
+            return SystemResult.Ok;
+          }
           var source = String(
             "pipewiresrc name=source do-timestamp=true keepalive-time=100 resend-last=true"
           );

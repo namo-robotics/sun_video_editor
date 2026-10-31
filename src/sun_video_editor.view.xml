@@ -135,6 +135,21 @@
           <Label text="Delay in seconds" horizontal="Start" />
           <TextInput value="{state.capture.delay.clone(a)}" changeAction="110" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
           <Checkbox text="Include pointer" checked="{state.capture.cursor}" changeAction="113" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+          <If test="{state.capture.kind == 1}">
+            <Checkbox key="capture-camera" text="Record camera" checked="{state.capture.camera}" changeAction="126" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+            <Checkbox key="capture-microphone" text="Record microphone" checked="{state.capture.microphone}" changeAction="127" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+            <Label text="Uses the default camera and microphone. Allow device access when prompted." horizontal="Start" styleResource="muted" />
+            <If test="{state.capture.camera}">
+              <Label text="Camera position" horizontal="Start" />
+              <Select key="camera-position" selected="{state.capture.corner}" changeAction="128" enabled="{not state.capture.process.running and not state.capture.copy_process.running}">
+                <Select.Options><Option key="{0}" text="Lower right" /><Option key="{1}" text="Lower left" /><Option key="{2}" text="Upper right" /><Option key="{3}" text="Upper left" /></Select.Options>
+              </Select>
+              <Label text="Camera size" horizontal="Start" />
+              <Select key="camera-size" selected="{state.capture.camera_size}" changeAction="129" enabled="{not state.capture.process.running and not state.capture.copy_process.running}">
+                <Select.Options><Option key="{0}" text="Small · 20%" /><Option key="{1}" text="Medium · 30%" /><Option key="{2}" text="Large · 40%" /></Select.Options>
+              </Select>
+            </If>
+          </If>
           <Row spacing="12">
             <Button text="Choose source and start" action="114" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="primary" />
             <Button visible="{state.capture.kind == 1}" text="Stop and save" action="115" enabled="{state.capture.recording and not state.capture.stopping}" />
@@ -159,7 +174,7 @@
             </If>
           </If>
         </Column>
-        <Label text="Allow screen sharing when prompted. Recordings are silent. Captures are saved in Pictures or Videos." styleResource="muted" horizontal="Start" />
+        <Label text="Allow screen sharing when prompted. Enable Record microphone to include audio. Captures are saved in Pictures, Movies, or Videos." styleResource="muted" horizontal="Start" />
       </Column>
     </Scroll>
   </View>

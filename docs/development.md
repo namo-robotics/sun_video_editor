@@ -253,7 +253,7 @@ change during capture stops the operation rather than silently moving the crop.
 Live selection requires an Ubuntu desktop with XWayland and portal
 screen geometry; unsupported or out-of-bounds layouts fail explicitly.
 Screenshots retain the portal stream's full pixel resolution as lossless PNG;
-recordings retain that resolution as VP8 WebM, capped at 30 fps. Recording uses
+screen-only recordings retain that resolution as VP8 WebM, capped at 30 fps. Recording uses
 constrained quality with a resolution-scaled bitrate budget (about 15.6 Mb/s for
 1080p and 62.2 Mb/s for 4K) instead of the encoder's low default bitrate.
 Small selected areas retain their actual pixel dimensions; captures are never
@@ -271,14 +271,17 @@ Ubuntu capture dependencies are GIO, GStreamer, `libx11-6`, `libxext6`,
 `gstreamer1.0-pipewire`, and `gstreamer1.0-plugins-good`, plus a running desktop
 portal with ScreenCast support. The installer and Debian/Snap payload declare
 the runtime packages. The helper is installed alongside the executable.
-Audio is not implemented. Areas are selected within a single authorized screen.
+Optional microphone capture uses FFmpeg's PulseAudio input (including PipeWire's
+PulseAudio compatibility service); camera capture uses V4L2 at `/dev/video0`.
+Areas are selected within a single authorized screen.
 Snap confinement and real portal capture require desktop validation.
 
 On Apple Silicon macOS, `build.sh` builds the Sun capture helper with Xcode Command
 Line Tools and the `sun_apple` bindings. It uses ScreenCaptureKit's system sharing picker for screens and
 windows, then an Escape-cancellable overlay for area selection. The countdown
 starts after selection. Screenshots are PNG; recordings are captured natively,
-then converted to silent WebM with FFmpeg when stopped. The helper is packaged
+then converted to WebM with FFmpeg when stopped. Optional camera and microphone
+inputs use FFmpeg AVFoundation with the system default devices. The helper is packaged
 beside the application. Allow the system sharing prompt; if access is denied,
 check **System Settings > Privacy & Security > Screen & System Audio Recording**.
 Captures are saved under **Pictures/Sun Captures** or **Movies/Sun Captures**.
@@ -287,6 +290,40 @@ Cancelling discards private partial output. Forced termination can leave a hidde
 and multi-monitor checks on macOS; `sun_video_editor.capture --self-test` checks
 argument validation, publication, and session guards without capturing the desktop.
 The `sun_apple` tests check region coordinates.
+
+### Camera and microphone recordings
+
+Recording mode exposes independent **Record camera** and **Record microphone**
+checkboxes. Camera position supports all four corners, defaulting to lower right.
+Small, medium, and large insets fit within 20%, 30%, and 40% of both recorded
+frame dimensions while preserving the camera aspect ratio. These settings apply
+to the finished recording and its playback preview; there is no live camera overlay
+on the desktop. Screenshot mode never opens either device.
+
+`src/tools/recording.sun` owns the shared presenter workflow. Devices open only
+after screen authorization, area selection, and the countdown. Screen capture
+waits for presenter media to arrive; the presenter timeline is trimmed to the
+start of the desktop recording. Device startup timing is polled, so real-device
+synchronization should be checked manually. The helper records presenter media
+privately, stops it alongside screen capture, and composes a VP9/Opus WebM before
+publishing. Saving therefore takes longer when either input is enabled. Cancellation,
+permission failures, and encoding failures remove unpublished files. Forced termination
+can leave a `.sun-presenter-*` directory beside the destination (inside the private
+capture directory on macOS).
+
+On macOS, grant Camera and Microphone access when prompted; check the corresponding
+entries in System Settings > Privacy & Security if capture fails. On Ubuntu,
+ensure the camera is available to the current user and a default recording source
+is selected in desktop sound settings. Device selection within the app and system
+audio capture are not included. The Snap declares `camera` and `audio-record` plugs;
+connect them with `sudo snap connect sun-video-editor:camera` and
+`sudo snap connect sun-video-editor:audio-record` before using those inputs.
+
+The platform-independent tests generate a colored camera feed and a microphone tone,
+then decode the composed video to check inset position, dimensions, audio presence,
+and private-file cleanup. Manually test both platforms with camera only, microphone
+only, and both; check permissions denied, missing/busy devices, cancellation during
+startup and saving, stopping screen sharing, audio synchronization, and playback.
 
 Home and capture controls use packaged SVG icons rather than font glyphs.
 Their padded canvases account for the toolkit image preview minimum size, with

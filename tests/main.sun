@@ -5,7 +5,8 @@ function main() i32 {
 manifest {
   test_files: [
     "media.sun",
-    "view.sun"
+    "view.sun",
+    "recording.sun"
   ]
   libraries: [
     "stdlib.moon",
@@ -17,6 +18,7 @@ manifest {
     "../src/view.sun",
     "../build/generated/sun_video_editor.view.sun",
     "../src/process.sun",
+    "../src/tools/recording.sun",
     "../src/media.sun",
     "../src/job.sun",
     "fixtures.sun"

@@ -48,6 +48,42 @@ module screencast {
     return candidate;
   }
 
+  /** Preserves bounded helper errors, including crash diagnostics and multiline encoder failures. */
+  public function helper_failure(
+    status: i32,
+    output: const ref String,
+    diagnostics: const ref String
+  ) String {
+    var a = make_heap_allocator();
+    var message = String("");
+    var lines = output.split(a, b'\n');
+    for (var line: ref String in lines) {
+      if (line.starts_with("Capture failed:")) {
+        message = line.clone(a);
+      } else if (not message.is_empty() and not line.is_empty()) {
+        message.append("\n");
+        message.append(line);
+      }
+    }
+    if (message.is_empty()) {
+      var detail = diagnostics.clone(a);
+      detail.trim();
+      if (detail.is_empty()) {
+        message = `Capture failed: helper exited unexpectedly (status ${status}). Rebuild or reinstall Sun Video Editor.`;
+      } else {
+        message = `Capture failed (status ${status}): ${detail}`;
+      }
+    }
+    if (message.length() > 2048) {
+      message = match message.substr(a, 0, 2048) {
+        AccessResult.Ok(value) => value,
+        AccessResult.OutOfBounds(_) => String("Capture failed")
+      };
+      message.append("…");
+    }
+    return message;
+  }
+
   /** Keeps capture lifetime separate from the editor's conversion jobs. */
   public class Capture {
     public var process: video.Process = video.Process();
@@ -59,6 +95,10 @@ module screencast {
     public var kind: i64 = 0;
     public var source: i64 = 0;
     public var cursor: bool = true;
+    public var camera: bool = false;
+    public var microphone: bool = false;
+    public var corner: i64 = 0;
+    public var camera_size: i64 = 1;
     public var recording: bool = false;
     public var stopping: bool = false;
     public var message: String = String("Ready to capture.");
@@ -182,6 +222,10 @@ module screencast {
       command.add_arg(this.source == 2 ? "area" : (this.source == 0 ? "screen" : "window"));
       command.add_arg(`${seconds}`);
       command.add_arg(this.cursor ? "cursor" : "hidden");
+      command.add_arg(this.kind == 1 and this.camera ? "camera" : "no-camera");
+      command.add_arg(this.kind == 1 and this.microphone ? "microphone" : "no-microphone");
+      command.add_arg(`${this.corner}`);
+      command.add_arg(`${this.camera_size}`);
       try this.process.start(command);
       this.observed = 0;
       this.recording = false;
@@ -285,10 +329,11 @@ module screencast {
       }
       if (not this.process.running) {
         this.recording = false;
-        if (this.process.status != 0 and not this.stopping and
-          not this.message.starts_with("Capture failed:")) {
-          this.message = String(
-            "Capture failed. Check desktop capture permissions and capture dependencies."
+        if (this.process.status != 0 and not this.stopping) {
+          this.message = helper_failure(
+            this.process.status,
+            this.process.text,
+            this.process.diagnostics
           );
           eprintln(this.process.diagnostics);
         }

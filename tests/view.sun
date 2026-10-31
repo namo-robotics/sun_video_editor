@@ -78,6 +78,28 @@ module sun_video_editor {
     }
   }
 
+  /** Displays abnormal helper exits and keeps multiline device errors instead of blaming permissions. */
+  test_function capture_failure_diagnostics() ViewResult {
+    var empty = String("");
+    var crash = String("pointer being freed was not allocated\n");
+    var message = screencast.helper_failure(134, empty, crash);
+    try std.test.assert(message.contains("134") and message.contains("pointer being freed"));
+    var output = String("Recording…\nCapture failed: Camera unavailable\nDevice is busy\n");
+    message = screencast.helper_failure(1, output, crash);
+    try std.test.assert(
+      message.contains("Camera unavailable") and message.contains("Device is busy")
+    );
+    try std.test.assert(not message.contains("pointer being freed"));
+    message = screencast.helper_failure(9, empty, empty);
+    try std.test.assert(message.contains("9") and message.contains("exited unexpectedly"));
+    var verbose = String("");
+    for (var i: i64 = 0; i < 3000; i += 1) {
+      verbose.append("x");
+    }
+    message = screencast.helper_failure(1, empty, verbose);
+    try std.test.assert(message.length() < 2100);
+  }
+
   /** Accepts whole-second delays and rejects malformed or unbounded countdowns. */
   test_function capture_delay_validation() ViewResult {
     try std.test.assert_eq(try screencast.delay_seconds(String("0")), 0);

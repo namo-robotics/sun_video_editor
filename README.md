@@ -5,14 +5,18 @@ Two tools for local video work:
 - **Video Editor:** trim, convert, and compress videos. Export to MP4, MOV, WebM,
   MKV, AVI, or animated GIF.
 - **Screencast:** capture a screen, window, or selected area as a PNG screenshot
-  or high-quality silent WebM recording at the source resolution, with an optional
-  delay, image previews, and recording playback. Screenshots use lossless PNG.
+  or high-quality WebM recording at the source resolution, with optional camera
+  and microphone recording, a configurable camera inset, a delay, image previews,
+  and recording playback. Screenshots use lossless PNG.
 
 Captures request screen-sharing authorization. Choose the source first; the delay
 then runs before the screenshot or recording starts.
 
-Video editing supports Ubuntu and macOS. Screencast requires Ubuntu with PipeWire
-and desktop portal support; audio recording is not yet supported.
+Video editing and screencast support Ubuntu and macOS. Ubuntu screen capture
+requires PipeWire and desktop portal support; macOS uses the system sharing picker.
+For recordings, enable **Record camera** and/or **Record microphone**. Choose a
+camera corner and size; the default is a medium inset in the lower-right corner.
+These options use the default devices (the camera at `/dev/video0` on Ubuntu).
 
 ![Sun Video Editor showing video preview, trim controls, and export settings](assets/sun_video_editor.png)
 

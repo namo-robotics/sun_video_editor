@@ -72,7 +72,7 @@ module macos_capture {
   }
 
   /** Prints a protocol message immediately. */
-  function report(message: String) void {
+  public function report(message: String) void {
     println(message);
     unsafe { flush_streams(null); };
   }
@@ -83,6 +83,7 @@ module macos_capture {
     public var source: i32 = 0;
     public var cursor: bool = true;
     public var delay: i64 = 0;
+    public var presenter: presenter.Options = presenter.Options();
 
     /** Initializes default screenshot settings. */
     init() {}
@@ -90,10 +91,11 @@ module macos_capture {
 
   /** Rejects malformed helper arguments before touching native capture APIs. */
   public function options(args: ref Vec<String>) SystemResult<Options> {
-    if (args.size() != 5) {
+    if (args.size() != 5 and args.size() != 9) {
       return SystemResult.Error(Error(1, "Invalid capture arguments"));
     }
     var result = Options();
+    result.presenter = try presenter.options(args);
     if (not args[1].equals_literal("screenshot") and not args[1].equals_literal("record")) {
       return SystemResult.Error(Error(1, "Invalid capture kind"));
     }
@@ -132,6 +134,7 @@ module macos_capture {
   /** Owns private files, the native session, and a cancellable encoder for one capture. */
   class Capture {
     var settings: Options;
+    var presenter: presenter.Recording = presenter.Recording();
     var session: apple_screen_capture.Session = apple_screen_capture.Session();
     var encoder: video.Process = video.Process();
     var stage: String = String("");
@@ -148,12 +151,15 @@ module macos_capture {
 
     /** Takes ownership of the validated capture options. */
     init(settings: Options) {
+      this.presenter.settings = settings.presenter;
+      settings.presenter = presenter.Options();
       this.settings = settings;
     }
 
     /** Stops owned work and removes only this session's unpublished files. */
     deinit() {
       this.encoder.stop();
+      this.presenter.close();
       this.session.close();
       if (not this.stage.is_empty()) {
         ignore_error(std.io.remove_file(this.native_file));
@@ -173,6 +179,11 @@ module macos_capture {
     method prepare_output() SystemResult<void> {
       var root = try apple_foundation.media_directory(this.settings.recording);
       var directory = `${root}/Sun Captures`;
+      return this.reserve_output(directory);
+    }
+
+    /** Reserves private output under a supplied directory without accessing capture devices. */
+    public method reserve_output(directory: ref String) SystemResult<void> {
       var mkdir = std.process.Command(make_heap_allocator(), "mkdir");
       mkdir.add_arg("-p");
       mkdir.add_arg(directory);
@@ -183,7 +194,11 @@ module macos_capture {
       this.stage = private_dir;
       var suffix = this.settings.recording ? "webm" : "png";
       this.output = `${directory}/Capture-${identifier}.${suffix}`;
-      this.native_file = this.settings.recording ? `${this.stage}/capture.mp4` : `${this.stage}/capture.png`;
+      if (this.settings.recording) {
+        this.native_file = `${this.stage}/capture.mp4`;
+      } else {
+        this.native_file = `${this.stage}/capture.png`;
+      }
       this.encoded_file = `${this.stage}/capture.webm`;
       return SystemResult.Ok;
     }
@@ -203,6 +218,11 @@ module macos_capture {
     /** Starts WebM encoding only after ScreenCaptureKit finalized the MP4. */
     method encode() SystemResult<void> {
       this.session.close();
+      if (this.presenter.settings.enabled()) {
+        this.presenter.stop();
+        this.state = 4;
+        return SystemResult.Ok;
+      }
       var command = std.process.Command(make_heap_allocator(), "ffmpeg");
       command.add_arg("-nostdin");
       command.add_arg("-hide_banner");
@@ -239,6 +259,7 @@ module macos_capture {
         if (this.state == 3) {
           this.encoder.cancel();
         } else if (this.active) {
+          this.presenter.stop();
           this.session.stop();
           this.stopping = true;
           this.clock = std.time.now();
@@ -249,6 +270,7 @@ module macos_capture {
         this.stopping = true;
         this.clock = std.time.now();
         report(String("Saving recording…"));
+        this.presenter.stop();
         this.session.stop();
       }
     }
@@ -258,6 +280,18 @@ module macos_capture {
       if (this.done) {
         return SystemResult.Ok;
       }
+      if (this.state == 4) {
+        if (this.cancelled) {
+          this.done = true;
+          return SystemResult.Ok;
+        }
+        try this.presenter.compose(this.native_file);
+        if (this.presenter.completed) {
+          try this.publish(this.presenter.result);
+        }
+        return SystemResult.Ok;
+      }
+      try this.presenter.poll();
       if (this.state == 3) {
         try this.encoder.tick();
         if (not this.encoder.running) {
@@ -286,6 +320,7 @@ module macos_capture {
         },
         apple_screen_capture.Event.Recording => {
           this.active = true;
+          this.presenter.mark_screen();
           report(String("Recording…"));
         },
         apple_screen_capture.Event.Finished => {
@@ -314,7 +349,13 @@ module macos_capture {
           report(`Starting in ${seconds}…`);
         }
         if (remaining <= 0) {
-          try this.prepare_output();
+          if (this.stage.is_empty()) {
+            try this.prepare_output();
+          }
+          try this.presenter.prepare(this.stage, true, false);
+          if (not this.presenter.ready()) {
+            return SystemResult.Ok;
+          }
           try this.session.start(this.settings.recording, this.settings.cursor, this.native_file);
           this.state = 2;
           this.clock = std.time.now();
@@ -341,6 +382,25 @@ module macos_capture {
     if (not valid.recording or valid.source != 2 or valid.delay != 3600 or valid.cursor) {
       return SystemResult.Error(Error(1, "Capture options failed"));
     }
+    for (var mode: i64 = 0; mode < 2; mode += 1) {
+      var files = try PublicationFixture();
+      if (true) {
+        var settings = Options();
+        settings.recording = mode == 1;
+        settings.presenter.camera = mode == 1;
+        settings.presenter.microphone = mode == 1;
+        var capture = Capture(settings);
+        try capture.reserve_output(files.directory);
+      }
+      var listing = std.process.Command(a, "find");
+      listing.add_arg(files.directory);
+      listing.add_arg("-mindepth");
+      listing.add_arg("1");
+      var remaining = try video.capture(listing);
+      if (not remaining.is_empty()) {
+        return SystemResult.Error(Error(1, "Capture output reservation leaked private files"));
+      }
+    }
     args = Vec<String>(a, 5);
     args.push(String("capture"));
     args.push(String("record"));
@@ -362,7 +422,11 @@ module macos_capture {
       SystemResult.Error(_) => {}
     };
     try test_publication();
-    report(String("PASS macOS capture options, session guards, and publication"));
+    report(
+      String(
+        "PASS macOS capture options, output reservation, cleanup, session guards, and publication"
+      )
+    );
     return SystemResult.Ok;
   }
 
@@ -397,9 +461,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   return match result {
     SystemResult.Ok => 0,
     SystemResult.Error(error) => {
-      println(
-        `Capture failed: ${error.message()}. Check macOS System Settings > Privacy & Security > Screen & System Audio Recording.`
-      );
+      macos_capture.report(`Capture failed: ${error.message()}`);
       return 1;
     }
   };
@@ -410,6 +472,7 @@ manifest {
     "sun_apple.moon"
   ]
   source_files: [
-    "../process.sun"
+    "../process.sun",
+    "recording.sun"
   ]
 }
