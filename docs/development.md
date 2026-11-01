@@ -399,8 +399,9 @@ into the application state.
 
 The macOS workflow targets Apple Silicon, matching the Sun compiler's Homebrew
 release. It builds GTK bindings natively, runs media and native acceptance tests,
-and tests installation through Homebrew before publishing a commit-specific archive
-to the `dev` release. Intel Macs are not covered by this workflow.
+and tests installation through Homebrew before publishing to the `dev` release. The archive, DMG, and checksums use
+stable filenames and are overwritten on each publication. After publication, CI
+removes obsolete commit-named macOS assets. Intel Macs are not covered by this workflow.
 
 Install the tested release on Apple Silicon with macOS 26 (Tahoe) or newer:
 

@@ -93,7 +93,7 @@ codesign --force --sign "$signing_identity" "${signing_options[@]}" "$app"
 codesign --verify --deep --strict "$app"
 ./scripts/test-macos-app.sh "$app"
 ln -s /Applications build/macos-app/Applications
-disk_image="build/sun-video-editor-${GITHUB_SHA:-local}-arm64-apple-darwin.dmg"
+disk_image="build/sun-video-editor-arm64-apple-darwin.dmg"
 hdiutil create -ov -format UDZO -volname 'Sun Video Editor' -srcfolder build/macos-app "$disk_image"
 if [[ -n ${APPLE_NOTARY_PROFILE:-} ]]; then
   [[ "$signing_identity" != - ]] || { echo 'Notarization requires APPLE_SIGNING_IDENTITY' >&2; exit 1; }

@@ -71,6 +71,7 @@ jobs:
           name: Development Build
           prerelease: true
           fail_on_unmatched_files: true
+          overwrite_files: true
           files: |
             build/release/*.deb
             build/release/sun-version.txt
@@ -160,7 +161,7 @@ jobs:
       - name: Render and test the Homebrew formula
         shell: bash
         run: |
-          archive="build/sun-video-editor-${GITHUB_SHA}-arm64-apple-darwin.tar.gz"
+          archive="build/sun-video-editor-arm64-apple-darwin.tar.gz"
           digest=$(shasum -a 256 "$archive" | cut -d ' ' -f 1)
           version="0.1.0.dev.${GITHUB_RUN_NUMBER}"
           url="https://github.com/${GITHUB_REPOSITORY}/releases/download/dev/$(basename "$archive")"
@@ -205,6 +206,7 @@ jobs:
           name: Development Build
           prerelease: true
           fail_on_unmatched_files: true
+          overwrite_files: true
           files: |
             build/release/*.tar.gz
             build/release/*.tar.gz.sha256
@@ -226,3 +228,17 @@ jobs:
           gh api -X PUT "repos/$repo/contents/Formula/sun-video-editor.rb" \
             -f message='editor: update the tested Apple Silicon release' \
             -f "content=$(base64 -w0 build/release/sun-video-editor.rb)" "${args[@]}"
+      - name: Remove obsolete commit-named macOS assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {data: release} = await github.rest.repos.getReleaseByTag({...context.repo, tag: 'dev'});
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              ...context.repo, release_id: release.id, per_page: 100
+            });
+            const obsolete = /^sun-video-editor-[0-9a-f]{40}-arm64-apple-darwin\.(?:tar\.gz|dmg)(?:\.sha256)?$/;
+            for (const asset of assets) {
+              if (obsolete.test(asset.name)) {
+                await github.rest.repos.deleteReleaseAsset({...context.repo, asset_id: asset.id});
+              }
+            }

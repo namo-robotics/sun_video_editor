@@ -22,7 +22,7 @@ if grep -E '/Users/runner|/private/tmp|/workspaces/' build/macos-linkage.txt; th
   exit 1
 fi
 codesign --force --sign - build/macos/bin/sun_video_editor
-archive="build/sun-video-editor-${GITHUB_SHA:-local}-arm64-apple-darwin.tar.gz"
+archive="build/sun-video-editor-arm64-apple-darwin.tar.gz"
 tar -C build/macos -czf "$archive" .
 shasum -a 256 "$archive" > "$archive.sha256"
 
