@@ -52,6 +52,33 @@ module sun_video_editor {
     return SystemResult.Ok;
   }
 
+  /** Waits for the paused decoder and application to reach a requested preview position. */
+  function wait_preview_position(
+    renderer: ref ui_gtk.Renderer,
+    session: ref ui.Session<State>,
+    preview: u64,
+    position: i64
+  ) SystemResult<void> {
+    var deadline = std.time.now();
+    var delay = std.time.create_duration_millis(10);
+    while (deadline.elapsed().as_millis() < 5000) {
+      try turn(renderer, session);
+      var decoded = renderer.media_timestamp(preview);
+      if (renderer.media_status(preview) == 1 and decoded >= position - 1 and
+        decoded <= position + 1 and session.state.position == position) {
+        return SystemResult.Ok;
+      }
+      std.time.sleep(delay);
+    }
+    var decoded = renderer.media_timestamp(preview);
+    return SystemResult.Error(
+      Error(
+        1,
+        `Preview seek timed out: expected ${position}, decoded ${decoded}, state ${session.state.position}`
+      )
+    );
+  }
+
   /** Checks native arrow edits and exact trim times across application redraws. */
   function frame_stepping(
     renderer: ref ui_gtk.Renderer,
@@ -79,8 +106,11 @@ module sun_video_editor {
     if (session.state.position != 2041667 or start_us(session.state) != 0) {
       return SystemResult.Error(Error(1, "Unselected playhead did not step by one frame"));
     }
+    // Finish the previous asynchronous seek before requesting a new test position.
+    try wait_preview_position(renderer, session, preview, 2041667);
     session.state.position = 0;
     try session.render(renderer);
+    try wait_preview_position(renderer, session, preview, 0);
     try renderer.drag_media(preview, 0.0, 0.0);
     try turn(renderer, session);
     try renderer.step_media(preview, 1);
@@ -88,20 +118,7 @@ module sun_video_editor {
     if (start_us(session.state) != 41667 or session.state.position != 41667) {
       return SystemResult.Error(Error(1, "Coincident bar and playhead did not step together"));
     }
-    var deadline = std.time.now();
-    var delay = std.time.create_duration_millis(10);
-    while (deadline.elapsed().as_millis() < 5000) {
-      try turn(renderer, session);
-      var decoded = renderer.media_timestamp(preview);
-      if (renderer.media_status(preview) == 1 and decoded >= 41666 and decoded <= 41668) {
-        break;
-      }
-      std.time.sleep(delay);
-    }
-    var decoded = renderer.media_timestamp(preview);
-    if (renderer.media_status(preview) != 1 or decoded < 41666 or decoded > 41668) {
-      return SystemResult.Error(Error(1, "Frame step did not decode the requested paused frame"));
-    }
+    try wait_preview_position(renderer, session, preview, 41667);
     session.state.settings.start = String("0");
     session.state.position = 0;
     try session.render(renderer);
