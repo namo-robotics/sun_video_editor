@@ -55,6 +55,7 @@ module editor_build {
       pkg.add_arg("--libs");
       pkg.add_arg("gio-unix-2.0");
       pkg.add_arg("gstreamer-1.0");
+      pkg.add_arg("gstreamer-video-1.0");
       pkg.add_arg("x11");
       pkg.add_arg("xext");
       var output = try pkg.output();

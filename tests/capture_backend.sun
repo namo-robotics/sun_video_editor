@@ -27,14 +27,15 @@ module capture_tests {
     scaled: bool,
     revoked: bool,
     width: i32,
-    height: i32
+    height: i32,
+    window: bool
   ) SystemResult<void> {
     var a = make_heap_allocator();
     var stamp = desktop.filename_stamp();
     var directory = `build/capture-tests-output/${stamp}`;
     var destination = String("");
     if (true) {
-      var capture = capture_backend.Capture(video, crop, false, true, 0);
+      var capture = capture_backend.Capture(video, crop, window, true, 0);
       if (crop) {
         capture.logical_width = scaled ? 160 : width;
         capture.logical_height = scaled ? 120 : height;
@@ -103,15 +104,22 @@ module capture_tests {
     return SystemResult.Ok;
   }
 
+  /** Window streams without padding retain their exact size through both output formats. */
+  test_function window_capture() TestResult<void> {
+    try encode(false, false, false, false, false, 321, 241, true);
+    try encode(true, false, false, false, false, 321, 241, true);
+    return TestResult.Ok;
+  }
+
   /** A single frame produces a readable lossless screenshot. */
   test_function screenshot() TestResult<void> {
-    try encode(false, false, false, false, false, 320, 240);
+    try encode(false, false, false, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Stopping drains the encoder and writes a readable WebM trailer. */
   test_function recording() TestResult<void> {
-    try encode(true, false, false, false, false, 320, 240);
+    try encode(true, false, false, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
@@ -151,49 +159,49 @@ module capture_tests {
 
   /** Repeated portal revocation finalizes the recording only once. */
   test_function revoked_recording() TestResult<void> {
-    try encode(true, false, false, false, true, 320, 240);
+    try encode(true, false, false, false, true, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Cancellation never publishes a partial recording. */
   test_function cancellation() TestResult<void> {
-    try encode(true, true, false, false, false, 320, 240);
+    try encode(true, true, false, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Odd region dimensions survive PNG encoding without padding or scaling. */
   test_function area_screenshot() TestResult<void> {
-    try encode(false, false, true, false, false, 320, 240);
+    try encode(false, false, true, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Odd video regions receive at most one padding pixel for H.264 encoding. */
   test_function area_recording() TestResult<void> {
-    try encode(true, false, true, false, false, 320, 240);
+    try encode(true, false, true, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Logical monitor coordinates scale to physical stream pixels. */
   test_function scaled_area() TestResult<void> {
-    try encode(false, false, true, true, false, 320, 240);
+    try encode(false, false, true, true, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** Cancelling a cropped recording removes its private file. */
   test_function area_cancellation() TestResult<void> {
-    try encode(true, true, true, false, false, 320, 240);
+    try encode(true, true, true, false, false, 320, 240, false);
     return TestResult.Ok;
   }
 
   /** High-resolution screenshots retain source dimensions. */
   test_function screenshot_4k() TestResult<void> {
-    try encode(false, false, false, false, false, 3840, 2160);
+    try encode(false, false, false, false, false, 3840, 2160, false);
     return TestResult.Ok;
   }
 
   /** Full-HD recordings preserve the source resolution. */
   test_function recording_full_hd() TestResult<void> {
-    try encode(true, false, false, false, false, 1920, 1080);
+    try encode(true, false, false, false, false, 1920, 1080, false);
     return TestResult.Ok;
   }
 

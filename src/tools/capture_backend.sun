@@ -93,7 +93,8 @@ module capture_backend {
     /** Builds a bounded live compositor and fragmented MP4 writer, or a lossless screenshot pipeline. */
     public method description(source: ref String) String {
       var crop = this.width > 0 ? "videoconvert ! video/x-raw,format=RGB ! videocrop name=region ! " : "";
-      var screen = `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(crop)}videoconvert`;
+      var visible = this.window ? "videocrop name=window_crop ! " : "";
+      var screen = `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(visible)}${String(crop)}videoconvert`;
       if (not this.video) {
         return `${screen} ! pngenc snapshot=true ! fdsink name=output`;
       }
@@ -139,6 +140,9 @@ module capture_backend {
       this.destination = `${directory}/${name} ${stamp}${extension}`;
       var description = this.description(source);
       try this.pipeline.configure(description, this.output, remote, target, node);
+      if (this.window) {
+        try this.pipeline.crop_window();
+      }
       if (this.width > 0) {
         try this.pipeline.crop(
           this.x,

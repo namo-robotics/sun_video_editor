@@ -274,7 +274,11 @@ rectangle to actual stream pixels before cropping and encoding. A stream size
 change during capture stops the operation rather than silently moving the crop.
 Live selection requires an Ubuntu desktop with XWayland and portal
 screen geometry; unsupported or out-of-bounds layouts fail explicitly.
-Screenshots retain the portal stream's full pixel resolution as lossless PNG;
+Window capture requires a bundle providing `desktop.Pipeline.crop_window()`.
+It consumes PipeWire's visible-window rectangle before fixing output dimensions,
+excluding compositor buffer padding without detecting or trimming dark pixels.
+When crop metadata is absent, the complete stream frame is retained.
+Screenshots retain the visible frame's pixel resolution as lossless PNG;
 recordings use H.264/AAC MP4, capped at 30 fps. The native GStreamer pipeline
 combines screen, camera, and microphone while capturing and writes short MP4
 fragments. The x264 encoder uses constrained quality with a bounded thread count.
