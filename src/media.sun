@@ -39,6 +39,8 @@ module video {
   /** Stores the supported input stream and container properties. */
   public class Media {
     public var duration: f64 = 0.0;
+    public var frame_rate_num: i64 = 0;
+    public var frame_rate_den: i64 = 1;
     public var size: i64 = 0;
     public var width: i64 = 0;
     public var height: i64 = 0;
@@ -214,6 +216,28 @@ module video {
     return SystemResult.Ok(total);
   }
 
+  /** Reads a bounded rational frame rate, leaving unknown rates available for fallback. */
+  function frame_rate(media: ref Media, text: const ref String) void {
+    var parts = text.split(make_heap_allocator(), b'/');
+    if (parts.size() != 2) {
+      return;
+    }
+    var numerator = match parts[0].parse_i64() {
+      Option.Some(value) => value,
+      Option.None => 0
+    };
+    var denominator = match parts[1].parse_i64() {
+      Option.Some(value) => value,
+      Option.None => 0
+    };
+    if (numerator <= 0 or numerator > 1000000000 or denominator <= 0 or denominator > 1000000000 or
+      numerator > denominator * 1000000) {
+      return;
+    }
+    media.frame_rate_num = numerator;
+    media.frame_rate_den = denominator;
+  }
+
   /** Converts bounded probe JSON into a supported video description. */
   function decode(document: ref Json) JsonResult<Media> {
     var result = Media();
@@ -236,6 +260,10 @@ module video {
         result.width = integer(stream, "width");
         result.height = integer(stream, "height");
         result.codec = field(stream, "codec_name");
+        frame_rate(result, field(stream, "avg_frame_rate"));
+        if (result.frame_rate_num == 0) {
+          frame_rate(result, field(stream, "r_frame_rate"));
+        }
         var transfer = field(stream, "color_transfer");
         var primaries = field(stream, "color_primaries");
         result.hdr = transfer.equals_literal("smpte2084") or
@@ -304,7 +332,7 @@ module video {
     command.add_arg("error");
     command.add_arg("-show_entries");
     command.add_arg(
-      "format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries"
+      "format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries,avg_frame_rate,r_frame_rate"
     );
     command.add_arg("-of");
     command.add_arg("json");

@@ -6,6 +6,35 @@ module sun_video_editor {
   /** Combines appearance validation and assertion failures. */
   enum ViewResult { Ok, Assertion(std.test.AssertionError), System(Error) }
 
+  /** Preserves fractional-frame trim times and passes the source rate to the preview. */
+  test_function frame_precision() ViewResult {
+    for (var value: i64 = 0; value < 1000000; value += 33367) {
+      var text = timestamp(value);
+      try std.test.assert_eq(time_us(text, -1, 4000000), value);
+    }
+    var state = State();
+    state.page = 1;
+    state.job.ready = true;
+    state.job.media.duration = 4.0;
+    state.job.media.frame_rate_num = 30000;
+    state.job.media.frame_rate_den = 1001;
+    state.settings.start = timestamp(33367);
+    state.settings.end = timestamp(3960623);
+    var description = view(state);
+    var found = false;
+    for (var i: i64 = 0; i < description.elements.size(); i += 1) {
+      var node = description.elements[i];
+      if (node.action == 15) {
+        found = true;
+        try std.test.assert_eq(node.frame_rate_num, 30000);
+        try std.test.assert_eq(node.frame_rate_den, 1001);
+        try std.test.assert_eq(node.trim_start, 33367);
+        try std.test.assert_eq(node.trim_end, 3960623);
+      }
+    }
+    try std.test.assert(found);
+  }
+
   /** Preserves action availability and the shared palette across the export lifecycle. */
   test_function reusable_converter_states() ViewResult {
     for (var stage: i32 = 0; stage < 4; stage += 1) {

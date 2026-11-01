@@ -52,6 +52,62 @@ module sun_video_editor {
     return SystemResult.Ok;
   }
 
+  /** Checks native arrow edits and exact trim times across application redraws. */
+  function frame_stepping(
+    renderer: ref ui_gtk.Renderer,
+    session: ref ui.Session<State>,
+    preview: u64
+  ) SystemResult<void> {
+    try renderer.drag_media(preview, 0.25, 0.25);
+    try turn(renderer, session);
+    try renderer.drag_media(preview, 0.0, 0.0);
+    try turn(renderer, session);
+    try renderer.step_media(preview, 1);
+    try turn(renderer, session);
+    if (start_us(session.state) != 41667 or session.state.position != 1000000) {
+      return SystemResult.Error(Error(1, "Selected start bar did not step independently"));
+    }
+    try renderer.step_media(preview, -1);
+    try turn(renderer, session);
+    if (start_us(session.state) != 0 or session.state.position != 1000000) {
+      return SystemResult.Error(Error(1, "Start bar selection did not survive a redraw"));
+    }
+    try renderer.drag_media(preview, 0.5, 0.5);
+    try turn(renderer, session);
+    try renderer.step_media(preview, 1);
+    try turn(renderer, session);
+    if (session.state.position != 2041667 or start_us(session.state) != 0) {
+      return SystemResult.Error(Error(1, "Unselected playhead did not step by one frame"));
+    }
+    session.state.position = 0;
+    try session.render(renderer);
+    try renderer.drag_media(preview, 0.0, 0.0);
+    try turn(renderer, session);
+    try renderer.step_media(preview, 1);
+    try turn(renderer, session);
+    if (start_us(session.state) != 41667 or session.state.position != 41667) {
+      return SystemResult.Error(Error(1, "Coincident bar and playhead did not step together"));
+    }
+    var deadline = std.time.now();
+    var delay = std.time.create_duration_millis(10);
+    while (deadline.elapsed().as_millis() < 5000) {
+      try turn(renderer, session);
+      var decoded = renderer.media_timestamp(preview);
+      if (renderer.media_status(preview) == 1 and decoded >= 41666 and decoded <= 41668) {
+        break;
+      }
+      std.time.sleep(delay);
+    }
+    var decoded = renderer.media_timestamp(preview);
+    if (renderer.media_status(preview) != 1 or decoded < 41666 or decoded > 41668) {
+      return SystemResult.Error(Error(1, "Frame step did not decode the requested paused frame"));
+    }
+    session.state.settings.start = String("0");
+    session.state.position = 0;
+    try session.render(renderer);
+    return SystemResult.Ok;
+  }
+
   /** Checks native form edits, asynchronous completion, cancellation, and subscription cleanup. */
   function acceptance(
     renderer: ref ui_gtk.Renderer,
@@ -208,6 +264,7 @@ module sun_video_editor {
     } else {
       println("Resize assertions skipped: fixed CI display cannot fit the large window");
     }
+    try frame_stepping(renderer, session, preview);
     try renderer.drag_media(preview, 0.0, 0.125);
     try turn(renderer, session);
     try renderer.drag_media(preview, 1.0, 0.5);

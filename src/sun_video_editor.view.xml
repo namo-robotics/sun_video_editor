@@ -21,7 +21,7 @@
             <Panel.body>
               <Label text="{source_name(state)}" horizontal="Start" />
               <Label text="{metadata(state)}" styleResource="muted" horizontal="Start" />
-              <Video text="{preview_source(state)}" duration="{duration_us(state)}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" trimRanges="{timeline_ranges(state)}" activeRange="{state.active_section}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
+              <Video text="{preview_source(state)}" duration="{duration_us(state)}" frameRateNum="{state.job.media.frame_rate_num}" frameRateDen="{state.job.media.frame_rate_den}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" trimRanges="{timeline_ranges(state)}" activeRange="{state.active_section}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
               <Row spacing="12">
                 <Section text="02   TRIM YOUR CLIP" expandX="{true}" />
                 <Button key="split-section" icon="{capture_icon(state, &quot;cut&quot;)}" tooltip="Split section at playhead" action="17" width="40" height="36" enabled="{can_split(state)}" />
@@ -176,7 +176,7 @@
               <Button text="Open in Video Editor" action="125" enabled="{not state.capture.copy_process.running and state.job.mode == 0}" />
             </Row>
             <If test="{state.capture.preview.ready}">
-              <Video trimControls="false" key="recording-preview" text="{state.capture.saved.clone(a)}" duration="{_convert&lt;i64&gt;(state.capture.preview.media.duration * 1000000.0)}" trimStart="{state.capture.preview_start}" trimEnd="{state.capture.preview_end}" position="{state.capture.preview_position}" changeAction="123" height="360" expandX="true" spacing="12" />
+              <Video trimControls="false" key="recording-preview" frameRateNum="{state.capture.preview.media.frame_rate_num}" frameRateDen="{state.capture.preview.media.frame_rate_den}" text="{state.capture.saved.clone(a)}" duration="{_convert&lt;i64&gt;(state.capture.preview.media.duration * 1000000.0)}" trimStart="{state.capture.preview_start}" trimEnd="{state.capture.preview_end}" position="{state.capture.preview_position}" changeAction="123" height="360" expandX="true" spacing="12" />
             </If>
             <If test="{not state.capture.preview.ready}">
               <Label text="{state.capture.preview.message.clone(a)}" horizontal="Start" styleResource="muted" />

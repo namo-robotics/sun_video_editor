@@ -202,6 +202,28 @@ module video_tests {
     return TestResult.Ok;
   }
 
+  /** Reads fractional frame rates and falls back safely when metadata is unavailable. */
+  test_function frame_rate_metadata() TestResult<void> {
+    var fractional = String(
+      "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"30000/1001\"}]}"
+    );
+    var media = try video.parse_probe(fractional);
+    try std.test.assert_eq(media.frame_rate_num, 30000);
+    try std.test.assert_eq(media.frame_rate_den, 1001);
+    var fallback = String(
+      "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"0/0\",\"r_frame_rate\":\"24/1\"}]}"
+    );
+    var nominal = try video.parse_probe(fallback);
+    try std.test.assert_eq(nominal.frame_rate_num, 24);
+    try std.test.assert_eq(nominal.frame_rate_den, 1);
+    var invalid = String(
+      "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"-1/1\",\"r_frame_rate\":\"999999999999/1\"}]}"
+    );
+    var unknown = try video.parse_probe(invalid);
+    try std.test.assert_eq(unknown.frame_rate_num, 0);
+    return TestResult.Ok;
+  }
+
   /** Rejects HDR and missing metadata rather than producing an incorrect SDR conversion. */
   test_function metadata_validation() TestResult<void> {
     var hdr = String(

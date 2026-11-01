@@ -183,13 +183,27 @@ snapcraft release sun-video-editor REVISION stable
 5. Choose whether to keep audio and press **Export**. **Cancel export**
    stops the job.
 
-With the timeline focused, arrow keys scrub, Shift+arrows move the start handle,
-Ctrl+arrows move the active section’s end handle, and Space toggles playback. The preview stops at
-the last kept section’s end; dragging a handle also seeks to that boundary. Preview failures
-are reported separately and do not prevent conversion.
+With the video or timeline focused, Left/Right steps by one frame. Clicking the
+video selects the playhead without seeking. Click a trim bar to
+select it (shown in gold); the arrows then move that bar. Clicking the track
+clears bar selection and moves the playhead. If the playhead coincides with the
+selected bar, arrow keys move them together. A bar that crosses the playhead
+picks it up and moves it along; until then the playhead stays put.
+Stepping pauses playback. Space toggles playback. Circular, translucent icon
+buttons centered over the video provide backward jump, Play/Pause, and forward
+jump. The jump buttons move by 15 seconds, preserving playback state and trim
+bounds; their tooltips describe the direction and interval. Controls stay visible
+while paused, hovered, or focused with the keyboard, and fade while playing when
+the pointer leaves the video. Jumps stop at the source boundaries. The same overlay
+appears in the recording preview. Bars cannot cross neighbouring
+sections. Frame steps use the source's reported rational frame rate, so fractional
+rates do not accumulate rounding drift. Variable-rate sources use their average
+rate; sources without a usable rate retain time-based scrubbing.
+The preview stops at the last kept section’s end; dragging a handle also seeks to
+that boundary. Preview failures are reported separately and do not prevent conversion.
 
 The interface is defined in `src/sun_video_editor.view.xml`. Panels are distinguished
-by background colors. Buttons share square corners and visible hover and keyboard-focus
+by background colors. Form buttons share square corners and visible hover and keyboard-focus
 backgrounds through the theme; capture choices use a reusable `ChoiceButton`
 component with distinct selected and disabled appearances.
 Reusable component instances declare stable keys; other static widgets use keys
@@ -461,16 +475,28 @@ To add the Apple bindings to an existing checkout without replacing its UI or GT
 dependencies, run `./scripts/install-dependencies.sh --only sun_apple`. Then
 `./build.sh` uses the published artifacts without a `SUN_APPLE_BUILD` override.
 
-### Toolkit requirements for section editing
+### Toolkit requirements for section and frame editing
 
-Multi-section timelines and icon tooltips require the matching `sun_ui` and
-`sun_gobject` changes. Publish those toolkit bundles before an editor CI release
-uses the new XML properties. For local work with built toolkit checkouts:
+Multi-section timelines, frame stepping, and icon tooltips require the matching
+`sun_ui` and `sun_gobject` changes. Live macOS capture also requires a compatible
+`sun_apple` bundle. Publish those bundles before an editor CI release uses the
+new APIs. For local work with built toolkit checkouts, set all three overrides
+from the editor repository root:
 
 ```sh
-SUN_UI_BUILD=../sun_ui/build SUN_GOBJECT_BUILD=../sun_gobject/build \
-  SUN_APPLE_BUILD=../sun_apple/build ./build.sh
+export SUN_UI_BUILD="$PWD/../sun_ui/build"
+export SUN_GOBJECT_BUILD="$PWD/../sun_gobject/build"
+export SUN_APPLE_BUILD="$PWD/../sun_apple/build"
+./build.sh
 ```
+
+These exports apply to subsequent builds in the same terminal. A new terminal
+uses the downloaded bundles unless the overrides are set again. An `Unknown
+member 'start_live'` error indicates an older Apple bundle; `Unknown attribute`
+on `frameRateNum` or `frameRateDen` indicates an older `sun-viewc`. Select the
+matching local bundles above, or install compatible published releases. The
+editor does not rebuild dependency checkouts automatically. After a failed build,
+`build/sun_video_editor` may still be the executable from an earlier successful build.
 
 Kept sections retain source timestamps and are exported chronologically. Their
 ranges must not overlap or be empty, and the editor permits at most 64 sections.

@@ -39,7 +39,9 @@ module build_targets {
           JsonResult.Ok(value) => (try value.as_string()).clone(a),
           JsonResult.Error(_) => tests.clone(a)
         };
-        return JsonResult.Ok(Target(source.clone(a), output.clone(a), tests, kind.equals_literal("library")));
+        return JsonResult.Ok(
+          Target(source.clone(a), output.clone(a), tests, kind.equals_literal("library"))
+        );
       }
     }
     return JsonResult.Error(JsonError("Unknown build target", -1));

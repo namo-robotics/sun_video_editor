@@ -35,7 +35,7 @@ module sun_video_editor {
     if (value >= _convert<f64>(duration) / 1000000.0) {
       return duration;
     }
-    return _convert<i64>(value * 1000000.0);
+    return _convert<i64>(value * 1000000.0 + 0.5);
   }
 
   /** Resolves an in point without letting an invalid manual edit collapse the native range. */
@@ -61,7 +61,7 @@ module sun_video_editor {
     return String("");
   }
 
-  /** Formats an exact millisecond timestamp accepted by the export time parser. */
+  /** Preserves microsecond frame boundaries while keeping millisecond values compact. */
   function timestamp(value: i64) String {
     var milliseconds = value / 1000;
     var hours = milliseconds / 3600000;
@@ -91,6 +91,16 @@ module sun_video_editor {
       result.append("0");
     }
     result.append(fraction);
+    var remainder = value % 1000;
+    if (remainder != 0) {
+      if (remainder < 100) {
+        result.append("0");
+      }
+      if (remainder < 10) {
+        result.append("0");
+      }
+      result.append(remainder);
+    }
     return result;
   }
 

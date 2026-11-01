@@ -89,14 +89,6 @@ module sun_video_editor {
     if (not encoders.contains("libx264") or not encoders.contains(" aac ")) {
       return SystemResult.Error(Error(1, "Install FFmpeg with libx264 and AAC encoders"));
     }
-    var probe = std.process.Command(a, "ffprobe");
-    probe.add_arg("-version");
-    match video.capture(probe) {
-      SystemResult.Ok(_) => {},
-      SystemResult.Error(_) => {
-        return SystemResult.Error(Error(1, "Install ffprobe alongside FFmpeg"));
-      }
-    };
     var scale = std.process.Command(a, "ffmpeg");
     scale.add_arg("-hide_banner");
     scale.add_arg("-h");
