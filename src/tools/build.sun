@@ -71,6 +71,8 @@ module editor_build {
     if (gtk) {
       command.add_arg(`-L${dependency}/native`);
       command.add_arg("-lsun_gobject_native");
+      // The native media bindings require the system math library.
+      command.add_arg("-lm");
       var pkg = std.process.Command(a, "pkg-config");
       pkg.add_arg("--libs");
       pkg.add_arg("gtk4");
