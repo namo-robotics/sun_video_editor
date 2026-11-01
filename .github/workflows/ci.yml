@@ -113,6 +113,8 @@ jobs:
     needs: snap
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    # Store publication is optional; builds and tests remain required.
+    continue-on-error: true
     env:
       SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
     steps:
@@ -137,6 +139,11 @@ jobs:
       - name: Explain missing Store setup
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SNAPCRAFT_STORE_CREDENTIALS == ''
         run: echo 'Snap built but not published. Register sun-video-editor and add the SNAPCRAFT_STORE_CREDENTIALS repository secret; see README.md.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Report Snap publication failure
+        if: failure()
+        run: |
+          echo '::warning::Snap Store publication failed. The built Snap remains available as a workflow artifact.'
+          echo 'Snap Store publication failed. See the publish-snap job logs; the built Snap remains available as a workflow artifact.' >> "$GITHUB_STEP_SUMMARY"
   macos:
     runs-on: macos-latest
     steps:
