@@ -507,3 +507,9 @@ ranges must not overlap or be empty, and the editor permits at most 64 sections.
 The time fields remain editable while invalid; export reports a validation error.
 FFmpeg trims and resets timestamps for each video/audio section before joining,
 then applies the selected export preset. Splits never modify the original file.
+
+When Export finds an existing destination, it offers **Replace and export**.
+Click again to replace that file with the current edits. This confirmation is
+cleared by settings changes or a new destination; it does not enable the persistent
+**Replace existing output** checkbox. Invalid exports no longer retain the previous
+“Export complete” status.

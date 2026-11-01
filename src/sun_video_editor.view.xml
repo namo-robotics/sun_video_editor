@@ -81,7 +81,7 @@
               </LabeledField>
               <Button text="Choose destination…" action="14" enabled="{state.job.mode == 0}" />
               <Checkbox text="Replace existing output" checked="{state.settings.overwrite}" changeAction="9" enabled="{state.job.mode == 0}" />
-              <Button text="Export" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
+              <Button text="{String(state.confirm_export ? &quot;Replace and export&quot; : &quot;Export&quot;)}" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
               <Button text="Cancel export" action="12" visible="{state.job.mode != 0}" enabled="{state.job.mode != 0}" />
               <Label text="{progress_label(state)}" foregroundResource="accent" horizontal="Start" />
               <Label text="Your original stays untouched." styleResource="muted" horizontal="Start" />

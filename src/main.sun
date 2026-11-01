@@ -53,6 +53,7 @@ module sun_video_editor {
           state.capture_save_source = String("");
           changed = true;
         } else if (state.job.mode == 0) {
+          state.confirm_export = false;
           state.settings.output = path;
           state.settings.overwrite = false;
           changed = true;

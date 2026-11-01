@@ -336,6 +336,45 @@ module sun_video_editor {
     if (exported.media.duration < 1.4 or exported.media.duration > 1.6) {
       return SystemResult.Error(Error(1, "Export did not use the dragged trim interval"));
     }
+    var revised_end = String("1.5");
+    try renderer.edit(control(session, 4, false), revised_end, 0);
+    try turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    try turn(renderer, session);
+    if (not session.state.confirm_export or session.state.job.mode != 0 or
+      session.state.job.percent == 100) {
+      return SystemResult.Error(
+        Error(1, "Existing export did not offer replacement confirmation")
+      );
+    }
+    revised_end = String("1.25");
+    try renderer.edit(control(session, 4, false), revised_end, 0);
+    try turn(renderer, session);
+    if (session.state.confirm_export) {
+      return SystemResult.Error(Error(1, "Editing retained an earlier overwrite confirmation"));
+    }
+    renderer.click(control(session, 11, false));
+    try turn(renderer, session);
+    if (not session.state.confirm_export or session.state.job.mode != 0) {
+      return SystemResult.Error(Error(1, "Edited settings bypassed replacement confirmation"));
+    }
+    renderer.click(control(session, 11, false));
+    try turn(renderer, session);
+    if (session.state.job.mode != 2 or session.state.confirm_export or
+      session.state.settings.overwrite) {
+      return SystemResult.Error(
+        Error(1, "Second Export click did not start a one-time replacement")
+      );
+    }
+    try wait_job(renderer, session);
+    try exported.probe(output);
+    try video_fixtures.finish(exported);
+    if (exported.media.duration < 0.65 or exported.media.duration > 0.85) {
+      return SystemResult.Error(Error(1, "Repeated export did not publish the revised trim"));
+    }
+    var restore_end = String("2.0");
+    try renderer.edit(control(session, 4, false), restore_end, 0);
+    try turn(renderer, session);
     try renderer.edit(control(session, 5, false), empty, 5);
     try turn(renderer, session);
     var gif = fixture.path("ui-output.gif");

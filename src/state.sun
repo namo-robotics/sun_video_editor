@@ -11,6 +11,7 @@ module sun_video_editor {
     var job: video.Job = video.Job();
     var open_requested: bool = false;
     var save_requested: bool = false;
+    var confirm_export: bool = false;
     var capture_save_requested: bool = false;
     var capture_save_source: String = String("");
     var position: i64 = 0;
@@ -31,6 +32,7 @@ module sun_video_editor {
 
   /** Selects a source and immediately starts reading its media information. */
   function open_source(state: ref State, path: const ref String) SystemResult<void> {
+    state.confirm_export = false;
     state.page = 1;
     state.settings.input = path.clone(make_heap_allocator());
     state.position = 0;
@@ -115,6 +117,9 @@ module sun_video_editor {
     queue: ref ui.EventQueue
   ) SystemResult<void> {
     var a = make_heap_allocator();
+    if (event.action != 11 and event.action != 15) {
+      state.confirm_export = false;
+    }
     if (event.action >= 100) {
       if (event.action == 116) {
         state.capture.cancel();
@@ -217,6 +222,9 @@ module sun_video_editor {
         if (not known) {
           return SystemResult.Ok;
         }
+        if (event.value.range_start != start_us(state) or event.value.range_end != end_us(state)) {
+          state.confirm_export = false;
+        }
         state.active_section = event.value.range_id;
         state.settings.start = timestamp(event.value.range_start);
         state.settings.end = timestamp(event.value.range_end);
@@ -267,7 +275,17 @@ module sun_video_editor {
       }
     } else {
       if (event.action == 11) {
+        var overwrite = state.settings.overwrite;
+        state.settings.overwrite = overwrite or state.confirm_export;
+        state.confirm_export = false;
         report(state, state.job.convert(state.settings));
+        state.settings.overwrite = overwrite;
+        if (state.job.needs_overwrite) {
+          state.confirm_export = true;
+          state.job.message = String(
+            "Destination exists. Click Replace and export to save your edits there."
+          );
+        }
       }
       if (event.action == 13) {
         state.open_requested = true;

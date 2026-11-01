@@ -14,6 +14,7 @@ module video {
     public var percent: i64 = 0;
     public var cancelled: bool = false;
     public var output_size: i64 = 0;
+    public var needs_overwrite: bool = false;
     var destination: String = String("");
     var directory: String = String("");
     var temporary: String = String("");
@@ -73,6 +74,7 @@ module video {
         return SystemResult.Error(Error(1, "Output is a directory"));
       }
       if (std.io.exists(this.destination) and not this.overwrite) {
+        this.needs_overwrite = true;
         return SystemResult.Error(
           Error(1, "Destination exists. Check Replace existing output to confirm.")
         );
@@ -85,6 +87,8 @@ module video {
       if (this.mode != 0 or not this.ready) {
         return SystemResult.Error(Error(1, "Load a video before converting"));
       }
+      this.needs_overwrite = false;
+      this.percent = 0;
       var input = try absolute(settings.input);
       if (not input.equals(this.loaded)) {
         return SystemResult.Error(Error(1, "Input changed. Load its information first."));
@@ -136,6 +140,7 @@ module video {
     public method fail(error: Error) void {
       this.process.stop();
       this.mode = 0;
+      this.percent = 0;
       this.cleanup();
       this.message = error.message().clone(make_heap_allocator());
     }
