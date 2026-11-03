@@ -246,8 +246,6 @@ manifest {
   libraries: [
     "stdlib.moon",
     "${namo-robotics/sun_ui}/lib/sun_ui.moon",
-    "${namo-robotics/sun_gobject}/lib/sun_gobject.moon",
-    "${namo-robotics/sun_gobject}/lib/sun_gtk.moon",
     "${namo-robotics/sun_ui}/lib/sun_ui_gtk.moon"
   ]
   source_files: [
