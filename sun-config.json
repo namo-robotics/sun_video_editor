@@ -1,52 +1,142 @@
 {
   "root": true,
-  "sun_path": [
-    "build"
-  ],
   "entrypoints": [
     {
       "name": "sun_video_editor",
       "path": "src/main.sun",
       "type": "binary",
-      "output_name": "build/sun_video_editor"
+      "export": true,
+      "build": [
+        "scripts/generate_view.sh",
+        "scripts/build_editor.sh"
+      ]
     },
     {
-      "name": "tests",
+      "name": "editor_tests",
       "path": "tests/main.sun",
       "type": "binary",
-      "output_name": "build/editor-tests",
-      "test_binary_name": "build/editor-tests_test"
+      "export": false,
+      "build": [
+        "scripts/generate_view.sh",
+        "scripts/build_editor.sh"
+      ]
     },
     {
-      "name": "build-tool",
+      "name": "editor_build",
       "path": "src/tools/build.sun",
       "type": "binary",
-      "output_name": "build/editor-build"
+      "export": false
     },
     {
-      "name": "package-tool",
+      "name": "editor_package_tool",
       "path": "src/tools/package.sun",
       "type": "binary",
-      "output_name": "build/editor-package-tool"
+      "export": false
     },
     {
-      "name": "capture-helper",
+      "name": "sun_video_editor_capture",
       "path": "src/tools/capture.sun",
       "type": "binary",
-      "output_name": "build/sun_video_editor.capture"
+      "export": true,
+      "enabled": {
+        "default": false,
+        "target": {
+          "x86_64-linux-gnu": true,
+          "x86_64-linux-musl": true
+        }
+      },
+      "build": [
+        "scripts/build_capture.sh"
+      ]
     },
     {
-      "name": "capture-tests",
+      "name": "capture_tests",
       "path": "tests/capture_backend.sun",
       "type": "binary",
-      "output_name": "build/capture-tests",
-      "test_binary_name": "build/capture-tests_test"
+      "export": false,
+      "enabled": {
+        "default": false,
+        "target": {
+          "x86_64-linux-gnu": true,
+          "x86_64-linux-musl": true
+        }
+      },
+      "build": [
+        "scripts/build_capture.sh"
+      ]
     },
     {
-      "name": "capture-helper-macos",
+      "name": "sun_video_editor_capture",
       "path": "src/tools/capture_macos.sun",
       "type": "binary",
-      "output_name": "build/sun_video_editor.capture"
+      "export": true,
+      "enabled": {
+        "default": false,
+        "target": {
+          "arm64-apple-darwin": true
+        }
+      },
+      "build": [
+        "scripts/build_capture_macos.sh"
+      ]
+    }
+  ],
+  "package_id": "namo-robotics/sun_video_editor",
+  "dependencies": [
+    {
+      "target": {
+        "x86_64-linux-gnu": {
+          "package": "namo-robotics/sun_ui",
+          "library": "namo-robotics/sun_ui",
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui.moon",
+          "hash": "af6e9f279b4d362e02cc1253d282b67a7e56c6596ae63004bf1b6d8a452fa021"
+        }
+      }
+    },
+    {
+      "target": {
+        "x86_64-linux-gnu": {
+          "package": "namo-robotics/sun_ui",
+          "library": "namo-robotics/sun_ui_gtk",
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui_gtk.moon",
+          "hash": "bd112b7344293f0873dfa6803a67d87c042aa5f81b13da05d38556ba883e5f7b"
+        }
+      }
+    },
+    {
+      "target": {
+        "x86_64-linux-gnu": {
+          "package": "namo-robotics/sun_ui",
+          "binary": "namo-robotics/sun_viewc",
+          "path": "build/dependencies/sun_ui/build/sun_viewc"
+        }
+      }
+    },
+    {
+      "target": {
+        "arm64-apple-darwin": {
+          "package": "namo-robotics/sun_ui",
+          "path": "build/dependencies/sun_ui/package"
+        }
+      }
+    },
+    {
+      "package": "namo-robotics/sun_gobject",
+      "path": "build/dependencies/sun_gobject/package"
+    },
+    {
+      "target": {
+        "arm64-apple-darwin": {
+          "package": "namo-robotics/sun_apple",
+          "path": "build/dependencies/sun_apple/package"
+        }
+      }
+    }
+  ],
+  "exports": [
+    {
+      "path": "packaging/icons",
+      "destination": "bin/sun_video_editor_capture.icons"
     }
   ]
 }

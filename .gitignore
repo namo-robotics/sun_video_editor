@@ -13,3 +13,5 @@ __pycache__/
 /debian/debhelper-build-stamp
 /*.snap
 .DS_Store
+/sun/
+/.sun/

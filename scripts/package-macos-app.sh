@@ -13,7 +13,7 @@ install -m 755 packaging/macos/launcher.sh "$contents/MacOS/sun-video-editor"
 install -m 644 packaging/macos/fonts.conf "$contents/Resources/fonts.conf"
 cp -R build/macos/share/sun-video-editor "$contents/Resources/licenses"
 cp -R packaging/icons "$contents/Resources/capture-icons"
-ln -s ../Resources/capture-icons "$contents/MacOS/sun_video_editor.capture.icons"
+ln -s ../Resources/capture-icons "$contents/MacOS/sun_video_editor_capture.icons"
 # Generate the complete macOS icon family from the existing application artwork.
 for size in 16 32 128 256 512; do
   sips -z "$size" "$size" packaging/sun-video-editor.png --out "build/macos-icon.iconset/icon_${size}x${size}.png" >/dev/null
@@ -26,7 +26,7 @@ seed() {
   printf '%s\t%s\n' "$1" "$2" >> build/macos-seeds.tsv
 }
 seed "$PWD/build/sun_video_editor" MacOS/sun_video_editor
-seed "$PWD/build/sun_video_editor.capture" MacOS/sun_video_editor.capture
+seed "$PWD/build/sun_video_editor_capture" MacOS/sun_video_editor_capture
 seed "$(brew --prefix ffmpeg)/bin/ffmpeg" MacOS/ffmpeg
 seed "$(brew --prefix ffmpeg)/bin/ffprobe" MacOS/ffprobe
 # The editor's publication and copy commands use GNU command-line options.

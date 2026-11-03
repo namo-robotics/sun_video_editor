@@ -32,7 +32,7 @@ module capture_tests {
   ) SystemResult<void> {
     var a = make_heap_allocator();
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture-tests-output/${stamp}`;
+    var directory = `build/capture_tests-output/${stamp}`;
     var destination = String("");
     if (true) {
       var capture = capture_backend.Capture(video, crop, window, true, 0);
@@ -210,7 +210,7 @@ module capture_tests {
     var a = make_heap_allocator();
     for (var mode = 0; mode < 2; mode += 1) {
       var stamp = desktop.filename_stamp();
-      var directory = `build/capture-tests-output/${stamp}`;
+      var directory = `build/capture_tests-output/${stamp}`;
       var width = mode == 0 ? 3840 : 1920;
       var height = mode == 0 ? 2160 : 1080;
       var reference = desktop.Output();
@@ -312,7 +312,7 @@ module capture_tests {
   /** Finalizes a recording when source failure and portal closure arrive in either order. */
   function interrupted_recording(error_first: bool) TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture-tests-output/${stamp}`;
+    var directory = `build/capture_tests-output/${stamp}`;
     var capture = capture_backend.Capture(true, false, false, true, 0);
     var source = String("videotestsrc is-live=true name=source");
     try capture.start(source, directory, true);
@@ -359,7 +359,7 @@ module capture_tests {
   /** An error downstream of the desktop source cannot publish incomplete output. */
   test_function output_error() TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture-tests-output/${stamp}`;
+    var directory = `build/capture_tests-output/${stamp}`;
     var capture = capture_backend.Capture(true, false, false, true, 0);
     var source = String("videotestsrc is-live=true name=source ! identity error-after=15");
     try capture.start(source, directory, true);
@@ -447,7 +447,7 @@ module capture_tests {
   /** Publication cannot replace an existing destination and cleanup removes the private file. */
   test_function publication_collision() TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture-tests-output/${stamp}`;
+    var directory = `build/capture_tests-output/${stamp}`;
     var output = desktop.Output();
     try output.reserve(directory);
     var destination = `${directory}/existing.png`;
@@ -474,7 +474,7 @@ function main() i32 {
 manifest {
   libraries: [
     "stdlib.moon",
-    "sun_capture.moon"
+    "${namo-robotics/sun_gobject}/lib/sun_capture.moon"
   ],
   source_files: [
     "../src/tools/capture_backend.sun",

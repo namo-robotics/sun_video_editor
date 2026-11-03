@@ -60,3 +60,26 @@ To create an installable package:
   `build/` and drag the app to Applications.
 
 See the [development guide](docs/development.md) for setup details and build options.
+
+### Configured build scripts
+
+The editor entrypoint uses `scripts/generate_view.sh` followed by
+`scripts/build_editor.sh`. Sun resolves its declared dependencies before running
+the scripts and provides the selected target and artifact paths through the build
+context. The scripts query dependency roots with `sun dependency-path` and invoke
+`sun build-compile` to preserve compiler settings. Linux and macOS capture targets
+use `scripts/build_capture.sh` and `scripts/build_capture_macos.sh`, respectively.
+
+These entrypoints can be built through the standalone `sun-config.json` or an
+including config. Included local providers take precedence over downloaded
+packages. Use a compiler that supports the `build` script array.
+
+### Dependency release URLs
+
+On Linux x86_64, `sun-config.json` downloads `sun_ui` and `sun_ui_gtk` directly
+from their published `.moon` URLs and verifies the pinned SHA-256 digests.
+Update each URL and digest together when adopting a newer rolling release.
+The dependency installer is still required for native archives, tools, and
+license notices. Those assets are published inside Debian packages or macOS
+tarballs and must be extracted before Sun can use them. macOS dependencies
+continue to use the local packages staged from those downloaded releases.

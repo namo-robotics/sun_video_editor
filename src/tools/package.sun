@@ -45,7 +45,7 @@ module editor_package {
     }
     var a = make_heap_allocator();
     var target = try build_targets.load("sun_video_editor");
-    var helper = try build_targets.load("capture-helper");
+    var helper = try build_targets.load("sun_video_editor_capture");
     var helper_exists = std.io.is_file(helper.output);
     if (not std.io.is_file(target.output) or not helper_exists) {
       return SystemResult.Error(Error(1, "Build and test the video target before packaging"));
@@ -62,13 +62,13 @@ module editor_package {
     for (var icon: ref String in icon_names) {
       try install_file(
         `packaging/icons/${icon}.svg`,
-        `${destination}/usr/bin/sun_video_editor.capture.icons/${icon}.svg`,
+        `${destination}/usr/bin/sun_video_editor_capture.icons/${icon}.svg`,
         false
       );
     }
     try install_file(
       helper.output.clone(a),
-      `${destination}/usr/bin/sun_video_editor.capture`,
+      `${destination}/usr/bin/sun_video_editor_capture`,
       true
     );
     try install_file(
@@ -138,7 +138,7 @@ module editor_package {
     dependencies.add_arg("-e");
     dependencies.add_arg(target.output);
     dependencies.add_arg("-e");
-    var helper = try build_targets.load("capture-helper");
+    var helper = try build_targets.load("sun_video_editor_capture");
     dependencies.add_arg(helper.output);
     var variables = try capture(dependencies);
     variables.append("misc:Depends=\n");

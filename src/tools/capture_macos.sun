@@ -406,9 +406,10 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   };
 }
 manifest {
+  id: "namo-robotics/sun_video_editor_capture"
   libraries: [
     "stdlib.moon",
-    "sun_apple.moon"
+    "${namo-robotics/sun_apple}/lib/sun_apple.moon"
   ]
   source_files: [
     "../process.sun",

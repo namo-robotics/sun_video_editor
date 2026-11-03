@@ -47,11 +47,70 @@ module build_targets {
     return JsonResult.Error(JsonError("Unknown build target", -1));
   }
 
+  /** Queries the compiler so tools share its target selection and resolved paths. */
+  function query(action: static_ptr<u8>, dependency: static_ptr<u8>) SystemResult<String> {
+    var a = make_heap_allocator();
+    var env = std.env.Env(a);
+    var executable = match env.get("SUN_EXECUTABLE") {
+      Option.Some(value) => value.clone(a),
+      Option.None => String("sun")
+    };
+    var command = std.process.Command(a, executable);
+    command.add_arg(action);
+    command.add_arg("--config");
+    command.add_arg("sun-config.json");
+    if (not String(dependency).is_empty()) {
+      command.add_arg("--dependency");
+      command.add_arg(dependency);
+    }
+    var output = try command.output();
+    if (output.status() != 0) {
+      eprint(output.stderr());
+      return SystemResult.Error(Error(output.status(), "Cannot resolve build configuration"));
+    }
+    return SystemResult.Ok(output.stdout().clone(a));
+  }
+
+  /** Copies one resolved string property from the compiler's JSON response. */
+  function property(document: ref Json, key: static_ptr<u8>) JsonResult<String> {
+    return JsonResult.Ok((try (try document.get(key)).as_string()).clone(make_heap_allocator()));
+  }
+
+  /** Resolves a directory property and translates malformed responses into build errors. */
+  function directory(
+    action: static_ptr<u8>,
+    key: static_ptr<u8>,
+    dependency: static_ptr<u8>
+  ) SystemResult<String> {
+    var text = try query(action, dependency);
+    var document = match parse_json(make_heap_allocator(), text) {
+      JsonResult.Ok(value) => value,
+      JsonResult.Error(error) => {
+        return SystemResult.Error(Error(1, "Invalid compiler configuration response"));
+      }
+    };
+    return match property(document, key) {
+      JsonResult.Ok(value) => SystemResult.Ok(value),
+      JsonResult.Error(error) => SystemResult.Error(
+        Error(1, "Missing compiler configuration property")
+      )
+    };
+  }
+
+  /** Returns the selected directory for this project's intermediates. */
+  public function build_directory() SystemResult<String> {
+    return directory("describe", "build_root", "");
+  }
+
+  /** Returns the selected package root for a declared dependency. */
+  public function dependency(name: static_ptr<u8>) SystemResult<String> {
+    return directory("resolve", "root", name);
+  }
+
   /** Loads one target, reporting malformed configuration or missing targets as build errors. */
   public function load(name: static_ptr<u8>) SystemResult<Target> {
     var a = make_heap_allocator();
-    var path = String("sun-config.json");
-    var text = try std.io.read_to_string(a, path);
+    var text = try query("describe", "");
     var document = match parse_json(a, text) {
       JsonResult.Ok(value) => value,
       JsonResult.Error(error) => {

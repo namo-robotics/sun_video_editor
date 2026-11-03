@@ -28,7 +28,7 @@ Ubuntu. It verifies that FFmpeg and ffprobe are version 8 or newer.
 
 The installer downloads published `sun_ui` and `sun_gobject` release assets into
 `build/dependencies/`. Linux uses Debian packages; macOS uses Apple Silicon
-archives. The `sun-ui` Debian package includes `sun-viewc`, and `sun-gobject`
+archives. The `sun-ui` Debian package includes `sun_viewc`, and `sun-gobject`
 includes the native archive. Both packages include license notices and compiler
 version records. Version differences are informational; Sun enforces bundle
 compatibility during compilation.
@@ -242,7 +242,7 @@ preserves the current editor settings and source; navigation is disabled during
 active conversion or capture.
 
 Capture settings and process ownership live in `src/capture.sun`. The compiled
-`sun_video_editor.capture` companion is implemented in `src/tools/capture.sun`
+`sun_video_editor_capture` companion is implemented in `src/tools/capture.sun`
 and `src/tools/capture_backend.sun`. Sun owns permission sequencing, selection,
 countdown, encoding policy, cancellation, and output publication. The Linux
 `sun_capture.moon` bundle from sun_gobject provides checked resource owners;
@@ -316,7 +316,7 @@ check **System Settings > Privacy & Security > Screen & System Audio Recording**
 Captures are saved under **Pictures/Sun Captures** or **Movies/Sun Captures**.
 Cancelling discards private partial output. Forced termination can leave a hidden
 `.capture-*` directory. Screen, window, and area capture need manual permission
-and multi-monitor checks on macOS; `sun_video_editor.capture --self-test` checks
+and multi-monitor checks on macOS; `sun_video_editor_capture --self-test` checks
 argument validation, publication, and session guards without capturing the desktop.
 The `sun_apple` tests check region coordinates.
 
@@ -378,7 +378,7 @@ startup and saving, stopping screen sharing, audio synchronization, and playback
 Home and capture controls use packaged SVG icons rather than font glyphs.
 Their padded canvases account for the toolkit image preview minimum size, with
 extra raster resolution for Retina displays.
-The adjacent `sun_video_editor.capture.icons` directory must travel with the executable.
+The adjacent `sun_video_editor_capture.icons` directory must travel with the executable.
 
 On Linux, `./build.sh --test` additionally runs synthetic PNG/MP4 encoder,
 countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup
@@ -497,7 +497,7 @@ export SUN_APPLE_BUILD="$PWD/../sun_apple/build"
 These exports apply to subsequent builds in the same terminal. A new terminal
 uses the downloaded bundles unless the overrides are set again. An `Unknown
 member 'start_live'` error indicates an older Apple bundle; `Unknown attribute`
-on `frameRateNum` or `frameRateDen` indicates an older `sun-viewc`. Select the
+on `frameRateNum` or `frameRateDen` indicates an older `sun_viewc`. Select the
 matching local bundles above, or install compatible published releases. The
 editor does not rebuild dependency checkouts automatically. After a failed build,
 `build/sun_video_editor` may still be the executable from an earlier successful build.

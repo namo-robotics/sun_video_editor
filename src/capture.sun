@@ -27,7 +27,7 @@ module screencast {
 
   /** Finds the companion helper beside an explicit executable path or a PATH entry. */
   public function helper_path(executable: const ref String) String {
-    var candidate = `${executable}.capture`;
+    var candidate = `${executable}_capture`;
     if (std.io.is_file(candidate)) {
       return candidate;
     }
@@ -37,7 +37,7 @@ module screencast {
       Option.Some(path) => {
         var directories = path.split(a, b':');
         for (var directory: ref String in directories) {
-          var installed = `${directory}/${executable}.capture`;
+          var installed = `${directory}/${executable}_capture`;
           if (std.io.is_file(installed)) {
             return installed;
           }
@@ -96,7 +96,7 @@ module screencast {
     public var copy_process: video.Process = video.Process();
     var copy_temporary: String = String("");
     var copy_destination: String = String("");
-    public var helper: String = String("build/sun_video_editor.capture");
+    public var helper: String = String("build/sun_video_editor_capture");
     public var delay: String = String("0");
     public var kind: i64 = 0;
     public var source: i64 = 0;

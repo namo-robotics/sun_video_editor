@@ -94,7 +94,9 @@ for dependency in "${dependencies[@]}"; do
   if [[ $dependency == sun_ui ]]; then
     test -f "$target/build/sun_ui.moon"
     test -f "$target/build/sun_ui_gtk.moon"
-    install -m 755 "$prefix/bin/sun-viewc" "$target/build/sun-viewc"
+    generator="$prefix/bin/sun_viewc"
+    if [[ ! -f "$generator" ]]; then generator="$prefix/bin/sun-viewc"; fi
+    install -m 755 "$generator" "$target/build/sun_viewc"
   elif [[ $dependency == sun_apple ]]; then
     test -f "$target/build/sun_apple.moon"
     mkdir -p "$target/build/native"
@@ -119,4 +121,11 @@ for dependency in "${dependencies[@]}"; do
   rm -rf "build/dependencies/$dependency"
   mv "$staging/$dependency" "build/dependencies/$dependency"
 done
+# Expose the downloaded artifacts through the compiler's package resolver.
+if [[ $(uname -s) == Darwin ]]; then
+  package_target=aarch64-unknown-darwin
+else
+  package_target=x86_64-unknown-linux-gnu
+fi
+python3 scripts/stage-dependencies.py "$package_target" build/dependencies/*
 echo 'Published dependency artifacts are ready.'

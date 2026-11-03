@@ -242,12 +242,13 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
   };
 }
 manifest {
+  id: "namo-robotics/sun_video_editor"
   libraries: [
     "stdlib.moon",
-    "sun_ui.moon",
-    "sun_gobject.moon",
-    "sun_gtk.moon",
-    "sun_ui_gtk.moon"
+    "${namo-robotics/sun_ui}/lib/sun_ui.moon",
+    "${namo-robotics/sun_gobject}/lib/sun_gobject.moon",
+    "${namo-robotics/sun_gobject}/lib/sun_gtk.moon",
+    "${namo-robotics/sun_ui}/lib/sun_ui_gtk.moon"
   ]
   source_files: [
     "capture.sun",
@@ -256,7 +257,7 @@ manifest {
     "job.sun",
     "state.sun",
     "view.sun",
-    "../build/generated/sun_video_editor.view.sun",
+    "$SUN_BUILD/generated/sun_video_editor.view.sun",
     "../tests/fixtures.sun",
     "../tests/acceptance.sun"
   ]
