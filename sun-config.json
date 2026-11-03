@@ -91,8 +91,7 @@
         "x86_64-linux-gnu": {
           "package": "namo-robotics/sun_ui",
           "library": "namo-robotics/sun_ui",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui.moon",
-          "hash": "de759372118d87d9f1471dcd04b96221472d24a22eb8a3e7b6766d16c9f2c094"
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui.moon"
         }
       }
     },
@@ -101,8 +100,7 @@
         "x86_64-linux-gnu": {
           "package": "namo-robotics/sun_ui",
           "library": "namo-robotics/sun_ui_gtk",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui_gtk.moon",
-          "hash": "05f3418a0c55bd2fea93d4c40636a659996747895bea30af10a7e2b98480aac0"
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui_gtk.moon"
         }
       }
     },
