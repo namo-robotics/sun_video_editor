@@ -25,8 +25,8 @@ iconutil -c icns build/macos-icon.iconset -o "$contents/Resources/SunVideoEditor
 seed() {
   printf '%s\t%s\n' "$1" "$2" >> build/macos-seeds.tsv
 }
-seed "$PWD/build/sun_video_editor" MacOS/sun_video_editor
-seed "$PWD/build/sun_video_editor_capture" MacOS/sun_video_editor_capture
+seed "$PWD/build/macos/bin/sun_video_editor" MacOS/sun_video_editor
+seed "$PWD/build/macos/bin/sun_video_editor_capture" MacOS/sun_video_editor_capture
 seed "$(brew --prefix ffmpeg)/bin/ffmpeg" MacOS/ffmpeg
 seed "$(brew --prefix ffmpeg)/bin/ffprobe" MacOS/ffprobe
 # The editor's publication and copy commands use GNU command-line options.

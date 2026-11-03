@@ -76,10 +76,13 @@ packages. Use a compiler that supports the `build` script array.
 
 ### Dependency release URLs
 
-On Linux x86_64, `sun-config.json` downloads `sun_ui` and `sun_ui_gtk` directly
-from their published `.moon` URLs and verifies the pinned SHA-256 digests.
-Update each URL and digest together when adopting a newer rolling release.
-The dependency installer is still required for native archives, tools, and
-license notices. Those assets are published inside Debian packages or macOS
-tarballs and must be extracted before Sun can use them. macOS dependencies
-continue to use the local packages staged from those downloaded releases.
+`sun-config.json` selects published `.sun.tar.gz` package URLs for Linux x86_64
+and Apple Silicon macOS. Sun resolves and validates the packages, including
+`sun_viewc`, the moons, and any separate native libraries. The moons carry the
+native archives needed by the editor and capture helper.
+
+`./scripts/install-dependencies.sh` installs system tools, resolves the configured
+URLs, and retains license notices for packaging. The build uses the same resolver
+and defaults to `build/dependencies/cache`; `SUN_DEPENDENCY_CACHE` can select a
+different cache. Dependency URLs have no pinned hashes and are refreshed when
+resolved. Change release URLs in the config to select another release.

@@ -6,8 +6,11 @@ cd "$(dirname "$0")/.."
 export PATH="$(brew --prefix coreutils)/libexec/gnubin:$PATH"
 ./build.sh
 mkdir -p build/macos/bin build/macos/share/sun-video-editor
-install -m 755 build/sun_video_editor build/macos/bin/sun_video_editor
-install -m 755 build/sun_video_editor_capture build/macos/bin/sun_video_editor_capture
+"${SUN_EXECUTABLE:-sun}" describe --config sun-config.json > build/macos-targets.json
+for product in sun_video_editor sun_video_editor_capture; do
+  artifact=$(python3 -c 'import json,sys; print(next(entry["output_name"] for entry in json.load(sys.stdin)["entrypoints"] if entry["name"] == sys.argv[1]))' "$product" < build/macos-targets.json)
+  install -m 755 "$artifact" "build/macos/bin/$product"
+done
 mkdir -p build/macos/bin/sun_video_editor_capture.icons
 cp -R packaging/icons/. build/macos/bin/sun_video_editor_capture.icons/
 install -m 644 LICENSE build/sun-version.txt packaging/sun-video-editor.png build/macos/share/sun-video-editor/

@@ -12,9 +12,9 @@ A file for guiding coding agents.
 - Keep application source and XML in `src/`, tests in `tests/`, and desktop assets in `packaging/`.
 - Format only first-party paths: `sun fmt src/main.sun src/state.sun src/view.sun src/media.sun src/process.sun src/job.sun src/tools tests`.
 - Format only first-party sources; never modify downloaded dependency artifacts.
-- `deps.repos` imports no repositories. Released bundles, tools, native libraries, and license notices are stored in `build/dependencies/`.
+- `deps.repos` imports no repositories. Published Sun packages are cached in `build/dependencies/cache` by default; packaging license notices are stored in `build/dependencies/`.
 - Native GTK ownership and callbacks belong in sun_gobject; UI components use sun_ui's public API and keep application state explicitly owned.
-- Default dependencies come from `build/dependencies/`. Explicit `SUN_UI_BUILD` and `SUN_GOBJECT_BUILD` overrides select other compatible bundles; packaging also accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for license notices.
+- Default dependencies use target-specific package URLs in `sun-config.json`. Local development can select compatible validated package paths in that config; packaging also accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for license notices.
 - Keep FFmpeg and ffprobe at version 8 or newer. Run media and GTK acceptance tests for changes to exports, trimming, or preview behavior.
 - The repository and executable are named `sun_video_editor`; Debian and Snap package identifiers are `sun-video-editor` because those formats do not permit underscores.
 
