@@ -31,7 +31,10 @@
       "name": "editor_package_tool",
       "path": "src/tools/package.sun",
       "type": "binary",
-      "export": false
+      "export": false,
+      "build": [
+        "scripts/build_tool.sh"
+      ]
     },
     {
       "name": "sun_video_editor_capture",
