@@ -1,131 +1,38 @@
 #!/usr/bin/env bash
-# Fetch published dependency packages and normalize their installed files for editor builds.
+# Resolve published Sun packages and retain license notices for application packaging.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-asset_directory=
-only_dependency=
-# Parse optional source and package selection before changing installed dependencies.
-while (($#)); do
-  case "$1" in
-    --from-directory)
-      [[ $# -ge 2 ]] || { echo 'Missing directory after --from-directory' >&2; exit 1; }
-      asset_directory=$(realpath "$2")
-      shift 2 ;;
-    --only)
-      [[ $# -ge 2 ]] || { echo 'Missing dependency after --only' >&2; exit 1; }
-      case "$2" in
-        sun_ui|sun_gobject|sun_apple) only_dependency=$2 ;;
-        *) echo 'Expected sun_ui, sun_gobject, or sun_apple after --only' >&2; exit 1 ;;
-      esac
-      shift 2 ;;
-    *) echo 'Usage: install-dependencies.sh [--from-directory DIRECTORY] [--only DEPENDENCY]' >&2; exit 1 ;;
-  esac
-done
-mkdir -p tmp build/dependencies
-staging=$(mktemp -d "$PWD/tmp/releases.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
 case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) platform=linux ;;
-  Darwin-arm64) platform=macos ;;
+  Linux-x86_64) dependencies=(sun_ui sun_gobject) ;;
+  Darwin-arm64) dependencies=(sun_ui sun_gobject sun_apple) ;;
   *) echo 'Release dependencies support Linux x86_64 and macOS arm64.' >&2; exit 1 ;;
 esac
-
-if [[ $only_dependency == sun_apple && $platform != macos ]]; then
-  echo 'sun_apple is only available for macOS.' >&2
-  exit 1
+if (($#)); then
+  if [[ $# != 2 || $1 != --only ]]; then
+    echo 'Usage: install-dependencies.sh [--only sun_ui|sun_gobject|sun_apple]' >&2
+    exit 1
+  fi
+  case " ${dependencies[*]} " in
+    *" $2 "*) dependencies=("$2") ;;
+    *) echo "Unsupported dependency for this host: $2" >&2; exit 1 ;;
+  esac
 fi
 ./scripts/install-system-dependencies.sh
 ./scripts/bootstrap-sun.sh
-compiler_version=$("${SUN_EXECUTABLE:-sun}" --version 2>&1)
-
-# Stage all platform dependencies before replacing installed artifacts.
-dependencies=(sun_ui sun_gobject)
-if [[ $platform == macos ]]; then dependencies+=(sun_apple); fi
-if [[ -n $only_dependency ]]; then dependencies=("$only_dependency"); fi
+compiler=${SUN_EXECUTABLE:-sun}
+export SUN_DEPENDENCY_CACHE="${SUN_DEPENDENCY_CACHE:-$PWD/build/dependencies/cache}"
 for dependency in "${dependencies[@]}"; do
-  package=${dependency//_/-}
-  if [[ $dependency == sun_ui ]]; then
-    release=${SUN_UI_RELEASE:-dev}
-  elif [[ $dependency == sun_apple ]]; then
-    release=${SUN_APPLE_RELEASE:-dev}
+  resolved=$("$compiler" resolve --config sun-config.json --dependency "namo-robotics/$dependency")
+  root=$(printf '%s\n' "$resolved" | python3 -c 'import json,sys; print(json.load(sys.stdin)["root"])')
+  mkdir -p "build/dependencies/$dependency"
+  license="$root/share/$dependency/LICENSE"
+  if [[ -f "$license" ]]; then
+    install -m 644 "$license" "build/dependencies/$dependency/LICENSE"
   else
-    release=${SUN_GOBJECT_RELEASE:-dev}
-  fi
-  if [[ $platform == linux ]]; then
-    asset="${package}_0.dev_amd64.deb"
-  else
-    asset="${dependency}-arm64-apple-darwin.tar.gz"
-  fi
-  archive="$staging/$asset"
-  if [[ -n $asset_directory ]]; then
-    cp "$asset_directory/$asset" "$archive"
-  else
-    url="https://github.com/namo-robotics/$dependency/releases/download/$release/$asset"
-    if ! curl --fail --location --retry 3 "$url" --output "$archive"; then
-      echo "Missing published dependency: $url. No source-build fallback is used." >&2
-      exit 1
-    fi
-  fi
-  unpack="$staging/unpack-$dependency"
-  mkdir -p "$unpack"
-  if [[ $platform == linux ]]; then
-    dpkg-deb --extract "$archive" "$unpack"
-    prefix="$unpack/usr"
-    notices="$prefix/share/doc/$package"
-    license=copyright
-  else
-    tar -xzf "$archive" -C "$unpack"
-    prefix=$unpack
-    notices="$prefix/share/$dependency"
-    license=LICENSE
-  fi
-  if [[ $(cat "$notices/sun-version.txt") != "$compiler_version" ]]; then
-    # Producer versions are provenance; Sun checks bundle compatibility when building.
-    echo "$dependency was built with a different compiler; Sun will check bundle compatibility during the build:" >&2
-    cat "$notices/sun-version.txt" >&2
-    printf '\nInstalled compiler: %s\n' "$compiler_version" >&2
-  fi
-  target="$staging/$dependency"
-  mkdir -p "$target/build"
-  cp "$prefix/lib/sun/"*.moon "$target/build/"
-  cp "$notices/$license" "$target/LICENSE"
-  cp "$notices/sun-version.txt" "$target/build/sun-version.txt"
-  printf '%s\n' "$release/$asset" > "$target/release.txt"
-  if [[ $dependency == sun_ui ]]; then
-    test -f "$target/build/sun_ui.moon"
-    test -f "$target/build/sun_ui_gtk.moon"
-    generator="$prefix/bin/sun_viewc"
-    if [[ ! -f "$generator" ]]; then generator="$prefix/bin/sun-viewc"; fi
-    install -m 755 "$generator" "$target/build/sun_viewc"
-  elif [[ $dependency == sun_apple ]]; then
-    test -f "$target/build/sun_apple.moon"
-    mkdir -p "$target/build/native"
-    cp "$prefix/lib/libsun_apple_native.a" "$prefix/lib/libsun_apple_native.dylib" "$target/build/native/"
-  else
-    test -f "$target/build/sun_gobject.moon"
-    test -f "$target/build/sun_gtk.moon"
-    mkdir -p "$target/build/native"
-    native="$prefix/lib/sun/native/libsun_gobject_native.a"
-    if [[ $platform == macos ]]; then native="$prefix/lib/libsun_gobject_native.a"; fi
-    cp "$native" "$target/build/native/"
-    if [[ $platform == linux ]]; then
-      if [[ ! -f "$target/build/sun_capture.moon" || ! -f "$prefix/lib/sun/native/libsun_capture_native.a" ]]; then
-        echo 'The sun_gobject release lacks native capture support. Select a release containing sun_capture.moon and libsun_capture_native.a.' >&2
-        exit 1
-      fi
-      cp "$prefix/lib/sun/native/libsun_capture_native.a" "$target/build/native/"
-    fi
+    # Older sun_gobject packages omit their license; retain the release's notice.
+    curl --fail --location --retry 3 \
+      "https://raw.githubusercontent.com/namo-robotics/$dependency/dev/LICENSE" \
+      --output "build/dependencies/$dependency/LICENSE"
   fi
 done
-for dependency in "${dependencies[@]}"; do
-  rm -rf "build/dependencies/$dependency"
-  mv "$staging/$dependency" "build/dependencies/$dependency"
-done
-# Expose the downloaded artifacts through the compiler's package resolver.
-if [[ $(uname -s) == Darwin ]]; then
-  package_target=aarch64-unknown-darwin
-else
-  package_target=x86_64-unknown-linux-gnu
-fi
-python3 scripts/stage-dependencies.py "$package_target" build/dependencies/*
-echo 'Published dependency artifacts are ready.'
+echo 'Published Sun packages are resolved and license notices are ready.'

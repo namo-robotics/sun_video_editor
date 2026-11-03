@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 ./scripts/bootstrap-sun.sh
+export SUN_DEPENDENCY_CACHE="${SUN_DEPENDENCY_CACHE:-$PWD/build/dependencies/cache}"
 if [[ $(uname -s) == Darwin ]] && command -v brew >/dev/null; then
   export PKG_CONFIG_PATH="$(brew --prefix sun-gtk4)/lib/pkgconfig:$(brew --prefix libffi)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 fi

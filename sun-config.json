@@ -90,46 +90,31 @@
       "target": {
         "x86_64-linux-gnu": {
           "package": "namo-robotics/sun_ui",
-          "library": "namo-robotics/sun_ui",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui.moon"
-        }
-      }
-    },
-    {
-      "target": {
-        "x86_64-linux-gnu": {
-          "package": "namo-robotics/sun_ui",
-          "library": "namo-robotics/sun_ui_gtk",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui_gtk.moon"
-        }
-      }
-    },
-    {
-      "target": {
-        "x86_64-linux-gnu": {
-          "package": "namo-robotics/sun_ui",
-          "binary": "namo-robotics/sun_viewc",
-          "path": "build/dependencies/sun_ui/build/sun_viewc"
-        }
-      }
-    },
-    {
-      "target": {
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui-x86_64-linux-gnu.sun.tar.gz"
+        },
         "arm64-apple-darwin": {
           "package": "namo-robotics/sun_ui",
-          "path": "build/dependencies/sun_ui/package"
+          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui-arm64-apple-darwin.sun.tar.gz"
         }
       }
     },
     {
-      "package": "namo-robotics/sun_gobject",
-      "path": "build/dependencies/sun_gobject/package"
+      "target": {
+        "x86_64-linux-gnu": {
+          "package": "namo-robotics/sun_gobject",
+          "url": "https://github.com/namo-robotics/sun_gobject/releases/download/dev/sun_gobject-x86_64-linux-gnu.sun.tar.gz"
+        },
+        "arm64-apple-darwin": {
+          "package": "namo-robotics/sun_gobject",
+          "url": "https://github.com/namo-robotics/sun_gobject/releases/download/dev/sun_gobject-arm64-apple-darwin.sun.tar.gz"
+        }
+      }
     },
     {
       "target": {
         "arm64-apple-darwin": {
           "package": "namo-robotics/sun_apple",
-          "path": "build/dependencies/sun_apple/package"
+          "url": "https://github.com/namo-robotics/sun_apple/releases/download/dev/sun_apple-arm64-apple-darwin.sun.tar.gz"
         }
       }
     }
