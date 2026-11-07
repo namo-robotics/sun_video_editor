@@ -17,7 +17,7 @@ class SunVideoEditor < Formula
 
   # Keep GNU utility behavior consistent with the tested Linux media workflow.
   def install
-    libexec.install "bin/sun_video_editor", "bin/sun_video_editor.capture", "bin/sun_video_editor.capture.icons"
+    libexec.install "bin/sun_video_editor", "bin/sun_video_editor_capture", "bin/sun_video_editor_capture.icons"
     (share/"sun-video-editor").install Dir["share/sun-video-editor/*"]
     (bin/"sun_video_editor").write_env_script libexec/"sun_video_editor",
       PATH: "#{Formula["coreutils"].opt_libexec}/gnubin:#{HOMEBREW_PREFIX}/bin:$PATH"
@@ -26,5 +26,7 @@ class SunVideoEditor < Formula
   # Check actual media capabilities without needing a window server in brew test.
   test do
     assert_match "FFmpeg 8+ ready", shell_output("#{bin}/sun_video_editor --check-dependencies")
+    system libexec/"sun_video_editor_capture", "--self-test"
+    assert_predicate libexec/"sun_video_editor_capture.icons", :directory?
   end
 end
