@@ -6,6 +6,12 @@
       "path": "src/main.sun",
       "type": "binary",
       "export": true,
+      "resources": [
+        {
+          "path": "packaging/icons",
+          "destination": "sun_video_editor_capture.icons"
+        }
+      ],
       "build": [
         "scripts/generate_view.sh",
         "scripts/build_editor.sh"
@@ -89,40 +95,76 @@
     {
       "target": {
         "x86_64-linux-gnu": {
-          "package": "namo-robotics/sun_ui",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui-x86_64-linux-gnu.sun.tar.gz"
+          "git": "git@github.com:namo-robotics/sun_ui.git",
+          "version": "main",
+          "packages": {
+            "namo-robotics/sun_ui": {
+              "entrypoints": [
+                "sun_ui",
+                "sun_ui_gtk",
+                "sun_viewc"
+              ]
+            }
+          }
         },
         "arm64-apple-darwin": {
-          "package": "namo-robotics/sun_ui",
-          "url": "https://github.com/namo-robotics/sun_ui/releases/download/dev/sun_ui-arm64-apple-darwin.sun.tar.gz"
+          "git": "git@github.com:namo-robotics/sun_ui.git",
+          "version": "main",
+          "packages": {
+            "namo-robotics/sun_ui": {
+              "entrypoints": [
+                "sun_ui",
+                "sun_ui_gtk",
+                "sun_viewc"
+              ]
+            }
+          }
         }
       }
     },
     {
       "target": {
         "x86_64-linux-gnu": {
-          "package": "namo-robotics/sun_gobject",
-          "url": "https://github.com/namo-robotics/sun_gobject/releases/download/dev/sun_gobject-x86_64-linux-gnu.sun.tar.gz"
+          "git": "git@github.com:namo-robotics/sun_gobject.git",
+          "version": "main",
+          "packages": {
+            "namo-robotics/sun_gobject": {
+              "entrypoints": [
+                "sun_gobject",
+                "sun_gtk",
+                "sun_capture"
+              ]
+            }
+          }
         },
         "arm64-apple-darwin": {
-          "package": "namo-robotics/sun_gobject",
-          "url": "https://github.com/namo-robotics/sun_gobject/releases/download/dev/sun_gobject-arm64-apple-darwin.sun.tar.gz"
+          "git": "git@github.com:namo-robotics/sun_gobject.git",
+          "version": "main",
+          "packages": {
+            "namo-robotics/sun_gobject": {
+              "entrypoints": [
+                "sun_gobject",
+                "sun_gtk"
+              ]
+            }
+          }
         }
       }
     },
     {
       "target": {
         "arm64-apple-darwin": {
-          "package": "namo-robotics/sun_apple",
-          "url": "https://github.com/namo-robotics/sun_apple/releases/download/dev/sun_apple-arm64-apple-darwin.sun.tar.gz"
+          "git": "git@github.com:namo-robotics/sun_apple.git",
+          "version": "main",
+          "packages": {
+            "namo-robotics/sun_apple": {
+              "entrypoints": [
+                "sun_apple"
+              ]
+            }
+          }
         }
       }
-    }
-  ],
-  "exports": [
-    {
-      "path": "packaging/icons",
-      "destination": "bin/sun_video_editor_capture.icons"
     }
   ]
 }

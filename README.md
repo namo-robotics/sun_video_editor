@@ -52,6 +52,15 @@ From the repository root, install dependencies, build, test, and run:
 ./build/sun_video_editor
 ```
 
+On Apple Silicon macOS, build just the editor and capture helper with:
+
+```sh
+./build_macos.sh
+```
+
+Run dependency setup first on a fresh checkout. This wrapper selects
+`arm64-apple-darwin` and the editor package. Use `./build.sh --test` for tests.
+
 To create an installable package:
 
 - **Ubuntu:** run `./build.sh --package`, then install on your desktop with
@@ -72,17 +81,22 @@ use `scripts/build_capture.sh` and `scripts/build_capture_macos.sh`, respectivel
 
 These entrypoints can be built through the standalone `sun-config.json` or an
 including config. Included local providers take precedence over downloaded
-packages. Use a compiler that supports the `build` script array.
+packages. Use a compiler that supports the `build` script array and
+entrypoint-relative resources. The editor build script also copies icons beside
+the executable so direct build outputs are runnable.
 
-### Dependency release URLs
+### Source dependencies
 
-`sun-config.json` selects published `.sun.tar.gz` package URLs for Linux x86_64
-and Apple Silicon macOS. Sun resolves and validates the packages, including
-`sun_viewc`, the moons, and any separate native libraries. The moons carry the
-native archives needed by the editor and capture helper.
+Following system setup, `./scripts/install-dependencies.sh` asks Sun to resolve
+the Git dependencies in `sun-config.json` and copies their license notices for
+packaging. Sun builds the selected entrypoints and their prerequisites, including
+GTK binding generation, in its Git cache. No manual binding generation is needed.
 
-`./scripts/install-dependencies.sh` installs system tools, resolves the configured
-URLs, and retains license notices for packaging. The build uses the same resolver
-and defaults to `build/dependencies/cache`; `SUN_DEPENDENCY_CACHE` can select a
-different cache. Dependency URLs have no pinned hashes and are refreshed when
-resolved. Change release URLs in the config to select another release.
+Each repository declares a `packages` dictionary mapping package IDs to
+`entrypoints`. Use a compiler supporting this format. Repositories use SSH and
+`main`; public CI setup uses HTTPS. Run `sun build --refresh-sources` to refresh
+cached revisions explicitly.
+
+`deps.repos` and `./scripts/import.sh` remain available for optional source
+development. Imported checkouts do not override cached Git dependencies by
+themselves; include them as `projects` in a workspace config to use local providers.

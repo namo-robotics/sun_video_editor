@@ -1,2 +1,19 @@
-# Dependencies are installed from published releases by scripts/install-dependencies.sh.
-repositories: {}
+{
+  "repositories": {
+    "src/sun_gobject": {
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_gobject.git",
+      "version": "main"
+    },
+    "src/sun_ui": {
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_ui.git",
+      "version": "main"
+    },
+    "src/sun_apple": {
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_apple.git",
+      "version": "main"
+    }
+  }
+}

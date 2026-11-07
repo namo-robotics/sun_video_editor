@@ -29,6 +29,8 @@ module editor_build {
     command.add_arg("build");
     command.add_arg("--config");
     command.add_arg("sun-config.json");
+    command.add_arg("--package");
+    command.add_arg("namo-robotics/sun_video_editor");
     command.add_arg("--entrypoint");
     command.add_arg(name);
     return run(command);
@@ -60,16 +62,6 @@ module editor_build {
     mkdir.add_arg("build");
     mkdir.add_arg("tmp");
     try run(mkdir);
-    var build_root = try build_targets.build_directory();
-    var icons = std.process.Command(a, "mkdir");
-    icons.add_arg("-p");
-    icons.add_arg(`${build_root}/sun_video_editor_capture.icons`);
-    try run(icons);
-    var copy_icons = std.process.Command(a, "cp");
-    copy_icons.add_arg("-R");
-    copy_icons.add_arg("packaging/icons/.");
-    copy_icons.add_arg(`${build_root}/sun_video_editor_capture.icons/`);
-    try run(copy_icons);
     var version = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
     version.add_arg("--version");
     var version_output = try version.output();

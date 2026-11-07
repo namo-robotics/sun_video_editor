@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)
     command -v apt-get >/dev/null || { echo 'System setup requires Ubuntu 26.04 with apt-get.' >&2; exit 1; }
-    packages=(ca-certificates curl build-essential pkg-config libgtk-4-dev librsvg2-dev
+    packages=(ca-certificates curl git openssh-client python3 cmake ninja-build gobject-introspection libgirepository1.0-dev build-essential pkg-config libgtk-4-dev librsvg2-dev
       fonts-dejavu-core fonts-noto-core ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-pipewire libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libx11-dev libxext-dev
       xvfb xauth dbus-x11 dpkg-dev)
     missing=()
@@ -28,7 +28,7 @@ case "$(uname -s)-$(uname -m)" in
     ;;
   Darwin-arm64)
     command -v brew >/dev/null || { echo 'Install Homebrew, then rerun scripts/install-dependencies.sh.' >&2; exit 1; }
-    for formula in namo-robotics/sun/sun-gtk4 librsvg gstreamer ffmpeg coreutils pkgconf; do
+    for formula in namo-robotics/sun/sun-gtk4 librsvg gstreamer ffmpeg coreutils pkgconf cmake ninja python gobject-introspection; do
       if ! brew list --versions "$formula" >/dev/null 2>&1; then
         brew install "$formula"
       fi

@@ -26,16 +26,25 @@ sudo when needed) on Ubuntu, or Homebrew on macOS. This includes GTK development
 libraries, media dependencies, and test tools, plus Debian packaging tools on
 Ubuntu. It verifies that FFmpeg and ffprobe are version 8 or newer.
 
-The installer resolves the target-specific Sun package URLs in `sun-config.json`.
-The packages provide the toolkit moons, native archives, and `sun_viewc` tool;
-macOS also resolves `sun_apple`. Sun downloads and validates the packages in
-`build/dependencies/cache` by default. Set `SUN_DEPENDENCY_CACHE` to use another
-cache. License notices for application packaging remain in `build/dependencies/`.
-No dependency sources are imported or built; `deps.repos` is empty.
+The installer resolves the Git dependencies declared in `sun-config.json`:
+`sun_ui`, `sun_gobject`, and, on macOS, `sun_apple`. Sun builds the selected
+entrypoints and their prerequisites in its Git cache. The configured GTK build
+generates bindings from installed GIR metadata automatically. License notices
+are copied from the resolved packages into `build/dependencies/`.
 
-Change the URLs in `sun-config.json` to select another release. Missing assets
-stop setup. For offline development, configure local validated Sun package paths
-and install the system dependencies and compiler beforehand.
+The compiler remains a published installation. `SUN_EXECUTABLE` selects a custom
+compiler supporting Git `packages` selections; use its matching stdlib.
+Git URLs use SSH and `main`; public CI setup uses HTTPS. Run
+`sun build --refresh-sources` to refresh cached dependency revisions explicitly.
+After setup, cached sources support offline builds.
+
+`./scripts/import.sh` optionally imports development checkouts from `deps.repos`.
+It preserves existing working trees. These checkouts are separate from Sun's Git
+cache and are not required for normal builds.
+
+On Apple Silicon macOS, `./build_macos.sh` builds the editor package for
+`arm64-apple-darwin`, including its source dependencies and capture helper.
+Run dependency setup first; this wrapper does not run the test suites.
 
 For incremental work:
 
@@ -48,11 +57,10 @@ On Linux, the GTK acceptance test runs under Xvfb with a private D-Bus session
 and portal access disabled. This keeps the headless test independent of desktop
 portal services and their document mounts, while GTK warnings remain fatal.
 
-For local toolkit development, point the dependencies in `sun-config.json` at
-compatible validated Sun package directories. Capture previews require packages
-containing the `Image` widget and the `Video` widget’s `trimControls` option.
-Packaging additionally accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for the
-corresponding license files.
+For local toolkit development, include the editor and dependency checkouts as
+`projects` in a workspace config, then build the editor package through that config.
+Read each dependency's development instructions before editing it. Packaging also
+accepts `SUN_UI_SOURCE` and `SUN_GOBJECT_SOURCE` for license notices.
 
 FFmpeg and ffprobe **8 or newer** are required. Startup checks their released
 version numbers, H.264/AAC encoders, and the scale filter's `reset_sar` support.
@@ -239,9 +247,8 @@ countdown, encoding policy, cancellation, and output publication. The Linux
 `libsun_capture_native.a` handles D-Bus callbacks, descriptor transfer, GStreamer
 streaming callbacks, and X11 input. Python and Tk are not required for capture.
 
-Linux builds require a sun_gobject package containing the capture moon with its
-embedded native archive. For local validation, configure a compatible local Sun
-package path. The editor does not build dependency sources automatically.
+Linux builds compile the capture moon and its native archive from the configured
+sun_gobject Git dependency.
 Ordinary sun_ui clients do not link the capture archive.
 
 On Linux, screenshots and recordings use the ScreenCast portal. The permission dialog selects
@@ -342,9 +349,7 @@ cancellation during recording discards its output. Closing during finalization
 retains it. Successful publication removes owned temporary files.
 
 Live capture requires the updated `sun_apple` and `sun_capture` bundles and native
-archives. When developing these bindings, build each in its own repository and
-select its validated package directory in `sun-config.json`. Published dependencies remain the default; the editor
-does not build dependency source checkouts automatically. Linux additionally
+archives. The editor builds these from the configured Git dependencies. Linux additionally
 requires `gstreamer1.0-plugins-ugly` for x264, alongside the existing libav plugins
 for AAC. macOS embeds camera and microphone purpose strings in the helper.
 
@@ -367,6 +372,10 @@ Home and capture controls use packaged SVG icons rather than font glyphs.
 Their padded canvases account for the toolkit image preview minimum size, with
 extra raster resolution for Retina displays.
 The adjacent `sun_video_editor_capture.icons` directory must travel with the executable.
+The editor build script copies the icons beside the direct build output.
+The entrypoint's `resources` in `sun-config.json` also declare them for installation
+and packaging. This keeps direct launches working with compiler versions that
+do not copy declared resources into the build directory.
 
 On Linux, `./build.sh --test` additionally runs synthetic PNG/MP4 encoder,
 countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup
@@ -453,28 +462,24 @@ The hosted macOS display cannot fit the resize acceptance test's large window,
 so that assertion remains covered by Linux CI. macOS CI runs the media tests,
 preview, trim, export, cancellation, and Homebrew installation checks.
 
-For local Apple binding development, build `sun_apple` separately and configure
-its validated Sun package directory in `sun-config.json`.
+For local Apple binding development, include `src/sun_apple` as a project in
+your workspace config and build the editor package through that config.
 The helper's application logic is in `src/tools/capture_macos.sun`; reusable
 native delegate and overlay interop lives in `sun_apple`. Its `--self-test` does
 not request screen access.
 
-To resolve only the Apple bindings, run
-`./scripts/install-dependencies.sh --only sun_apple`. The build uses the published
-package URL by default.
+To build only the Apple dependency during setup, run
+`./scripts/install-dependencies.sh --only sun_apple`. Only that dependency and its prerequisites are resolved.
 
 ### Toolkit requirements for section and frame editing
 
 Multi-section timelines, frame stepping, and icon tooltips require the matching
 `sun_ui` and `sun_gobject` changes. Live macOS capture also requires a compatible
-`sun_apple` bundle. Publish those bundles before an editor CI release uses the
-new APIs. For local work, configure compatible validated package directories in
-`sun-config.json`.
+`sun_apple` revision. Refresh Git dependencies explicitly before using new APIs.
 
 An `Unknown member 'start_live'` error indicates an older Apple bundle; `Unknown
 attribute` on `frameRateNum` or `frameRateDen` indicates an older `sun_viewc`.
-Select matching local packages or compatible published package URLs. The
-editor does not rebuild dependency checkouts automatically. After a failed build,
+Run `sun build --refresh-sources` to update cached sources and rebuild. After a failed build,
 `build/sun_video_editor` may still be the executable from an earlier successful build.
 
 Kept sections retain source timestamps and are exported chronologically. Their
