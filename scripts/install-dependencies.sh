@@ -31,8 +31,14 @@ if [[ $(uname -s) == Darwin ]] && command -v brew >/dev/null; then
 fi
 export SUN_DEPENDENCY_CACHE="${SUN_DEPENDENCY_CACHE:-$PWD/build/dependencies/cache}"
 for dependency in "${dependencies[@]}"; do
+  # Resolve prints build progress before its final JSON record. Keep that output
+  # visible in CI while passing only the result to the JSON parser.
   root=$("$compiler" resolve --config sun-config.json --dependency "namo-robotics/$dependency" |
-    python3 -c 'import json, sys; print(json.load(sys.stdin)["root"])')
+    python3 -c 'import json, sys
+lines = sys.stdin.read().splitlines()
+for line in lines:
+    print(line, file=sys.stderr)
+print(json.loads(lines[-1] if lines else "")["root"])')
   mkdir -p "build/dependencies/$dependency"
   install -m 644 "$root/share/$dependency/LICENSE" "build/dependencies/$dependency/LICENSE"
 done
