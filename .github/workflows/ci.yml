@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build development image
-        run: docker build -t sun-video-editor-dev .
+        run: docker build --pull -t sun-video-editor-dev .
       - name: Build source dependencies, test, and package
         # The runner UID has no writable home in the image; keep Sun and GTK caches in the workspace.
         run: >-
