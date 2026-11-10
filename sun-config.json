@@ -93,40 +93,44 @@
   "package_id": "namo-robotics/sun_video_editor",
   "dependencies": [
     {
+      "type": "system",
+      "check": {
+        "type": "pkg-config",
+        "name": "librsvg-2.0"
+      },
       "target": {
-        "x86_64-linux-gnu": {
-          "git": "git@github.com:namo-robotics/sun_ui.git",
-          "version": "main",
-          "packages": {
-            "namo-robotics/sun_ui": {
-              "entrypoints": [
-                "sun_ui",
-                "sun_ui_gtk",
-                "sun_viewc"
-              ]
-            }
-          }
+        "linux": {
+          "apt": ["librsvg2-dev"]
         },
-        "arm64-apple-darwin": {
-          "git": "git@github.com:namo-robotics/sun_ui.git",
-          "version": "main",
-          "packages": {
-            "namo-robotics/sun_ui": {
-              "entrypoints": [
-                "sun_ui",
-                "sun_ui_gtk",
-                "sun_viewc"
-              ]
-            }
-          }
+        "macos": {
+          "brew": ["librsvg"]
         }
       }
     },
     {
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_ui.git",
+      "version": "main",
+      "packages": {
+        "namo-robotics/sun_ui": {
+          "entrypoints": [
+            "sun_ui",
+            "sun_ui_gtk",
+            "sun_viewc"
+          ]
+        }
+      },
+      "supported_targets": [
+        "x86_64-linux-gnu",
+        "arm64-apple-darwin"
+      ]
+    },
+    {
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_gobject.git",
+      "version": "main",
       "target": {
         "x86_64-linux-gnu": {
-          "git": "git@github.com:namo-robotics/sun_gobject.git",
-          "version": "main",
           "packages": {
             "namo-robotics/sun_gobject": {
               "entrypoints": [
@@ -138,8 +142,6 @@
           }
         },
         "arm64-apple-darwin": {
-          "git": "git@github.com:namo-robotics/sun_gobject.git",
-          "version": "main",
           "packages": {
             "namo-robotics/sun_gobject": {
               "entrypoints": [
@@ -152,19 +154,19 @@
       }
     },
     {
-      "target": {
-        "arm64-apple-darwin": {
-          "git": "git@github.com:namo-robotics/sun_apple.git",
-          "version": "main",
-          "packages": {
-            "namo-robotics/sun_apple": {
-              "entrypoints": [
-                "sun_apple"
-              ]
-            }
-          }
+      "type": "git",
+      "url": "git@github.com:namo-robotics/sun_apple.git",
+      "version": "main",
+      "packages": {
+        "namo-robotics/sun_apple": {
+          "entrypoints": [
+            "sun_apple"
+          ]
         }
-      }
+      },
+      "supported_targets": [
+        "arm64-apple-darwin"
+      ]
     }
   ]
 }
