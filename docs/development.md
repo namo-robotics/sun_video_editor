@@ -13,6 +13,13 @@ headless test tools. The container mounts the same Codex, Claude, SSH, GitHub CL
 and VS Code user configuration as sun_ui, with a separate editor ccache volume.
 Agent instructions are provided in both `AGENTS.md` and `CLAUDE.md`.
 
+The base image is published by `sun_infra` as
+`ghcr.io/namo-robotics/sun-dev:ubuntu26.04-llvm20`. CI authenticates to GHCR
+with its `GITHUB_TOKEN`. If the image is private, a package administrator must
+grant `sun_video_editor` Read access under the package's **Settings → Manage
+Actions access**. Local Docker builds also require a GHCR login with package
+read access.
+
 Run from this repository's root:
 
 ```sh
