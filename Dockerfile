@@ -14,6 +14,12 @@ RUN update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100 \
     && echo 'ubuntu ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
 COPY scripts/bootstrap-sun.sh /usr/local/bin/install-sun-dev
 RUN bash /usr/local/bin/install-sun-dev --update
+# Install transitive system requirements before builds run as an unprivileged user.
+COPY sun-config.json /tmp/sun-dependencies/sun-config.json
+RUN cd /tmp/sun-dependencies && apt-get update \
+    && GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=url.https://github.com/.insteadOf \
+       GIT_CONFIG_VALUE_0=git@github.com: sun dep install --config sun-config.json --yes \
+    && cd / && rm -rf /tmp/sun-dependencies /var/lib/apt/lists/*
 ENV LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 CCACHE_MAXSIZE=10G
 USER ubuntu
 # Create mount destinations as the remote user so Docker does not create root-owned parents.

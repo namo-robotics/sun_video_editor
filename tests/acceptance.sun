@@ -86,7 +86,7 @@ module sun_video_editor {
     preview: u64
   ) SystemResult<void> {
     try renderer.drag_media(preview, 0.25, 0.25);
-    try turn(renderer, session);
+    try wait_preview_position(renderer, session, preview, 1000000);
     try renderer.drag_media(preview, 0.0, 0.0);
     try turn(renderer, session);
     try renderer.step_media(preview, 1);
@@ -100,11 +100,17 @@ module sun_video_editor {
       return SystemResult.Error(Error(1, "Start bar selection did not survive a redraw"));
     }
     try renderer.drag_media(preview, 0.5, 0.5);
-    try turn(renderer, session);
+    // Frame stepping starts from the decoded playhead after the drag's seek completes.
+    try wait_preview_position(renderer, session, preview, 2000000);
     try renderer.step_media(preview, 1);
     try turn(renderer, session);
     if (session.state.position != 2041667 or start_us(session.state) != 0) {
-      return SystemResult.Error(Error(1, "Unselected playhead did not step by one frame"));
+      return SystemResult.Error(
+        Error(
+          1,
+          `Unselected playhead did not step by one frame: expected 2041667, got ${session.state.position}, trim start ${start_us(session.state)}`
+        )
+      );
     }
     // Finish the previous asynchronous seek before requesting a new test position.
     try wait_preview_position(renderer, session, preview, 2041667);
