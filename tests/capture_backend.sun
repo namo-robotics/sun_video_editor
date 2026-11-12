@@ -11,10 +11,13 @@ module capture_tests {
     var output = try command.output();
     if (output.status() != 0) {
       return SystemResult.Error(
-        Error(output.status(), output.stderr().clone(make_heap_allocator()))
+        try Error(
+          output.status(),
+          try output.stderr().clone(make_heap_allocator())
+        )
       );
     }
-    var result = output.stdout().clone(make_heap_allocator());
+    var result = try output.stdout().clone(make_heap_allocator());
     result.trim();
     return SystemResult.Ok(result);
   }
@@ -32,10 +35,10 @@ module capture_tests {
   ) SystemResult<void> {
     var a = make_heap_allocator();
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture_tests-output/${stamp}`;
-    var destination = String("");
+    var directory = try `build/capture_tests-output/${stamp}`;
+    var destination = try String("");
     if (true) {
-      var capture = capture_backend.Capture(video, crop, window, true, 0);
+      var capture = try capture_backend.Capture(video, crop, window, true, 0);
       if (crop) {
         capture.logical_width = scaled ? 160 : width;
         capture.logical_height = scaled ? 120 : height;
@@ -44,9 +47,10 @@ module capture_tests {
         capture.width = scaled ? 50 : 137;
         capture.height = scaled ? 30 : 91;
       }
-      var source = `videotestsrc is-live=true name=source ! video/x-raw,width=${width},height=${height},framerate=30/1`;
+      var source = try `videotestsrc is-live=true name=source ! video/x-raw,width=${width},height=${height},framerate=30/1`;
+
       try capture.start(source, directory, true);
-      destination = capture.destination.clone(a);
+      destination = try capture.destination.clone(a);
       var start = std.time.now();
       while (not capture.completed and not capture.cancelled and start.elapsed().as_secs() < 8) {
         try capture.tick();
@@ -72,14 +76,14 @@ module capture_tests {
         return SystemResult.Error(Error(1, "Cancellation published output"));
       }
     } else {
-      var probe = std.process.Command(a, "ffprobe");
-      probe.add_arg("-v");
-      probe.add_arg("error");
-      probe.add_arg("-show_entries");
-      probe.add_arg("stream=codec_name,width,height");
-      probe.add_arg("-of");
-      probe.add_arg("csv=p=0");
-      probe.add_arg(destination);
+      var probe = try std.process.Command(a, "ffprobe");
+      try probe.add_arg("-v");
+      try probe.add_arg("error");
+      try probe.add_arg("-show_entries");
+      try probe.add_arg("stream=codec_name,width,height");
+      try probe.add_arg("-of");
+      try probe.add_arg("csv=p=0");
+      try probe.add_arg(destination);
       var actual = try command(probe);
       var codec = video ? "h264" : "png";
       var expected_width = crop ? (scaled ? 100 : 137) : width;
@@ -88,15 +92,21 @@ module capture_tests {
         expected_width = (expected_width + 1) / 2 * 2;
         expected_height = (expected_height + 1) / 2 * 2;
       }
-      var expected = `${codec},${expected_width},${expected_height}`;
+      var expected = try `${codec},${expected_width},${expected_height}`;
+
       if (not actual.equals(expected)) {
-        return SystemResult.Error(Error(1, `Expected ${expected}, received ${actual}`));
+        return SystemResult.Error(
+          try Error(
+            1,
+            try `Expected ${expected}, received ${actual}`
+          )
+        );
       }
     }
-    var leftovers = std.process.Command(a, "find");
-    leftovers.add_arg(directory);
-    leftovers.add_arg("-name");
-    leftovers.add_arg(".sun-capture-*");
+    var leftovers = try std.process.Command(a, "find");
+    try leftovers.add_arg(directory);
+    try leftovers.add_arg("-name");
+    try leftovers.add_arg(".sun-capture-*");
     var found = try command(leftovers);
     if (not found.is_empty()) {
       return SystemResult.Error(Error(1, "Capture leaked a private output file"));
@@ -125,14 +135,15 @@ module capture_tests {
 
   /** The Linux pipeline publishes the combined recording only after both encoders finish. */
   test_function presenter_recording() TestResult<void> {
-    var capture = capture_backend.Capture(true, false, false, true, 0);
+    var capture = try capture_backend.Capture(true, false, false, true, 0);
     capture.presenter.camera = true;
     capture.presenter.microphone = true;
-    var directory = String("build/capture-presenter-tests");
+    var directory = try String("build/capture-presenter-tests");
     var clock = std.time.now();
-    var source = String(
+    var source = try String(
       "videotestsrc is-live=true name=source ! video/x-raw,width=320,height=240,framerate=30/1"
     );
+
     try capture.start(source, directory, true);
     clock = std.time.now();
     while (not capture.completed and clock.elapsed().as_secs() < 20) {
@@ -144,14 +155,15 @@ module capture_tests {
       std.time.sleep(std.time.create_duration_millis(5));
     }
     try std.test.assert(capture.completed);
-    var probe = std.process.Command(make_heap_allocator(), "ffprobe");
-    probe.add_arg("-v");
-    probe.add_arg("error");
-    probe.add_arg("-show_entries");
-    probe.add_arg("stream=codec_name,width,height");
-    probe.add_arg("-of");
-    probe.add_arg("csv=p=0");
-    probe.add_arg(capture.destination);
+    var probe = try std.process.Command(make_heap_allocator(), "ffprobe");
+
+    try probe.add_arg("-v");
+    try probe.add_arg("error");
+    try probe.add_arg("-show_entries");
+    try probe.add_arg("stream=codec_name,width,height");
+    try probe.add_arg("-of");
+    try probe.add_arg("csv=p=0");
+    try probe.add_arg(capture.destination);
     var streams = try command(probe);
     try std.test.assert(streams.contains("h264,320,240") and streams.contains("aac"));
     return TestResult.Ok;
@@ -210,16 +222,17 @@ module capture_tests {
     var a = make_heap_allocator();
     for (var mode = 0; mode < 2; mode += 1) {
       var stamp = desktop.filename_stamp();
-      var directory = `build/capture_tests-output/${stamp}`;
+      var directory = try `build/capture_tests-output/${stamp}`;
       var width = mode == 0 ? 3840 : 1920;
       var height = mode == 0 ? 2160 : 1080;
       var reference = desktop.Output();
       try reference.reserve(directory);
-      var raw = `${directory}/reference.raw`;
+      var raw = try `${directory}/reference.raw`;
       var conversion = "";
       var pipeline = desktop.Pipeline();
-      var empty = String("");
-      var description = `videotestsrc name=source pattern=checkers-8 num-buffers=1 ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1 ! ${conversion}fdsink name=output`;
+      var empty = try String("");
+      var description = try `videotestsrc name=source pattern=checkers-8 num-buffers=1 ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1 ! ${conversion}fdsink name=output`;
+
       try pipeline.configure(description, reference, -1, empty, empty);
       try pipeline.play();
       var start = std.time.now();
@@ -231,8 +244,9 @@ module capture_tests {
       try std.test.assert(done);
       pipeline.close();
       try reference.publish(raw);
-      var capture = capture_backend.Capture(mode == 1, false, false, true, 0);
-      var source = `videotestsrc name=source pattern=checkers-8 is-live=true ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1`;
+      var capture = try capture_backend.Capture(mode == 1, false, false, true, 0);
+      var source = try `videotestsrc name=source pattern=checkers-8 is-live=true ! video/x-raw,format=RGB,width=${width},height=${height},framerate=30/1`;
+
       try capture.start(source, directory, true);
       start = std.time.now();
       while (not capture.completed and start.elapsed().as_secs() < 8) {
@@ -243,65 +257,65 @@ module capture_tests {
         std.time.sleep(std.time.create_duration_millis(2));
       }
       try std.test.assert(capture.completed);
-      var compare = std.process.Command(a, "ffmpeg");
-      compare.add_arg("-v");
-      compare.add_arg("info");
-      compare.add_arg("-f");
-      compare.add_arg("rawvideo");
-      compare.add_arg("-pixel_format");
-      compare.add_arg("rgb24");
-      compare.add_arg("-framerate");
-      compare.add_arg("30");
-      compare.add_arg("-video_size");
-      compare.add_arg(`${width}x${height}`);
-      compare.add_arg("-i");
-      compare.add_arg(raw);
-      compare.add_arg("-i");
-      compare.add_arg(capture.destination);
-      compare.add_arg("-filter_complex_threads");
-      compare.add_arg("1");
-      compare.add_arg("-lavfi");
+      var compare = try std.process.Command(a, "ffmpeg");
+      try compare.add_arg("-v");
+      try compare.add_arg("info");
+      try compare.add_arg("-f");
+      try compare.add_arg("rawvideo");
+      try compare.add_arg("-pixel_format");
+      try compare.add_arg("rgb24");
+      try compare.add_arg("-framerate");
+      try compare.add_arg("30");
+      try compare.add_arg("-video_size");
+      try compare.add_arg(try `${width}x${height}`);
+      try compare.add_arg("-i");
+      try compare.add_arg(raw);
+      try compare.add_arg("-i");
+      try compare.add_arg(capture.destination);
+      try compare.add_arg("-filter_complex_threads");
+      try compare.add_arg("1");
+      try compare.add_arg("-lavfi");
       // Compare recordings after their intentional chroma subsampling, using the encoder's matrix.
-      compare.add_arg(
+      try compare.add_arg(
         mode == 0 ? "[0:v]format=gbrp[reference];[1:v]format=gbrp[captured];[reference][captured]ssim" : "[0:v]scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[reference];[1:v]format=yuv420p[captured];[reference][captured]ssim"
       );
-      compare.add_arg("-frames:v");
-      compare.add_arg("1");
-      compare.add_arg("-threads");
-      compare.add_arg("1");
-      compare.add_arg("-f");
-      compare.add_arg("null");
-      compare.add_arg("-");
+      try compare.add_arg("-frames:v");
+      try compare.add_arg("1");
+      try compare.add_arg("-threads");
+      try compare.add_arg("1");
+      try compare.add_arg("-f");
+      try compare.add_arg("null");
+      try compare.add_arg("-");
       var result = try compare.output();
       try std.test.assert_eq(result.status(), 0);
-      var diagnostic = result.stderr().clone(a);
+      var diagnostic = try result.stderr().clone(a);
       if (mode == 0) {
-        var decoded = `${directory}/decoded.rgb`;
-        var decode = std.process.Command(a, "ffmpeg");
-        decode.add_arg("-v");
-        decode.add_arg("error");
-        decode.add_arg("-i");
-        decode.add_arg(capture.destination);
-        decode.add_arg("-frames:v");
-        decode.add_arg("1");
-        decode.add_arg("-pix_fmt");
-        decode.add_arg("rgb24");
-        decode.add_arg("-threads");
-        decode.add_arg("1");
-        decode.add_arg("-f");
-        decode.add_arg("rawvideo");
-        decode.add_arg(decoded);
+        var decoded = try `${directory}/decoded.rgb`;
+        var decode = try std.process.Command(a, "ffmpeg");
+        try decode.add_arg("-v");
+        try decode.add_arg("error");
+        try decode.add_arg("-i");
+        try decode.add_arg(capture.destination);
+        try decode.add_arg("-frames:v");
+        try decode.add_arg("1");
+        try decode.add_arg("-pix_fmt");
+        try decode.add_arg("rgb24");
+        try decode.add_arg("-threads");
+        try decode.add_arg("1");
+        try decode.add_arg("-f");
+        try decode.add_arg("rawvideo");
+        try decode.add_arg(decoded);
         try command(decode);
-        var identical = std.process.Command(a, "cmp");
-        identical.add_arg(raw);
-        identical.add_arg(decoded);
+        var identical = try std.process.Command(a, "cmp");
+        try identical.add_arg(raw);
+        try identical.add_arg(decoded);
         try command(identical);
         try std.test.assert(diagnostic.contains("All:1.000000"), "PNG changed the source pixels");
       } else {
         var faithful = diagnostic.contains("All:0.99") or diagnostic.contains("All:0.98") or
           diagnostic.contains("All:0.97") or diagnostic.contains("All:1.000000");
         if (not faithful) {
-          eprintln(diagnostic);
+          std.io.eprintln(diagnostic);
         }
         try std.test.assert(faithful, "Recording lost source detail");
       }
@@ -312,9 +326,10 @@ module capture_tests {
   /** Finalizes a recording when source failure and portal closure arrive in either order. */
   function interrupted_recording(error_first: bool) TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture_tests-output/${stamp}`;
-    var capture = capture_backend.Capture(true, false, false, true, 0);
-    var source = String("videotestsrc is-live=true name=source");
+    var directory = try `build/capture_tests-output/${stamp}`;
+    var capture = try capture_backend.Capture(true, false, false, true, 0);
+    var source = try String("videotestsrc is-live=true name=source");
+
     try capture.start(source, directory, true);
     var start = std.time.now();
     while (not capture.completed and start.elapsed().as_secs() < 8) {
@@ -359,9 +374,10 @@ module capture_tests {
   /** An error downstream of the desktop source cannot publish incomplete output. */
   test_function output_error() TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture_tests-output/${stamp}`;
-    var capture = capture_backend.Capture(true, false, false, true, 0);
-    var source = String("videotestsrc is-live=true name=source ! identity error-after=15");
+    var directory = try `build/capture_tests-output/${stamp}`;
+    var capture = try capture_backend.Capture(true, false, false, true, 0);
+    var source = try String("videotestsrc is-live=true name=source ! identity error-after=15");
+
     try capture.start(source, directory, true);
     match await_error(capture) {
       SystemResult.Ok => {
@@ -377,28 +393,28 @@ module capture_tests {
 
   /** Delay validation rejects malformed, negative, and excessive arguments. */
   test_function delays() TestResult<void> {
-    var invalid = String("-1");
+    var invalid = try String("-1");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted negative delay");
       },
       SystemResult.Error(_) => {}
     };
-    invalid = String("3601");
+    invalid = try String("3601");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted excessive delay");
       },
       SystemResult.Error(_) => {}
     };
-    invalid = String("1;true");
+    invalid = try String("1;true");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted nonnumeric delay");
       },
       SystemResult.Error(_) => {}
     };
-    var capture = capture_backend.Capture(false, false, false, true, 1);
+    var capture = try capture_backend.Capture(false, false, false, true, 1);
     capture.countdown();
     if (capture.countdown_ready() or not capture.destination.is_empty()) {
       try std.test.fail("Countdown started capture early");
@@ -412,9 +428,9 @@ module capture_tests {
 
   /** An area cannot start a pipeline or reserve a file before selection. */
   test_function selection_required() TestResult<void> {
-    var capture = capture_backend.Capture(false, true, false, true, 0);
-    var source = String("videotestsrc name=source");
-    var directory = String("build/capture-unselected");
+    var capture = try capture_backend.Capture(false, true, false, true, 0);
+    var source = try String("videotestsrc name=source");
+    var directory = try String("build/capture-unselected");
     match capture.start(source, directory, true) {
       SystemResult.Ok => {
         try std.test.fail("Captured without selection");
@@ -429,13 +445,13 @@ module capture_tests {
 
   /** Error recovery retains an owned partial file while ordinary cancellation still removes it. */
   test_function recovery_retains_partial_output() TestResult<void> {
-    var path = String("");
+    var path = try String("");
     if (true) {
       var output = desktop.Output();
-      var directory = String("build/capture-recovery-tests");
+      var directory = try String("build/capture-recovery-tests");
       try output.reserve(directory);
-      path = output.preserve();
-      var content = String("recoverable fragments");
+      path = try output.preserve();
+      var content = try String("recoverable fragments");
       try std.io.write_string(path, content);
     }
     var saved = try std.io.read_to_string(make_heap_allocator(), path);
@@ -447,11 +463,11 @@ module capture_tests {
   /** Publication cannot replace an existing destination and cleanup removes the private file. */
   test_function publication_collision() TestResult<void> {
     var stamp = desktop.filename_stamp();
-    var directory = `build/capture_tests-output/${stamp}`;
+    var directory = try `build/capture_tests-output/${stamp}`;
     var output = desktop.Output();
     try output.reserve(directory);
-    var destination = `${directory}/existing.png`;
-    var original = String("keep me");
+    var destination = try `${directory}/existing.png`;
+    var original = try String("keep me");
     try std.io.write_string(destination, original);
     match output.publish(destination) {
       SystemResult.Ok => {
@@ -477,6 +493,7 @@ manifest {
     "${namo-robotics/sun_gobject}/lib/sun_capture.moon"
   ],
   source_files: [
+    "../src/results.sun",
     "../src/tools/capture_backend.sun",
     "../src/tools/recording.sun",
     "../src/process.sun"

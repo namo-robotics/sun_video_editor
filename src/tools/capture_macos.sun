@@ -28,9 +28,9 @@ module macos_capture {
     /** Creates private paths and an empty directory without modifying user media. */
     init() SystemResult<void> {
       var id = try apple_foundation.uuid();
-      this.directory = `tmp/capture-publication-${id}`;
-      this.source = `${this.directory}/source`;
-      this.destination = `${this.directory}/destination`;
+      this.directory = try `tmp/capture-publication-${id}`;
+      this.source = try `${this.directory}/source`;
+      this.destination = try `${this.directory}/destination`;
       if (not std.io.is_dir("tmp")) {
         try std.io.make_dir("tmp", 448);
       }
@@ -48,8 +48,8 @@ module macos_capture {
   /** Verifies collision protection and successful publication using real filesystem operations. */
   function test_publication() SystemResult<void> {
     var files = try PublicationFixture();
-    var payload = String("completed capture");
-    var original = String("existing capture");
+    var payload = try String("completed capture");
+    var original = try String("existing capture");
     try std.io.write_string(files.source, payload);
     try std.io.write_string(files.destination, original);
     match publish_file(files.source, files.destination) {
@@ -73,7 +73,7 @@ module macos_capture {
 
   /** Prints a protocol message immediately. */
   public function report(message: String) void {
-    println(message);
+    std.io.println(message);
     unsafe { flush_streams(null); };
   }
 
@@ -135,10 +135,10 @@ module macos_capture {
   class Capture {
     var settings: Options;
     var session: apple_screen_capture.Session = apple_screen_capture.Session();
-    var stage: String = String("");
-    var output: String = String("");
-    var native_file: String = String("");
-    var recovery_file: String = String("");
+    var stage: String;
+    var output: String;
+    var native_file: String;
+    var recovery_file: String;
     var published: bool = false;
     var state: i32 = 0;
     var clock: std.time.Instant = std.time.now();
@@ -149,7 +149,12 @@ module macos_capture {
     public var done: bool = false;
 
     /** Takes ownership of the validated capture options. */
-    init(settings: Options) {
+    init(settings: Options) AllocationResult<void> {
+      this.stage = try String("");
+      this.output = try String("");
+      this.native_file = try String("");
+      this.recovery_file = try String("");
+
       this.settings = settings;
     }
 
@@ -159,7 +164,7 @@ module macos_capture {
         not this.stage.is_empty() and std.io.is_file(this.native_file);
       if (preserve) {
         ignore_error(publish_file(this.native_file, this.recovery_file));
-        report(`Recovery: ${this.stage}`);
+        report(try `Recovery: ${this.stage}`);
       }
       this.session.close();
       if (not this.stage.is_empty() and not preserve) {
@@ -172,35 +177,38 @@ module macos_capture {
     /** Shows the source picker; no output file exists yet. */
     public method begin() SystemResult<void> {
       try this.session.select(this.settings.source);
-      report(String("Choose a source in the macOS sharing picker…"));
+      report(
+        try String("Choose a source in the macOS sharing picker…")
+      );
       return SystemResult.Ok;
     }
 
     /** Reserves a private directory and a unique final name. */
     method prepare_output() SystemResult<void> {
       var root = try apple_foundation.media_directory(this.settings.recording);
-      var directory = `${root}/Sun Captures`;
+      var directory = try `${root}/Sun Captures`;
       return this.reserve_output(directory);
     }
 
     /** Reserves private output under a supplied directory without accessing capture devices. */
     public method reserve_output(directory: ref String) SystemResult<void> {
-      var mkdir = std.process.Command(make_heap_allocator(), "mkdir");
-      mkdir.add_arg("-p");
-      mkdir.add_arg(directory);
+      var mkdir = try std.process.Command(make_heap_allocator(), "mkdir");
+
+      try mkdir.add_arg("-p");
+      try mkdir.add_arg(directory);
       var created = try video.capture(mkdir);
       var identifier = try apple_foundation.uuid();
-      var private_dir = `${directory}/.capture-${identifier}`;
+      var private_dir = try `${directory}/.capture-${identifier}`;
       try std.io.make_dir(private_dir, 448);
       this.stage = private_dir;
       var suffix = this.settings.recording ? "mp4" : "png";
-      this.output = `${directory}/Capture-${identifier}.${suffix}`;
+      this.output = try `${directory}/Capture-${identifier}.${suffix}`;
       if (this.settings.recording) {
-        this.native_file = `${this.stage}/capture.mp4`;
+        this.native_file = try `${this.stage}/capture.mp4`;
       } else {
-        this.native_file = `${this.stage}/capture.png`;
+        this.native_file = try `${this.stage}/capture.png`;
       }
-      this.recovery_file = `${this.stage}/recovery.mp4`;
+      this.recovery_file = try `${this.stage}/recovery.mp4`;
       return SystemResult.Ok;
     }
 
@@ -213,26 +221,28 @@ module macos_capture {
       try publish_file(path, this.output);
       this.published = true;
       this.done = true;
-      report(`Saved: ${this.output}`);
+      report(try `Saved: ${this.output}`);
       return SystemResult.Ok;
     }
 
     /** Stops capture; closing during finalization retains partial output instead of discarding it. */
-    public method interrupt(cancel: bool) void {
+    public method interrupt(cancel: bool) AllocationResult<void> {
       if (cancel or not this.active) {
         this.cancelled = not this.stopping;
         this.done = true;
         report(
-          String(
+          try String(
             this.cancelled ? "Capture cancelled." : "Saving interrupted; retaining the recording for recovery."
           )
         );
       } else if (not this.stopping) {
         this.stopping = true;
         this.clock = std.time.now();
-        report(String("Finalizing MP4…"));
+        report(try String("Finalizing MP4…"));
         this.session.stop();
       }
+
+      return AllocationResult.Ok;
     }
 
     /** Advances selection, countdown, capture, and encoding while preserving cancellation. */
@@ -250,7 +260,7 @@ module macos_capture {
         },
         apple_screen_capture.Event.Recording => {
           this.active = true;
-          report(String("Recording…"));
+          report(try String("Recording…"));
         },
         apple_screen_capture.Event.Finished => {
           if (this.cancelled) {
@@ -263,7 +273,9 @@ module macos_capture {
           try this.publish(this.native_file);
         },
         apple_screen_capture.Event.Region => {
-          report(String("Drag to select an area. Press Escape to cancel."));
+          report(
+            try String("Drag to select an area. Press Escape to cancel.")
+          );
         },
         apple_screen_capture.Event.Idle => {}
       };
@@ -275,7 +287,7 @@ module macos_capture {
         var seconds = remaining <= 250 ? 0 : (remaining - 250 + 999) / 1000;
         if (seconds > 0 and seconds != this.last_seconds) {
           this.last_seconds = seconds;
-          report(`Starting in ${seconds}…`);
+          report(try `Starting in ${seconds}…`);
         }
         if (remaining <= 0) {
           if (this.stage.is_empty()) {
@@ -291,7 +303,9 @@ module macos_capture {
               _convert<i32>(this.settings.presenter.size)
             );
             report(
-              String("Starting recording; allow camera and microphone access when prompted…")
+              try String(
+                "Starting recording; allow camera and microphone access when prompted…"
+              )
             );
           } else {
             try this.session.start(false, this.settings.cursor, this.native_file);
@@ -311,12 +325,17 @@ module macos_capture {
   /** Checks parsing, publication, and session guards without presenting native capture UI. */
   public function self_test() SystemResult<void> {
     var a = make_heap_allocator();
-    var args = Vec<String>(a, 5);
-    args.push(String("capture"));
-    args.push(String("record"));
-    args.push(String("area"));
-    args.push(String("3600"));
-    args.push(String("hidden"));
+    var args = try Vec<String>(a, 5);
+    try args.push(try String("capture"));
+
+    try args.push(try String("record"));
+
+    try args.push(try String("area"));
+
+    try args.push(try String("3600"));
+
+    try args.push(try String("hidden"));
+
     var valid = try options(args);
     if (not valid.recording or valid.source != 2 or valid.delay != 3600 or valid.cursor) {
       return SystemResult.Error(Error(1, "Capture options failed"));
@@ -328,24 +347,29 @@ module macos_capture {
         settings.recording = mode == 1;
         settings.presenter.camera = mode == 1;
         settings.presenter.microphone = mode == 1;
-        var capture = Capture(settings);
+        var capture = try Capture(settings);
         try capture.reserve_output(files.directory);
       }
-      var listing = std.process.Command(a, "find");
-      listing.add_arg(files.directory);
-      listing.add_arg("-mindepth");
-      listing.add_arg("1");
+      var listing = try std.process.Command(a, "find");
+      try listing.add_arg(files.directory);
+      try listing.add_arg("-mindepth");
+      try listing.add_arg("1");
       var remaining = try video.capture(listing);
       if (not remaining.is_empty()) {
         return SystemResult.Error(Error(1, "Capture output reservation leaked private files"));
       }
     }
-    args = Vec<String>(a, 5);
-    args.push(String("capture"));
-    args.push(String("record"));
-    args.push(String("area"));
-    args.push(String("3601"));
-    args.push(String("hidden"));
+    args = try Vec<String>(a, 5);
+    try args.push(try String("capture"));
+
+    try args.push(try String("record"));
+
+    try args.push(try String("area"));
+
+    try args.push(try String("3601"));
+
+    try args.push(try String("hidden"));
+
     match options(args) {
       SystemResult.Ok(_) => {
         return SystemResult.Error(Error(1, "Invalid delay accepted"));
@@ -353,7 +377,7 @@ module macos_capture {
       SystemResult.Error(_) => {}
     };
     var session = apple_screen_capture.Session();
-    var path = String("unused.png");
+    var path = try String("unused.png");
     match session.start(false, true, path) {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Capture started before selection"));
@@ -362,7 +386,7 @@ module macos_capture {
     };
     try test_publication();
     report(
-      String(
+      try String(
         "PASS macOS capture options, output reservation, cleanup, session guards, and publication"
       )
     );
@@ -373,7 +397,7 @@ module macos_capture {
   public function run(args: ref Vec<String>) SystemResult<void> {
     var settings = try options(args);
     var signals = try std.signal.SignalSubscription();
-    var capture = Capture(settings);
+    var capture = try Capture(settings);
     try capture.begin();
     while (not capture.done) {
       var pending = try signals.take_pending();
@@ -388,22 +412,26 @@ module macos_capture {
 }
 
 /** Dispatches self-tests or the private capture protocol and reports actionable failures. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
-  var env = std.env.Env(make_heap_allocator());
-  var args = env.args(argc, argv);
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
+  var env = try std.env.Env(make_heap_allocator());
+  var args = try env.args(argc, argv);
   var result: SystemResult<void> = SystemResult.Ok;
   if (args.size() == 2 and args[1].equals_literal("--self-test")) {
     result = macos_capture.self_test();
   } else {
     result = macos_capture.run(args);
   }
-  return match result {
-    SystemResult.Ok => 0,
-    SystemResult.Error(error) => {
-      macos_capture.report(`Capture failed: ${error.message()}`);
-      return 1;
+  return AllocationResult.Ok(
+    match result {
+      SystemResult.Ok => 0,
+      SystemResult.Error(error) => {
+        macos_capture.report(
+          try `Capture failed: ${error.message()}`
+        );
+        return AllocationResult.Ok(1);
+      }
     }
-  };
+  );
 }
 manifest {
   id: "namo-robotics/sun_video_editor_capture"
@@ -412,6 +440,7 @@ manifest {
     "${namo-robotics/sun_apple}/lib/sun_apple.moon"
   ]
   source_files: [
+    "../results.sun",
     "../process.sun",
     "recording.sun"
   ]

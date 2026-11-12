@@ -20,7 +20,7 @@ module build_targets {
   }
 
   /** Selects a named local entry with explicit paths and a binary or library type. */
-  function select(document: ref Json, name: static_ptr<u8>) JsonResult<Target> {
+  function select(document: ref std.json.Json, name: static_ptr<u8>) std.json.JsonResult<Target> {
     var a = make_heap_allocator();
     var entries = try document.get("entrypoints");
     for (var i: i64 = 0; i < entries.len(); i += 1) {
@@ -31,49 +31,60 @@ module build_targets {
         var output = try (try entry.get("output_name")).as_string();
         var kind = try (try entry.get("type")).as_string();
         if (kind.equals_literal("library") == false and kind.equals_literal("binary") == false) {
-          return JsonResult.Error(JsonError("Expected a binary or library entrypoint", -1));
+          return std.json.JsonResult.Error(
+            std.json.JsonError("Expected a binary or library entrypoint", -1)
+          );
         }
-        var tests = output.clone(a);
-        tests.append("_test");
+        var tests = try output.clone(a);
+        try tests.append("_test");
         tests = match entry.get("test_binary_name") {
-          JsonResult.Ok(value) => (try value.as_string()).clone(a),
-          JsonResult.Error(_) => tests.clone(a)
+          std.json.JsonResult.Ok(value) => try (try value.as_string()).clone(a),
+          std.json.JsonResult.Error(_) => try tests.clone(a)
         };
-        return JsonResult.Ok(
-          Target(source.clone(a), output.clone(a), tests, kind.equals_literal("library"))
+        return std.json.JsonResult.Ok(
+          Target(
+            try source.clone(a),
+            try output.clone(a),
+            tests,
+            kind.equals_literal("library")
+          )
         );
       }
     }
-    return JsonResult.Error(JsonError("Unknown build target", -1));
+    return std.json.JsonResult.Error(std.json.JsonError("Unknown build target", -1));
   }
 
   /** Queries the compiler so tools share its target selection and resolved paths. */
   function query(action: static_ptr<u8>, dependency: static_ptr<u8>) SystemResult<String> {
     var a = make_heap_allocator();
-    var env = std.env.Env(a);
+    var env = try std.env.Env(a);
     var executable = match env.get("SUN_EXECUTABLE") {
-      Option.Some(value) => value.clone(a),
-      Option.None => String("sun")
+      Option.Some(value) => try value.clone(a),
+      Option.None => try String("sun")
     };
-    var command = std.process.Command(a, executable);
-    command.add_arg(action);
-    command.add_arg("--config");
-    command.add_arg("sun-config.json");
-    if (not String(dependency).is_empty()) {
-      command.add_arg("--dependency");
-      command.add_arg(dependency);
+    var command = try std.process.Command(a, executable);
+    try command.add_arg(action);
+    try command.add_arg("--config");
+    try command.add_arg("sun-config.json");
+    if (not (try String(dependency)).is_empty()) {
+      try command.add_arg("--dependency");
+      try command.add_arg(dependency);
     }
     var output = try command.output();
     if (output.status() != 0) {
-      eprint(output.stderr());
-      return SystemResult.Error(Error(output.status(), "Cannot resolve build configuration"));
+      std.io.eprint(output.stderr());
+      return SystemResult.Error(
+        try Error(output.status(), "Cannot resolve build configuration")
+      );
     }
-    return SystemResult.Ok(output.stdout().clone(a));
+    return SystemResult.Ok(try output.stdout().clone(a));
   }
 
   /** Copies one resolved string property from the compiler's JSON response. */
-  function property(document: ref Json, key: static_ptr<u8>) JsonResult<String> {
-    return JsonResult.Ok((try (try document.get(key)).as_string()).clone(make_heap_allocator()));
+  function property(document: ref std.json.Json, key: static_ptr<u8>) std.json.JsonResult<String> {
+    return std.json.JsonResult.Ok(
+      try (try (try document.get(key)).as_string()).clone(make_heap_allocator())
+    );
   }
 
   /** Resolves a directory property and translates malformed responses into build errors. */
@@ -83,15 +94,15 @@ module build_targets {
     dependency: static_ptr<u8>
   ) SystemResult<String> {
     var text = try query(action, dependency);
-    var document = match parse_json(make_heap_allocator(), text) {
-      JsonResult.Ok(value) => value,
-      JsonResult.Error(error) => {
+    var document = match std.json.parse_json(make_heap_allocator(), text) {
+      std.json.JsonResult.Ok(value) => value,
+      std.json.JsonResult.Error(error) => {
         return SystemResult.Error(Error(1, "Invalid compiler configuration response"));
       }
     };
     return match property(document, key) {
-      JsonResult.Ok(value) => SystemResult.Ok(value),
-      JsonResult.Error(error) => SystemResult.Error(
+      std.json.JsonResult.Ok(value) => SystemResult.Ok(value),
+      std.json.JsonResult.Error(error) => SystemResult.Error(
         Error(1, "Missing compiler configuration property")
       )
     };
@@ -111,18 +122,18 @@ module build_targets {
   public function load(name: static_ptr<u8>) SystemResult<Target> {
     var a = make_heap_allocator();
     var text = try query("describe", "");
-    var document = match parse_json(a, text) {
-      JsonResult.Ok(value) => value,
-      JsonResult.Error(error) => {
-        eprintln(error.message());
+    var document = match std.json.parse_json(a, text) {
+      std.json.JsonResult.Ok(value) => value,
+      std.json.JsonResult.Error(error) => {
+        std.io.eprintln(try error.message());
         return SystemResult.Error(Error(1, "Cannot parse sun-config.json"));
       }
     };
     return match select(document, name) {
-      JsonResult.Ok(value) => SystemResult.Ok(value),
-      JsonResult.Error(error) => {
-        eprintln(name);
-        eprintln(error.message());
+      std.json.JsonResult.Ok(value) => SystemResult.Ok(value),
+      std.json.JsonResult.Error(error) => {
+        std.io.eprintln(name);
+        std.io.eprintln(try error.message());
         return SystemResult.Error(Error(1, "Cannot load configured build target"));
       }
     };

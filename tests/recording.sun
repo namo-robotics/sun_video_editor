@@ -8,7 +8,7 @@ module presenter_tests {
 
   /** Rejects invalid positions, sizes, and screenshot device requests before device access. */
   test_function arguments() TestResult {
-    var args = String("capture record screen 0 cursor camera microphone 0 1").split_whitespace(
+    var args = (try String("capture record screen 0 cursor camera microphone 0 1")).split_whitespace(
       make_heap_allocator()
     );
     var settings = try presenter.options(args);
@@ -16,9 +16,9 @@ module presenter_tests {
       settings.camera and settings.microphone and settings.corner == 0 and settings.size == 1
     );
     for (var field: i64 = 0; field < 3; field += 1) {
-      var invalid = String(
+      var invalid = (try String(
         field == 0 ? "capture record screen 0 cursor camera microphone 4 1" : (field == 1 ? "capture record screen 0 cursor camera microphone 0 3" : "capture screenshot screen 0 cursor camera microphone 0 1")
-      ).split_whitespace(
+      )).split_whitespace(
         make_heap_allocator()
       );
       match presenter.options(invalid) {

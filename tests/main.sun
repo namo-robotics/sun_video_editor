@@ -13,6 +13,7 @@ manifest {
     "${namo-robotics/sun_ui}/lib/sun_ui.moon"
   ]
   source_files: [
+    "../src/results.sun",
     "../src/capture.sun",
     "../src/state.sun",
     "../src/view.sun",

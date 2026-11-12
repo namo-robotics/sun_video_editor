@@ -8,8 +8,8 @@ module video {
     var child: std.process.Child = std.process.Child(0, 0, 0, 0);
     var output: std.io.File = std.io.File();
     var errors: std.io.File = std.io.File();
-    public var text: String = String("");
-    public var diagnostics: String = String("");
+    public var text: String;
+    public var diagnostics: String;
     public var running: bool = false;
     public var status: i32 = -1;
     var exited: bool = false;
@@ -32,8 +32,8 @@ module video {
       this.child = try command.start();
       this.output.adopt(this.child.take_stdout());
       this.errors.adopt(this.child.take_stderr());
-      this.text = String("");
-      this.diagnostics = String("");
+      this.text.clear();
+      this.diagnostics.clear();
       this.running = true;
       this.exited = false;
       this.cancelling = false;
@@ -66,6 +66,7 @@ module video {
       this.output.close();
       this.errors.close();
       this.running = false;
+
     }
 
     /** Reads bounded amounts from both ready pipes and observes process completion. */
@@ -92,14 +93,20 @@ module video {
       }
       return SystemResult.Ok;
     }
+
+    /** Initializes owned storage and reports allocation failure. */
+    init() AllocationResult<void> {
+      this.text = try String("");
+      this.diagnostics = try String("");
+    }
   }
 
   /** Drains only ready bytes, bounding both memory and work per UI turn. */
   function drain(file: ref std.io.File, text: ref String, limit: i64) SystemResult<void> {
     var a = make_heap_allocator();
-    var buffer = ContiguousBuffer<u8>(a, 4096);
+    var buffer = try ContiguousBuffer<u8>(a, 4096);
     for (var round: i64 = 0; round < 8 and file.is_open(); round += 1) {
-      var poll = std.io.Poller(a);
+      var poll = try std.io.Poller(a);
       poll.add_read(file.get_fd());
       if (try poll.wait(0) == 0) {
         break;
@@ -111,12 +118,14 @@ module video {
       match file.read(bytes) {
         std.io.ReadResult.Data(count) => {
           for (var i: i64 = 0; i < count; i += 1) {
-            text.append_char(buffer[i]);
+            try text.append_char(buffer[i]);
           }
           if (text.length() > limit) {
-            text = match text.substr(a, text.length() - limit, limit) {
+            text = match try sun_video_editor_results.access(
+              text.substr(a, text.length() - limit, limit)
+            ) {
               AccessResult.Ok(value) => value,
-              AccessResult.OutOfBounds(_) => String("")
+              AccessResult.OutOfBounds(_) => try String("")
             };
           }
         },
@@ -139,14 +148,19 @@ module video {
     var result = try command.output();
     if (result.status() != 0) {
       return SystemResult.Error(
-        Error(result.status(), result.stderr().clone(make_heap_allocator()))
+        try Error(
+          result.status(),
+          try result.stderr().clone(make_heap_allocator())
+        )
       );
     }
-    var text = result.stdout().clone(make_heap_allocator());
+    var text = try result.stdout().clone(make_heap_allocator());
     if (text.ends_with("\n")) {
-      text = match text.substr(make_heap_allocator(), 0, text.length() - 1) {
+      text = match try sun_video_editor_results.access(
+        text.substr(make_heap_allocator(), 0, text.length() - 1)
+      ) {
         AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => String("")
+        AccessResult.OutOfBounds(_) => try String("")
       };
     }
     return SystemResult.Ok(text);

@@ -9,17 +9,35 @@ module video_tests {
   /** Enforces the released tool versions required by the distribution packages. */
   test_function required_tool_versions() TestResult<void> {
     try std.test.assert(
-      video.supported_tool_version(String("ffmpeg version 8.0.1-3ubuntu2 Copyright"))
-    );
-    try std.test.assert(video.supported_tool_version(String("ffprobe version 9.1 Copyright")));
-    try std.test.assert(
-      not video.supported_tool_version(String("ffmpeg version 7.1.5 Copyright"))
+      try video.supported_tool_version(
+        try String("ffmpeg version 8.0.1-3ubuntu2 Copyright")
+      )
     );
     try std.test.assert(
-      not video.supported_tool_version(String("ffprobe version N-12345-gabcdef"))
+      try video.supported_tool_version(
+        try String("ffprobe version 9.1 Copyright")
+      )
     );
-    try std.test.assert(not video.supported_tool_version(String("ffmpeg version invalid")));
-    try std.test.assert(not video.supported_tool_version(String("unknown version 8.0")));
+    try std.test.assert(
+      not (try video.supported_tool_version(
+        try String("ffmpeg version 7.1.5 Copyright")
+      ))
+    );
+    try std.test.assert(
+      not (try video.supported_tool_version(
+        try String("ffprobe version N-12345-gabcdef")
+      ))
+    );
+    try std.test.assert(
+      not (try video.supported_tool_version(
+        try String("ffmpeg version invalid")
+      ))
+    );
+    try std.test.assert(
+      not (try video.supported_tool_version(
+        try String("unknown version 8.0")
+      ))
+    );
     return TestResult.Ok;
   }
 
@@ -29,16 +47,16 @@ module video_tests {
     var fixture = try video_fixtures.Fixture();
     var input = try video.absolute(fixture.input);
     var alias = fixture.path("alias.mov");
-    var link = std.process.Command(a, "ln");
-    link.add_arg("-s");
-    link.add_arg(input);
-    link.add_arg(alias);
+    var link = try std.process.Command(a, "ln");
+    try link.add_arg("-s");
+    try link.add_arg(input);
+    try link.add_arg(alias);
     try video.capture(link);
     var resolved = try video.absolute(alias);
     try std.test.assert(resolved.equals(input));
     var output = fixture.path("missing/../output $name; 'clip'.mp4");
     var directory = try video.absolute(fixture.directory);
-    directory.append("/output $name; 'clip'.mp4");
+    try directory.append("/output $name; 'clip'.mp4");
     var destination = try video.absolute(output);
     try std.test.assert(destination.equals(directory));
     try std.test.assert(not std.io.is_file(destination));
@@ -47,9 +65,12 @@ module video_tests {
 
   /** Checks strict time parsing and rejects invalid trim ranges before encoding. */
   test_function time_validation() TestResult<void> {
-    var time = String("01:02:03.5");
+    var time = try String("01:02:03.5");
     try std.test.assert_eq(try video.seconds(time), 3723.5);
-    var invalid = String("-1|nan|1:60|1::2|1.2:03|1.2.3|inf").split(make_heap_allocator(), b'|');
+    var invalid = (try String("-1|nan|1:60|1::2|1.2:03|1.2.3|inf")).split(
+      make_heap_allocator(),
+      b'|'
+    );
     for (var value: ref String in invalid) {
       match video.seconds(value) {
         SystemResult.Error(_) => {},
@@ -61,15 +82,15 @@ module video_tests {
     var settings = video.Settings();
     var media = video.Media();
     media.duration = 4.0;
-    settings.start = String("3");
-    settings.end = String("2");
+    settings.start = try String("3");
+    settings.end = try String("2");
     match video.trim_length(settings, media) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
         try std.test.assert(false);
       }
     };
-    settings.end = String("5");
+    settings.end = try String("5");
     match video.trim_length(settings, media) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
@@ -84,20 +105,34 @@ module video_tests {
     var settings = video.Settings();
     var media = video.Media();
     media.duration = 4.0;
-    settings.sections.push(video.Section(2, String("3"), String("4")));
-    settings.sections.push(video.Section(1, String("0"), String("1")));
+    try settings.sections.push(
+      video.Section(
+        2,
+        try String("3"),
+        try String("4")
+      )
+    );
+
+    try settings.sections.push(
+      video.Section(
+        1,
+        try String("0"),
+        try String("1")
+      )
+    );
+
     try std.test.assert_eq(try video.trim_length(settings, media), 2.0);
     var ordered = try video.kept_intervals(settings, media);
     try std.test.assert_eq(ordered[0].start, 0.0);
     try std.test.assert_eq(ordered[1].start, 3.0);
-    settings.sections[1].end = String("3.5");
+    settings.sections[1].end = try String("3.5");
     match video.trim_length(settings, media) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
         try std.test.assert(false, "overlapping sections accepted");
       }
     };
-    settings.sections[1].end = String("0");
+    settings.sections[1].end = try String("0");
     match video.trim_length(settings, media) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
@@ -109,28 +144,33 @@ module video_tests {
 
   /** Decodes one tiny RGB frame so an export can be checked for the correct source section. */
   function sample_color(path: const ref String, time: static_ptr<u8>) SystemResult<String> {
-    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
-    var flags = String("-v error -ss").split_whitespace(make_heap_allocator());
+    var command = try std.process.Command(make_heap_allocator(), "ffmpeg");
+
+    var flags = (try String("-v error -ss")).split_whitespace(
+      make_heap_allocator()
+    );
     for (var flag: ref String in flags) {
-      command.add_arg(flag);
+      try command.add_arg(flag);
     }
-    command.add_arg(time);
-    command.add_arg("-i");
-    command.add_arg(path);
-    command.add_arg("-frames:v");
-    command.add_arg("1");
-    command.add_arg("-vf");
-    command.add_arg("scale=2:2,format=rgb24");
-    command.add_arg("-threads");
-    command.add_arg("1");
-    command.add_arg("-f");
-    command.add_arg("rawvideo");
-    command.add_arg("pipe:1");
+    try command.add_arg(time);
+    try command.add_arg("-i");
+    try command.add_arg(path);
+    try command.add_arg("-frames:v");
+    try command.add_arg("1");
+    try command.add_arg("-vf");
+    try command.add_arg("scale=2:2,format=rgb24");
+    try command.add_arg("-threads");
+    try command.add_arg("1");
+    try command.add_arg("-f");
+    try command.add_arg("rawvideo");
+    try command.add_arg("pipe:1");
     var output = try command.output();
     if (output.status() != 0) {
       return SystemResult.Error(Error(1, "Cannot sample exported frame"));
     }
-    return SystemResult.Ok(output.stdout().clone(make_heap_allocator()));
+    return SystemResult.Ok(
+      try output.stdout().clone(make_heap_allocator())
+    );
   }
 
   /** Exports nonadjacent colored sections across all formats and checks video order and audio duration. */
@@ -138,40 +178,56 @@ module video_tests {
     var a = make_heap_allocator();
     var fixture = try video_fixtures.Fixture();
     var source = fixture.path("colored.mp4");
-    var generate = std.process.Command(a, "ffmpeg");
-    var flags = String("-v error -f lavfi -i").split_whitespace(a);
+    var generate = try std.process.Command(a, "ffmpeg");
+    var flags = (try String("-v error -f lavfi -i")).split_whitespace(
+      a
+    );
     for (var flag: ref String in flags) {
-      generate.add_arg(flag);
+      try generate.add_arg(flag);
     }
-    generate.add_arg(
+    try generate.add_arg(
       "color=red:s=64x64:r=24:d=2[r];color=blue:s=64x64:r=24:d=2[b];[r][b]concat=n=2:v=1:a=0"
     );
-    generate.add_arg("-f");
-    generate.add_arg("lavfi");
-    generate.add_arg("-i");
-    generate.add_arg("sine=frequency=440:duration=4");
-    generate.add_arg("-c:v");
-    generate.add_arg("libx264");
-    generate.add_arg("-threads");
-    generate.add_arg("2");
-    generate.add_arg("-c:a");
-    generate.add_arg("aac");
-    generate.add_arg(source);
+    try generate.add_arg("-f");
+    try generate.add_arg("lavfi");
+    try generate.add_arg("-i");
+    try generate.add_arg("sine=frequency=440:duration=4");
+    try generate.add_arg("-c:v");
+    try generate.add_arg("libx264");
+    try generate.add_arg("-threads");
+    try generate.add_arg("2");
+    try generate.add_arg("-c:a");
+    try generate.add_arg("aac");
+    try generate.add_arg(source);
     try video.capture(generate);
     var job = video.Job();
     try job.probe(source);
     try video_fixtures.finish(job);
     var settings = video.Settings();
-    settings.input = source.clone(a);
-    settings.sections.push(video.Section(2, String("3"), String("4")));
-    settings.sections.push(video.Section(1, String("0"), String("1")));
+    settings.input = try source.clone(a);
+    try settings.sections.push(
+      video.Section(
+        2,
+        try String("3"),
+        try String("4")
+      )
+    );
+
+    try settings.sections.push(
+      video.Section(
+        1,
+        try String("0"),
+        try String("1")
+      )
+    );
+
     for (var format: i64 = 0; format < 6; format += 1) {
       settings.format = format;
-      settings.output = `${fixture.directory}/joined${String(video.extension(format))}`;
+      settings.output = try `${fixture.directory}/joined${String(video.extension(format))}`;
       try job.convert(settings);
       try video_fixtures.finish(job);
       try std.test.assert_eq(job.percent, 100);
-      var probe = video.probe_command(settings.output);
+      var probe = try video.probe_command(settings.output);
       var result = try video.parse_probe(try video.capture(probe));
       try std.test.assert(result.duration >= 1.9 and result.duration <= 2.2);
       try std.test.assert(result.audio.equals_literal("none") == (format == 5));
@@ -196,7 +252,7 @@ module video_tests {
     settings.output = fixture.path("joined-silent.mp4");
     try job.convert(settings);
     try video_fixtures.finish(job);
-    var silent = video.probe_command(settings.output);
+    var silent = try video.probe_command(settings.output);
     var result = try video.parse_probe(try video.capture(silent));
     try std.test.assert(result.audio.equals_literal("none"));
     return TestResult.Ok;
@@ -204,21 +260,24 @@ module video_tests {
 
   /** Reads fractional frame rates and falls back safely when metadata is unavailable. */
   test_function frame_rate_metadata() TestResult<void> {
-    var fractional = String(
+    var fractional = try String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"30000/1001\"}]}"
     );
+
     var media = try video.parse_probe(fractional);
     try std.test.assert_eq(media.frame_rate_num, 30000);
     try std.test.assert_eq(media.frame_rate_den, 1001);
-    var fallback = String(
+    var fallback = try String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"0/0\",\"r_frame_rate\":\"24/1\"}]}"
     );
+
     var nominal = try video.parse_probe(fallback);
     try std.test.assert_eq(nominal.frame_rate_num, 24);
     try std.test.assert_eq(nominal.frame_rate_den, 1);
-    var invalid = String(
+    var invalid = try String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"-1/1\",\"r_frame_rate\":\"999999999999/1\"}]}"
     );
+
     var unknown = try video.parse_probe(invalid);
     try std.test.assert_eq(unknown.frame_rate_num, 0);
     return TestResult.Ok;
@@ -226,16 +285,17 @@ module video_tests {
 
   /** Rejects HDR and missing metadata rather than producing an incorrect SDR conversion. */
   test_function metadata_validation() TestResult<void> {
-    var hdr = String(
+    var hdr = try String(
       "{\"format\":{\"duration\":\"4\",\"size\":\"100\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"color_transfer\":\"smpte2084\"}]}"
     );
+
     match video.parse_probe(hdr) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
         try std.test.assert(false);
       }
     };
-    var bad = String("{}");
+    var bad = try String("{}");
     match video.parse_probe(bad) {
       SystemResult.Error(_) => {},
       SystemResult.Ok(_) => {
@@ -255,10 +315,10 @@ module video_tests {
     try std.test.assert(job.ready and job.media.width == 320 and job.media.height == 240);
     try std.test.assert(job.media.audio.equals_literal("aac"));
     var settings = video.Settings();
-    settings.input = fixture.input.clone(a);
+    settings.input = try fixture.input.clone(a);
     settings.output = fixture.path("trimmed $out; file.mp4");
-    settings.start = String("0.5");
-    settings.end = String("2.5");
+    settings.start = try String("0.5");
+    settings.end = try String("2.5");
     settings.resolution = 3;
     try job.convert(settings);
     try video_fixtures.finish(job);
@@ -273,19 +333,19 @@ module video_tests {
     try std.test.assert(
       result.media.codec.equals_literal("h264") and result.media.audio.equals_literal("aac")
     );
-    settings.input = settings.output.clone(a);
+    settings.input = try settings.output.clone(a);
     settings.output = fixture.path("silent.mov");
     settings.format = 1;
     settings.audio = false;
-    settings.start = String("0");
-    settings.end = String("");
+    settings.start = try String("0");
+    settings.end = try String("");
     try result.convert(settings);
     try video_fixtures.finish(result);
     var silent = video.Job();
     try silent.probe(settings.output);
     try video_fixtures.finish(silent);
     try std.test.assert(silent.media.audio.equals_literal("none"));
-    settings.input = settings.output.clone(a);
+    settings.input = try settings.output.clone(a);
     settings.output = fixture.path("silent-to-mp4.mp4");
     settings.format = 0;
     settings.audio = true;
@@ -303,9 +363,9 @@ module video_tests {
     try job.probe(fixture.input);
     try video_fixtures.finish(job);
     var settings = video.Settings();
-    settings.input = fixture.input.clone(a);
-    settings.start = String("0.5");
-    settings.end = String("1.5");
+    settings.input = try fixture.input.clone(a);
+    settings.start = try String("0.5");
+    settings.end = try String("1.5");
     for (var format: i64 = 0; format < 6; format += 1) {
       var largest: i64 = 0;
       settings.format = format;
@@ -313,8 +373,9 @@ module video_tests {
         settings.quality = quality;
         settings.audio = quality != 4;
         settings.output = fixture.path("preset");
-        settings.output.append(`-${format}-${quality}`);
-        settings.output.append(video.extension(format));
+        try settings.output.append(try `-${format}-${quality}`);
+
+        try settings.output.append(video.extension(format));
         try job.convert(settings);
         try video_fixtures.finish(job);
         try std.test.assert_eq(job.percent, 100);
@@ -331,30 +392,32 @@ module video_tests {
         try result.probe(settings.output);
         try video_fixtures.finish(result);
         try std.test.assert(result.media.duration >= 0.9 and result.media.duration <= 1.3);
-        var codec = String(
+        var codec = try String(
           format == 5 ? "gif" : (format == 2 ? "vp9" : (format == 4 ? "mpeg4" : "h264"))
         );
-        var audio = String(
+
+        var audio = try String(
           quality == 4 or format == 5 ? "none" : (format == 2 ? "opus" : (format == 4 ? "mp3" : "aac"))
         );
+
         try std.test.assert(result.media.codec.equals(codec));
         try std.test.assert(result.media.audio.equals(audio));
         try std.test.assert_eq(result.media.width, 320);
         try std.test.assert_eq(result.media.height, 240);
         if (format == 5) {
-          var frames = std.process.Command(a, "ffprobe");
-          frames.add_arg("-v");
-          frames.add_arg("error");
-          frames.add_arg("-ignore_loop");
-          frames.add_arg("1");
-          frames.add_arg("-count_frames");
-          frames.add_arg("-select_streams");
-          frames.add_arg("v:0");
-          frames.add_arg("-show_entries");
-          frames.add_arg("stream=nb_read_frames");
-          frames.add_arg("-of");
-          frames.add_arg("default=noprint_wrappers=1:nokey=1");
-          frames.add_arg(settings.output);
+          var frames = try std.process.Command(a, "ffprobe");
+          try frames.add_arg("-v");
+          try frames.add_arg("error");
+          try frames.add_arg("-ignore_loop");
+          try frames.add_arg("1");
+          try frames.add_arg("-count_frames");
+          try frames.add_arg("-select_streams");
+          try frames.add_arg("v:0");
+          try frames.add_arg("-show_entries");
+          try frames.add_arg("stream=nb_read_frames");
+          try frames.add_arg("-of");
+          try frames.add_arg("default=noprint_wrappers=1:nokey=1");
+          try frames.add_arg(settings.output);
           var count = try video.capture(frames);
           var expected = quality == 0 ? 30 : (quality == 1 ? 24 : (quality == 2 ? 20 : (quality ==
             3 ? 15 : 10)));
@@ -371,18 +434,18 @@ module video_tests {
 
   /** Keeps directory names intact and rejects unsupported preset values before encoding. */
   test_function format_paths_and_validation() TestResult<void> {
-    var path = String("/videos.mp4/clip.webm");
-    var changed = video.output_path(path, 3);
+    var path = try String("/videos.mp4/clip.webm");
+    var changed = try video.output_path(path, 3);
     try std.test.assert(changed.equals_literal("/videos.mp4/clip.mkv"));
-    path = String("/videos.mp4/clip");
-    changed = video.output_path(path, 4);
+    path = try String("/videos.mp4/clip");
+    changed = try video.output_path(path, 4);
     try std.test.assert(changed.equals_literal("/videos.mp4/clip.avi"));
-    changed = video.output_path(changed, 5);
+    changed = try video.output_path(changed, 5);
     try std.test.assert(changed.equals_literal("/videos.mp4/clip.gif"));
-    changed = video.output_path(changed, 0);
+    changed = try video.output_path(changed, 0);
     try std.test.assert(changed.equals_literal("/videos.mp4/clip.mp4"));
-    path = String("");
-    changed = video.output_path(path, 2);
+    path = try String("");
+    changed = try video.output_path(path, 2);
     try std.test.assert(changed.is_empty());
     var settings = video.Settings();
     var media = video.Media();
@@ -409,9 +472,9 @@ module video_tests {
     try job.probe(fixture.input);
     try video_fixtures.finish(job);
     var settings = video.Settings();
-    settings.input = fixture.input.clone(a);
+    settings.input = try fixture.input.clone(a);
     settings.output = fixture.path("existing.mp4");
-    var sentinel = String("keep this file");
+    var sentinel = try String("keep this file");
     try std.io.write_string(settings.output, sentinel);
     match job.convert(settings) {
       SystemResult.Error(_) => {},
@@ -426,9 +489,9 @@ module video_tests {
     try video_fixtures.finish(job);
     try std.test.assert(job.output_size > 0);
     var alias = fixture.path("alias.mp4");
-    var link = std.process.Command(a, "ln");
-    link.add_arg(fixture.input);
-    link.add_arg(alias);
+    var link = try std.process.Command(a, "ln");
+    try link.add_arg(fixture.input);
+    try link.add_arg(alias);
     try video.capture(link);
     settings.output = alias;
     match job.convert(settings) {
@@ -437,7 +500,7 @@ module video_tests {
         try std.test.assert(false);
       }
     };
-    settings.output = fixture.input.clone(a);
+    settings.output = try fixture.input.clone(a);
     settings.format = 1;
     match job.convert(settings) {
       SystemResult.Error(_) => {},
@@ -456,7 +519,7 @@ module video_tests {
     try job.probe(fixture.input);
     try video_fixtures.finish(job);
     var settings = video.Settings();
-    settings.input = fixture.input.clone(a);
+    settings.input = try fixture.input.clone(a);
     settings.output = fixture.path("cancelled.mp4");
     try job.convert(settings);
     job.cancel();
@@ -466,7 +529,7 @@ module video_tests {
     );
     var before = try std.io.read_dir(a, fixture.directory);
     try std.test.assert_eq(before.size(), 1);
-    var corrupt = String("not a video");
+    var corrupt = try String("not a video");
     try std.io.write_string(fixture.input, corrupt);
     try job.convert(settings);
     match video_fixtures.finish(job) {
@@ -488,16 +551,16 @@ module video_tests {
     var a = make_heap_allocator();
     var fixture = try video_fixtures.Fixture();
     var rotated = fixture.path("rotated.mov");
-    var remux = std.process.Command(a, "ffmpeg");
-    remux.add_arg("-v");
-    remux.add_arg("error");
-    remux.add_arg("-display_rotation");
-    remux.add_arg("90");
-    remux.add_arg("-i");
-    remux.add_arg(fixture.input);
-    remux.add_arg("-c");
-    remux.add_arg("copy");
-    remux.add_arg(rotated);
+    var remux = try std.process.Command(a, "ffmpeg");
+    try remux.add_arg("-v");
+    try remux.add_arg("error");
+    try remux.add_arg("-display_rotation");
+    try remux.add_arg("90");
+    try remux.add_arg("-i");
+    try remux.add_arg(fixture.input);
+    try remux.add_arg("-c");
+    try remux.add_arg("copy");
+    try remux.add_arg(rotated);
     try video.capture(remux);
     var job = video.Job();
     try job.probe(rotated);
@@ -513,20 +576,20 @@ module video_tests {
     try std.test.assert_eq(upright.media.width, 240);
     try std.test.assert_eq(upright.media.height, 320);
     var large = fixture.path("large.mov");
-    var enlarge = std.process.Command(a, "ffmpeg");
-    enlarge.add_arg("-v");
-    enlarge.add_arg("error");
-    enlarge.add_arg("-i");
-    enlarge.add_arg(fixture.input);
-    enlarge.add_arg("-t");
-    enlarge.add_arg("1");
-    enlarge.add_arg("-vf");
-    enlarge.add_arg("scale=1280:960");
-    enlarge.add_arg("-threads");
-    enlarge.add_arg("2");
-    enlarge.add_arg("-filter_threads");
-    enlarge.add_arg("1");
-    enlarge.add_arg(large);
+    var enlarge = try std.process.Command(a, "ffmpeg");
+    try enlarge.add_arg("-v");
+    try enlarge.add_arg("error");
+    try enlarge.add_arg("-i");
+    try enlarge.add_arg(fixture.input);
+    try enlarge.add_arg("-t");
+    try enlarge.add_arg("1");
+    try enlarge.add_arg("-vf");
+    try enlarge.add_arg("scale=1280:960");
+    try enlarge.add_arg("-threads");
+    try enlarge.add_arg("2");
+    try enlarge.add_arg("-filter_threads");
+    try enlarge.add_arg("1");
+    try enlarge.add_arg(large);
     try video.capture(enlarge);
     try job.probe(large);
     try video_fixtures.finish(job);
@@ -573,7 +636,7 @@ module video_tests {
     var a = make_heap_allocator();
     var fixture = try video_fixtures.Fixture();
     var settings = video.Settings();
-    settings.input = fixture.input.clone(a);
+    settings.input = try fixture.input.clone(a);
     settings.output = fixture.path("shutdown.mp4");
     if (true) {
       var job = video.Job();
@@ -588,7 +651,8 @@ module video_tests {
     try job.probe(fixture.input);
     try video_fixtures.finish(job);
     try job.convert(settings);
-    var sentinel = String("created while conversion was running");
+    var sentinel = try String("created while conversion was running");
+
     try std.io.write_string(settings.output, sentinel);
     match video_fixtures.finish(job) {
       SystemResult.Error(error) => {

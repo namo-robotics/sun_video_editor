@@ -11,35 +11,35 @@ module video_fixtures {
     /** Creates a test pattern with audio using bounded encoder threads. */
     init() SystemResult<void> {
       var a = make_heap_allocator();
-      var temporary = std.process.Command(a, "mktemp");
-      temporary.add_arg("-d");
-      temporary.add_arg("tmp/video-test.XXXXXX");
+      var temporary = try std.process.Command(a, "mktemp");
+      try temporary.add_arg("-d");
+      try temporary.add_arg("tmp/video-test.XXXXXX");
       this.directory = try video.capture(temporary);
       this.input = this.path("input $sample; clip.mov");
-      var command = std.process.Command(a, "ffmpeg");
-      command.add_arg("-hide_banner");
-      command.add_arg("-loglevel");
-      command.add_arg("error");
-      command.add_arg("-nostdin");
-      command.add_arg("-f");
-      command.add_arg("lavfi");
-      command.add_arg("-i");
-      command.add_arg("testsrc2=size=320x240:rate=24");
-      command.add_arg("-f");
-      command.add_arg("lavfi");
-      command.add_arg("-i");
-      command.add_arg("sine=frequency=440:sample_rate=48000");
-      command.add_arg("-t");
-      command.add_arg("4");
-      command.add_arg("-c:v");
-      command.add_arg("libx264");
-      command.add_arg("-crf");
-      command.add_arg("12");
-      command.add_arg("-threads");
-      command.add_arg("2");
-      command.add_arg("-c:a");
-      command.add_arg("aac");
-      command.add_arg(this.input);
+      var command = try std.process.Command(a, "ffmpeg");
+      try command.add_arg("-hide_banner");
+      try command.add_arg("-loglevel");
+      try command.add_arg("error");
+      try command.add_arg("-nostdin");
+      try command.add_arg("-f");
+      try command.add_arg("lavfi");
+      try command.add_arg("-i");
+      try command.add_arg("testsrc2=size=320x240:rate=24");
+      try command.add_arg("-f");
+      try command.add_arg("lavfi");
+      try command.add_arg("-i");
+      try command.add_arg("sine=frequency=440:sample_rate=48000");
+      try command.add_arg("-t");
+      try command.add_arg("4");
+      try command.add_arg("-c:v");
+      try command.add_arg("libx264");
+      try command.add_arg("-crf");
+      try command.add_arg("12");
+      try command.add_arg("-threads");
+      try command.add_arg("2");
+      try command.add_arg("-c:a");
+      try command.add_arg("aac");
+      try command.add_arg(this.input);
       try video.capture(command);
       return SystemResult.Ok;
     }
@@ -47,20 +47,22 @@ module video_fixtures {
     /** Deletes only this fixture's exclusive directory and its generated outputs. */
     deinit() {
       if (not this.directory.is_empty()) {
-        var command = std.process.Command(make_heap_allocator(), "rm");
-        command.add_arg("-rf");
-        command.add_arg("--");
-        command.add_arg(this.directory);
+        var command = try std.process.Command(make_heap_allocator(), "rm");
+
+        try command.add_arg("-rf");
+        try command.add_arg("--");
+        try command.add_arg(this.directory);
         ignore_error(command.status());
       }
     }
 
     /** Builds a child path without interpreting its characters. */
-    public const method path(name: static_ptr<u8>) String {
-      var result = this.directory.clone(make_heap_allocator());
-      result.append("/");
-      result.append(name);
-      return result;
+    public const method path(name: static_ptr<u8>) AllocationResult<String> {
+      var result = try this.directory.clone(make_heap_allocator());
+
+      try result.append("/");
+      try result.append(name);
+      return AllocationResult.Ok(result);
     }
   }
 

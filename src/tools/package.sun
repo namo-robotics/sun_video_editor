@@ -7,29 +7,35 @@ module editor_package {
   function capture(command: ref std.process.Command) SystemResult<String> {
     var output = try command.output();
     if (output.status() != 0) {
-      eprint(output.stderr());
-      return SystemResult.Error(Error(output.status(), "Packaging command failed"));
+      std.io.eprint(output.stderr());
+      return SystemResult.Error(
+        try Error(output.status(), "Packaging command failed")
+      );
     }
-    return SystemResult.Ok(output.stdout().clone(make_heap_allocator()));
+    return SystemResult.Ok(
+      try output.stdout().clone(make_heap_allocator())
+    );
   }
 
   /** Installs one file and creates its parent directories with an explicit mode. */
   function install_file(source: String, destination: String, executable: bool) SystemResult<void> {
-    var command = std.process.Command(make_heap_allocator(), "install");
-    command.add_arg("-D");
-    command.add_arg("-m");
-    command.add_arg(executable ? "755" : "644");
-    command.add_arg(source);
-    command.add_arg(destination);
+    var command = try std.process.Command(make_heap_allocator(), "install");
+
+    try command.add_arg("-D");
+    try command.add_arg("-m");
+    try command.add_arg(executable ? "755" : "644");
+    try command.add_arg(source);
+    try command.add_arg(destination);
     var output = try capture(command);
     return SystemResult.Ok;
   }
 
   /** Reads one Debian changelog field without duplicating package metadata. */
   function field(name: static_ptr<u8>) SystemResult<String> {
-    var command = std.process.Command(make_heap_allocator(), "dpkg-parsechangelog");
-    command.add_arg("-S");
-    command.add_arg(name);
+    var command = try std.process.Command(make_heap_allocator(), "dpkg-parsechangelog");
+
+    try command.add_arg("-S");
+    try command.add_arg(name);
     var result = try capture(command);
     result.trim();
     return SystemResult.Ok(result);
@@ -50,69 +56,73 @@ module editor_package {
     if (not std.io.is_file(target.output) or not helper_exists) {
       return SystemResult.Error(Error(1, "Build and test the video target before packaging"));
     }
-    var clear = std.process.Command(a, "rm");
-    clear.add_arg("-rf");
-    clear.add_arg("--");
-    clear.add_arg(destination);
+    var clear = try std.process.Command(a, "rm");
+    try clear.add_arg("-rf");
+    try clear.add_arg("--");
+    try clear.add_arg(destination);
     var cleared = try capture(clear);
-    try install_file(target.output.clone(a), `${destination}/usr/bin/sun_video_editor`, true);
-    var icon_names = String("editor screen window selection camera record cut delete").split_whitespace(
+    try install_file(
+      try target.output.clone(a),
+      try `${destination}/usr/bin/sun_video_editor`,
+      true
+    );
+    var icon_names = (try String("editor screen window selection camera record cut delete")).split_whitespace(
       a
     );
     for (var icon: ref String in icon_names) {
       try install_file(
-        `packaging/icons/${icon}.svg`,
-        `${destination}/usr/bin/sun_video_editor_capture.icons/${icon}.svg`,
+        try `packaging/icons/${icon}.svg`,
+        try `${destination}/usr/bin/sun_video_editor_capture.icons/${icon}.svg`,
         false
       );
     }
     try install_file(
-      helper.output.clone(a),
-      `${destination}/usr/bin/sun_video_editor_capture`,
+      try helper.output.clone(a),
+      try `${destination}/usr/bin/sun_video_editor_capture`,
       true
     );
     try install_file(
-      String("packaging/sun-video-editor.desktop"),
-      `${destination}/usr/share/applications/sun-video-editor.desktop`,
+      try String("packaging/sun-video-editor.desktop"),
+      try `${destination}/usr/share/applications/sun-video-editor.desktop`,
       false
     );
     try install_file(
-      String("packaging/sun-video-editor.png"),
-      `${destination}/usr/share/pixmaps/sun-video-editor.png`,
+      try String("packaging/sun-video-editor.png"),
+      try `${destination}/usr/share/pixmaps/sun-video-editor.png`,
       false
     );
     try install_file(
-      String("debian/copyright"),
-      `${destination}/usr/share/doc/sun-video-editor/copyright`,
+      try String("debian/copyright"),
+      try `${destination}/usr/share/doc/sun-video-editor/copyright`,
       false
     );
-    var env = std.env.Env(a);
+    var env = try std.env.Env(a);
     var gtk_source = match env.get("SUN_GOBJECT_SOURCE") {
-      Option.Some(value) => value.clone(a),
-      Option.None => String("build/dependencies/sun_gobject")
+      Option.Some(value) => try value.clone(a),
+      Option.None => try String("build/dependencies/sun_gobject")
     };
     var ui_source = match env.get("SUN_UI_SOURCE") {
-      Option.Some(value) => value.clone(a),
-      Option.None => String("build/dependencies/sun_ui")
+      Option.Some(value) => try value.clone(a),
+      Option.None => try String("build/dependencies/sun_ui")
     };
     try install_file(
-      `${ui_source}/LICENSE`,
-      `${destination}/usr/share/doc/sun-video-editor/copyright.sun_ui`,
+      try `${ui_source}/LICENSE`,
+      try `${destination}/usr/share/doc/sun-video-editor/copyright.sun_ui`,
       false
     );
     try install_file(
-      `${gtk_source}/LICENSE`,
-      `${destination}/usr/share/doc/sun-video-editor/copyright.sun_gobject`,
+      try `${gtk_source}/LICENSE`,
+      try `${destination}/usr/share/doc/sun-video-editor/copyright.sun_gobject`,
       false
     );
     try install_file(
-      String("/usr/share/doc/sun/copyright"),
-      `${destination}/usr/share/doc/sun-video-editor/copyright.sun`,
+      try String("/usr/share/doc/sun/copyright"),
+      try `${destination}/usr/share/doc/sun-video-editor/copyright.sun`,
       false
     );
     try install_file(
-      String("build/sun-version.txt"),
-      `${destination}/usr/share/doc/sun-video-editor/sun-version.txt`,
+      try String("build/sun-version.txt"),
+      try `${destination}/usr/share/doc/sun-video-editor/sun-version.txt`,
       false
     );
     return SystemResult.Ok;
@@ -121,8 +131,8 @@ module editor_package {
   /** Generates exact linked-library dependencies and builds a root-owned Debian archive. */
   public function deb() SystemResult<void> {
     var a = make_heap_allocator();
-    var architecture = std.process.Command(a, "dpkg");
-    architecture.add_arg("--print-architecture");
+    var architecture = try std.process.Command(a, "dpkg");
+    try architecture.add_arg("--print-architecture");
     var arch = try capture(architecture);
     arch.trim();
     if (not arch.equals_literal("amd64")) {
@@ -130,68 +140,73 @@ module editor_package {
     }
     var version = try field("Version");
     var name = try field("Source");
-    var package = `build/${name}_${version}_${arch}.deb`;
-    try stage(String("build/editor-package/root"));
+    var package = try `build/${name}_${version}_${arch}.deb`;
+    try stage(try String("build/editor-package/root"));
     var target = try build_targets.load("sun_video_editor");
-    var dependencies = std.process.Command(a, "dpkg-shlibdeps");
-    dependencies.add_arg("-O");
-    dependencies.add_arg("-e");
-    dependencies.add_arg(target.output);
-    dependencies.add_arg("-e");
+    var dependencies = try std.process.Command(a, "dpkg-shlibdeps");
+
+    try dependencies.add_arg("-O");
+    try dependencies.add_arg("-e");
+    try dependencies.add_arg(target.output);
+    try dependencies.add_arg("-e");
     var helper = try build_targets.load("sun_video_editor_capture");
-    dependencies.add_arg(helper.output);
+    try dependencies.add_arg(helper.output);
     var variables = try capture(dependencies);
-    variables.append("misc:Depends=\n");
-    var variables_path = String("build/editor-package/substvars");
+    try variables.append("misc:Depends=\n");
+    var variables_path = try String("build/editor-package/substvars");
+
     try std.io.write_string(variables_path, variables);
-    var mkdir = std.process.Command(a, "mkdir");
-    mkdir.add_arg("-p");
-    mkdir.add_arg("build/editor-package/root/DEBIAN");
+    var mkdir = try std.process.Command(a, "mkdir");
+    try mkdir.add_arg("-p");
+    try mkdir.add_arg("build/editor-package/root/DEBIAN");
     var created = try capture(mkdir);
-    var control = std.process.Command(a, "dpkg-gencontrol");
-    control.add_arg("-psun-video-editor");
-    control.add_arg("-Pbuild/editor-package/root");
-    control.add_arg("-Tbuild/editor-package/substvars");
-    control.add_arg("-fbuild/editor-package/files");
-    control.add_arg("-Obuild/editor-package/root/DEBIAN/control");
+    var control = try std.process.Command(a, "dpkg-gencontrol");
+    try control.add_arg("-psun-video-editor");
+    try control.add_arg("-Pbuild/editor-package/root");
+    try control.add_arg("-Tbuild/editor-package/substvars");
+    try control.add_arg("-fbuild/editor-package/files");
+    try control.add_arg("-Obuild/editor-package/root/DEBIAN/control");
     var generated = try capture(control);
-    var archive = std.process.Command(a, "dpkg-deb");
-    archive.add_arg("--root-owner-group");
-    archive.add_arg("--build");
-    archive.add_arg("build/editor-package/root");
-    archive.add_arg(package);
+    var archive = try std.process.Command(a, "dpkg-deb");
+    try archive.add_arg("--root-owner-group");
+    try archive.add_arg("--build");
+    try archive.add_arg("build/editor-package/root");
+    try archive.add_arg(package);
     var output = try capture(archive);
-    print(output);
+    std.io.print(output);
     return SystemResult.Ok;
   }
 }
 
 /** Selects an install payload or Debian archive from the workspace root. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
   var a = make_heap_allocator();
-  var environment = std.env.Env(a);
-  var args = environment.args(argc, argv);
+  var environment = try std.env.Env(a);
+  var args = try environment.args(argc, argv);
   var result: SystemResult<void> = SystemResult.Ok;
   if (args.size() == 2 and args[1].equals_literal("deb")) {
     result = editor_package.deb();
   } else if (args.size() == 3 and args[1].equals_literal("stage")) {
-    result = editor_package.stage(args[2].clone(a));
+    result = editor_package.stage(try args[2].clone(a));
   } else {
-    eprintln("Usage: sun src/tools/package.sun -- deb | stage DESTINATION");
-    return 1;
+    std.io.eprintln("Usage: sun src/tools/package.sun -- deb | stage DESTINATION");
+    return AllocationResult.Ok(1);
   }
-  return match result {
-    SystemResult.Ok => 0,
-    SystemResult.Error(error) => {
-      eprintln(error.message());
-      return 1;
+  return AllocationResult.Ok(
+    match result {
+      SystemResult.Ok => 0,
+      SystemResult.Error(error) => {
+        std.io.eprintln(try error.message());
+        return AllocationResult.Ok(1);
+      }
     }
-  };
+  );
 }
 manifest {
   libraries: [
     "stdlib.moon"
   ], source_files: [
+    "../results.sun",
     "targets.sun"
   ]
 }

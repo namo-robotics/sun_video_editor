@@ -44,7 +44,7 @@ module capture_backend {
     public var finishing: bool = false;
     public var completed: bool = false;
     public var cancelled: bool = false;
-    public var destination: String = String("");
+    public var destination: String;
     public var logical_width: i32 = 0;
     public var logical_height: i32 = 0;
     public var x: i32 = 0;
@@ -54,7 +54,15 @@ module capture_backend {
     var synthetic: bool = false;
 
     /** Stores settings without requesting permission or creating a file. */
-    init(video: bool, area: bool, window: bool, cursor: bool, delay: i64) {
+    init(
+      video: bool,
+      area: bool,
+      window: bool,
+      cursor: bool,
+      delay: i64
+    ) AllocationResult<void> {
+      this.destination = try String("");
+
       this.video = video;
       this.area = area;
       this.window = window;
@@ -66,9 +74,9 @@ module capture_backend {
     deinit() {
       this.pipeline.close();
       if (this.video and not this.completed and not this.cancelled) {
-        var recovery = this.output.preserve();
+        var recovery = try this.output.preserve();
         if (not recovery.is_empty()) {
-          println(`Recovery: ${recovery}`);
+          std.io.println(try `Recovery: ${recovery}`);
         }
       }
       this.selector.close();
@@ -91,28 +99,32 @@ module capture_backend {
     }
 
     /** Builds a bounded live compositor and fragmented MP4 writer, or a lossless screenshot pipeline. */
-    public method description(source: ref String) String {
+    public method description(source: ref String) AllocationResult<String> {
       var crop = this.width > 0 ? "videoconvert ! video/x-raw,format=RGB ! videocrop name=region ! " : "";
       var visible = this.window ? "videocrop name=window_crop ! " : "";
-      var screen = `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(visible)}${String(crop)}videoconvert`;
+      var screen = try `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(visible)}${String(crop)}videoconvert`;
+
       if (not this.video) {
-        return `${screen} ! pngenc snapshot=true ! fdsink name=output`;
+        return AllocationResult.Ok(
+          try `${screen} ! pngenc snapshot=true ! fdsink name=output`
+        );
       }
       var threads = desktop.encoder_threads();
-      var result = `${screen} ! identity name=screen_geometry ! presenter.sink_0 compositor name=presenter background=black sink_0::zorder=0 ! capsfilter name=canvas ! videoconvert ! video/x-raw,format=I420,colorimetry=bt709 ! videorate drop-only=true max-rate=30 ! x264enc name=encoder tune=zerolatency speed-preset=veryfast pass=qual quantizer=20 key-int-max=30 threads=${threads} ! video/x-h264,stream-format=avc,alignment=au ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! mux.video_0 mp4mux name=mux fragment-duration=1000 streamable=true ! fdsink name=output`;
+      var result = try `${screen} ! identity name=screen_geometry ! presenter.sink_0 compositor name=presenter background=black sink_0::zorder=0 ! capsfilter name=canvas ! videoconvert ! video/x-raw,format=I420,colorimetry=bt709 ! videorate drop-only=true max-rate=30 ! x264enc name=encoder tune=zerolatency speed-preset=veryfast pass=qual quantizer=20 key-int-max=30 threads=${threads} ! video/x-h264,stream-format=avc,alignment=au ! queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! mux.video_0 mp4mux name=mux fragment-duration=1000 streamable=true ! fdsink name=output`;
+
       if (this.presenter.camera) {
         var camera = this.synthetic ? "videotestsrc is-live=true pattern=red ! video/x-raw,width=160,height=120,framerate=30/1" : "v4l2src device=/dev/video0 do-timestamp=true";
-        result.append(
-          ` ${String(camera)} ! queue name=camera_queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! identity name=camera_geometry ! presenter.sink_1`
+        try result.append(
+          try ` ${String(camera)} ! queue name=camera_queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! identity name=camera_geometry ! presenter.sink_1`
         );
       }
       if (this.presenter.microphone) {
         var audio = this.synthetic ? "audiotestsrc is-live=true wave=sine" : "pulsesrc do-timestamp=true";
-        result.append(
-          ` ${String(audio)} ! queue name=microphone_queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! avenc_aac bitrate=128000 ! queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! mux.audio_0`
+        try result.append(
+          try ` ${String(audio)} ! queue name=microphone_queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! avenc_aac bitrate=128000 ! queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! mux.audio_0`
         );
       }
-      return result;
+      return AllocationResult.Ok(result);
     }
 
     /** Starts a stream after timing; tests can supply a synthetic source and private output directory. */
@@ -126,8 +138,8 @@ module capture_backend {
       }
       this.synthetic = synthetic;
       var remote: i32 = -1;
-      var target = String("");
-      var node = String("");
+      var target = try String("");
+      var node = try String("");
       if (not synthetic) {
         remote = try this.portal.remote();
         target = this.portal.target(true);
@@ -137,8 +149,8 @@ module capture_backend {
       var stamp = desktop.filename_stamp();
       var name = this.video ? "Screencast" : "Screenshot";
       var extension = this.video ? ".mp4" : ".png";
-      this.destination = `${directory}/${name} ${stamp}${extension}`;
-      var description = this.description(source);
+      this.destination = try `${directory}/${name} ${stamp}${extension}`;
+      var description = try this.description(source);
       try this.pipeline.configure(description, this.output, remote, target, node);
       if (this.window) {
         try this.pipeline.crop_window();
@@ -181,22 +193,24 @@ module capture_backend {
     }
 
     /** Discards incomplete output through the owned resources' cleanup paths. */
-    public method cancel() void {
+    public method cancel() AllocationResult<void> {
       if (this.finishing) {
         this.pipeline.close();
-        var recovery = this.output.preserve();
+        var recovery = try this.output.preserve();
         this.cancelled = true;
         this.selector.close();
-        println("Saving interrupted; retaining the recording for recovery.");
+        std.io.println("Saving interrupted; retaining the recording for recovery.");
         if (not recovery.is_empty()) {
-          println(`Recovery: ${recovery}`);
+          std.io.println(try `Recovery: ${recovery}`);
         }
-        return;
+        return AllocationResult.Ok;
       }
       this.cancelled = true;
       this.pipeline.close();
       this.selector.close();
-      println("Capture cancelled.");
+      std.io.println("Capture cancelled.");
+
+      return AllocationResult.Ok;
     }
 
     /** Handles portal revocation and source failure consistently in either delivery order. */
@@ -211,12 +225,12 @@ module capture_backend {
     public method pipeline_event(event: i32) SystemResult<void> {
       if (event == 1) {
         this.recording = true;
-        println(this.video ? "Recording…" : "Taking screenshot…");
+        std.io.println(this.video ? "Recording…" : "Taking screenshot…");
       } else if (event == 2) {
         this.pipeline.close();
         try this.output.publish(this.destination);
         this.completed = true;
-        println(`Saved: ${this.destination}`);
+        std.io.println(try `Saved: ${this.destination}`);
       } else if (event == 3) {
         if (this.video and this.recording) {
           try this.stop();
@@ -250,7 +264,7 @@ module capture_backend {
             var py = try this.portal.geometry(1);
             this.logical_width = try this.portal.geometry(2);
             this.logical_height = try this.portal.geometry(3);
-            println("Drag a rectangle on the screen. Release to confirm; Esc to cancel.");
+            std.io.println("Drag a rectangle on the screen. Release to confirm; Esc to cancel.");
             try this.selector.open(px, py, this.logical_width, this.logical_height);
           } else {
             this.countdown();
@@ -275,16 +289,19 @@ module capture_backend {
         var remaining = this.delay * 1000 - this.clock.elapsed().as_millis();
         var seconds = remaining <= 0 ? 0 : (remaining + 999) / 1000;
         if (seconds != this.previous_seconds) {
-          println(`Capture starts in ${seconds} seconds…`);
+          std.io.println(
+            try `Capture starts in ${seconds} seconds…`
+          );
           this.previous_seconds = seconds;
         }
         if (this.countdown_ready()) {
           var root = desktop.media_directory(this.video);
           var subdirectory = this.video ? "Screencasts" : "Screenshots";
-          var directory = `${root}/${subdirectory}`;
-          var source = String(
+          var directory = try `${root}/${subdirectory}`;
+          var source = try String(
             "pipewiresrc name=source do-timestamp=true keepalive-time=100 resend-last=true"
           );
+
           try this.start(source, directory, false);
         }
       }

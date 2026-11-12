@@ -19,20 +19,20 @@
               <Section text="01   SOURCE &amp; PREVIEW" expandX="{false}" />
             </Panel.header>
             <Panel.body>
-              <Label text="{source_name(state)}" horizontal="Start" />
-              <Label text="{metadata(state)}" styleResource="muted" horizontal="Start" />
-              <Video text="{preview_source(state)}" duration="{duration_us(state)}" frameRateNum="{state.job.media.frame_rate_num}" frameRateDen="{state.job.media.frame_rate_den}" trimStart="{start_us(state)}" trimEnd="{end_us(state)}" position="{state.position}" trimRanges="{timeline_ranges(state)}" activeRange="{state.active_section}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
+              <Label text="{try source_name(state)}" horizontal="Start" />
+              <Label text="{try metadata(state)}" styleResource="muted" horizontal="Start" />
+              <Video text="{try preview_source(state)}" duration="{duration_us(state)}" frameRateNum="{state.job.media.frame_rate_num}" frameRateDen="{state.job.media.frame_rate_den}" trimStart="{try start_us(state)}" trimEnd="{try end_us(state)}" position="{state.position}" trimRanges="{try timeline_ranges(state)}" activeRange="{state.active_section}" changeAction="15" enabled="{state.job.mode == 0}" spacing="12" expandX="true" expandY="true" />
               <Row spacing="12">
                 <Section text="02   TRIM YOUR CLIP" expandX="{true}" />
-                <Button key="split-section" icon="{capture_icon(state, &quot;cut&quot;)}" tooltip="Split section at playhead" action="17" width="40" height="36" enabled="{can_split(state)}" />
-                <Button key="remove-section" icon="{capture_icon(state, &quot;delete&quot;)}" tooltip="Remove selected kept section" action="19" width="40" height="36" enabled="{state.job.mode == 0 and state.settings.sections.size() > 1}" />
+                <Button key="split-section" icon="{try capture_icon(state, &quot;cut&quot;)}" tooltip="Split section at playhead" action="17" width="40" height="36" enabled="{try can_split(state)}" />
+                <Button key="remove-section" icon="{try capture_icon(state, &quot;delete&quot;)}" tooltip="Remove selected kept section" action="19" width="40" height="36" enabled="{state.job.mode == 0 and state.settings.sections.size() > 1}" />
                 <Button text="Reset trim" action="16" enabled="{state.job.ready and state.job.mode == 0}" />
               </Row>
               <Label text="Keep what lies between inward-facing trim bars. Seek, split, then move the inner bars apart to cut out a gap." styleResource="muted" horizontal="Start" />
               <If test="{state.settings.sections.size() > 0}">
                 <Row spacing="8">
-                  <For each="section" in="{section_keys(state)}" key="{section}">
-                    <Button text="{`Section ${section}`}" action="18" payload="{section}" enabled="{state.job.mode == 0}" styleResource="{String(state.active_section == section ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
+                  <For each="section" in="{try section_keys(state)}" key="{section}">
+                    <Button text="{try `Section ${section}`}" action="18" payload="{section}" enabled="{state.job.mode == 0}" styleResource="{try String(state.active_section == section ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
                   </For>
                 </Row>
               </If>
@@ -41,10 +41,10 @@
                 <Grid.Rows><Track kind="Auto" /><Track kind="Auto" /></Grid.Rows>
                 <Label text="Start time" horizontal="Start" styleResource="muted" />
                 <Label column="1" text="End time" horizontal="Start" styleResource="muted" />
-                <TextInput row="1" value="{state.settings.start.clone(a)}" changeAction="3" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
-                <TextInput row="1" column="1" value="{state.settings.end.clone(a)}" changeAction="4" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+                <TextInput row="1" value="{try state.settings.start.clone(a)}" changeAction="3" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
+                <TextInput row="1" column="1" value="{try state.settings.end.clone(a)}" changeAction="4" payload="{state.active_section}" enabled="{state.job.ready and state.job.mode == 0}" expandX="true" />
               </Grid>
-              <Label text="{selection_summary(state)}" foregroundResource="accent" horizontal="Start" />
+              <Label text="{try selection_summary(state)}" foregroundResource="accent" horizontal="Start" />
             </Panel.body>
           </Panel>
           <Panel key="export" column="{1}" expandX="{false}">
@@ -76,19 +76,19 @@
               <Checkbox text="Keep audio" checked="{state.settings.audio and state.settings.format != 5}" changeAction="8" enabled="{state.job.mode == 0 and state.settings.format != 5}" />
               <LabeledField text="Save as">
                 <LabeledField.body>
-                  <TextInput value="{state.settings.output.clone(a)}" changeAction="2" enabled="{state.job.mode == 0}" />
+                  <TextInput value="{try state.settings.output.clone(a)}" changeAction="2" enabled="{state.job.mode == 0}" />
                 </LabeledField.body>
               </LabeledField>
               <Button text="Choose destination…" action="14" enabled="{state.job.mode == 0}" />
               <Checkbox text="Replace existing output" checked="{state.settings.overwrite}" changeAction="9" enabled="{state.job.mode == 0}" />
-              <Button text="{String(state.confirm_export ? &quot;Replace and export&quot; : &quot;Export&quot;)}" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
+              <Button text="{try String(state.confirm_export ? &quot;Replace and export&quot; : &quot;Export&quot;)}" action="11" enabled="{state.job.mode == 0 and state.job.ready}" height="48" styleResource="primary" />
               <Button text="Cancel export" action="12" visible="{state.job.mode != 0}" enabled="{state.job.mode != 0}" />
-              <Label text="{progress_label(state)}" foregroundResource="accent" horizontal="Start" />
+              <Label text="{try progress_label(state)}" foregroundResource="accent" horizontal="Start" />
               <Label text="Your original stays untouched." styleResource="muted" horizontal="Start" />
             </Panel.body>
           </Panel>
         </Grid>
-        <Label text="{status_text(state)}" styleResource="muted" horizontal="Start" />
+        <Label text="{try status_text(state)}" styleResource="muted" horizontal="Start" />
       </Column>
     </Scroll>
   </View>
@@ -98,11 +98,11 @@
         <Grid.Columns><Track kind="Weight" value="1" /><Track kind="Weight" value="1" /></Grid.Columns>
         <Grid.Rows><Track kind="Auto" /></Grid.Rows>
         <Column spacing="12">
-          <Image text="{capture_icon(state, &quot;editor&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+          <Image text="{try capture_icon(state, &quot;editor&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
           <Button text="Video Editor" action="101" width="240" height="72" expandX="true" styleResource="homeTile" />
         </Column>
         <Column spacing="12" column="1">
-          <Image text="{capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+          <Image text="{try capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
           <Button text="Screencast" action="102" width="240" height="72" expandX="true" styleResource="homeTile" />
         </Column>
       </Grid>
@@ -117,32 +117,32 @@
           <Label text="Capture" horizontal="Start" />
           <Row spacing="12">
             <Column spacing="12">
-              <Image text="{capture_icon(state, &quot;camera&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Image text="{try capture_icon(state, &quot;camera&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
               <ChoiceButton key="capture-photo" text="Screenshot · PNG" action="111" width="240" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.kind == 0}" fontSize="18" />
             </Column>
             <Column spacing="12">
-              <Image text="{capture_icon(state, &quot;record&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Image text="{try capture_icon(state, &quot;record&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
               <ChoiceButton key="capture-video" text="Recording · MP4" action="112" width="240" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.kind == 1}" fontSize="18" />
             </Column>
           </Row>
           <Label text="Source" horizontal="Start" />
           <Row spacing="12">
             <Column spacing="12">
-              <Image text="{capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Image text="{try capture_icon(state, &quot;screen&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
               <ChoiceButton key="capture-screen" text="Screen" action="120" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 0}" fontSize="24" />
             </Column>
             <Column spacing="12">
-              <Image text="{capture_icon(state, &quot;window&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Image text="{try capture_icon(state, &quot;window&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
               <ChoiceButton key="capture-window" text="Window" action="121" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 1}" fontSize="24" />
             </Column>
             <Column spacing="12">
-              <Image text="{capture_icon(state, &quot;selection&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
+              <Image text="{try capture_icon(state, &quot;selection&quot;)}" width="160" height="120" horizontal="Center" vertical="Center" />
               <ChoiceButton key="capture-selection" text="Selection" action="122" width="160" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" selected="{state.capture.source == 2}" fontSize="24" />
             </Column>
           </Row>
           <Label text="Share a screen, then drag directly on it. Release to confirm; Esc to cancel." visible="{state.capture.source == 2}" horizontal="Start" styleResource="muted" />
           <Label text="Delay in seconds" horizontal="Start" />
-          <TextInput value="{state.capture.delay.clone(a)}" changeAction="110" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
+          <TextInput value="{try state.capture.delay.clone(a)}" changeAction="110" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
           <Checkbox text="Include pointer" checked="{state.capture.cursor}" changeAction="113" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
           <If test="{state.capture.kind == 1}">
             <Checkbox key="capture-camera" text="Record camera" checked="{state.capture.camera}" changeAction="126" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" />
@@ -162,12 +162,12 @@
           <Row spacing="12">
             <Button text="Choose source and start" action="114" enabled="{not state.capture.process.running and not state.capture.copy_process.running}" styleResource="primary" />
             <Button visible="{state.capture.kind == 1}" text="Stop and save" action="115" enabled="{state.capture.recording and not state.capture.stopping}" />
-            <Button text="{String(state.capture.stopping ? &quot;Keep partial and stop&quot; : &quot;Cancel&quot;)}" action="116" enabled="{state.capture.process.running}" />
+            <Button text="{try String(state.capture.stopping ? &quot;Keep partial and stop&quot; : &quot;Cancel&quot;)}" action="116" enabled="{state.capture.process.running}" />
           </Row>
-          <Label text="{state.capture.message.clone(a)}" horizontal="Start" />
+          <Label text="{try state.capture.message.clone(a)}" horizontal="Start" />
           <If test="{not state.capture.saved.is_empty() and state.capture.kind == 0 and not state.capture.process.running}">
             <Row spacing="12"><Label text="Screenshot preview" horizontal="Start" /><Button text="Save as…" action="124" enabled="{not state.capture.copy_process.running}" /></Row>
-            <Image key="screenshot-preview" text="{state.capture.saved.clone(a)}" height="360" expandX="true" />
+            <Image key="screenshot-preview" text="{try state.capture.saved.clone(a)}" height="360" expandX="true" />
           </If>
           <If test="{not state.capture.saved.is_empty() and state.capture.kind == 1 and not state.capture.process.running}">
             <Row spacing="12">
@@ -176,10 +176,10 @@
               <Button text="Open in Video Editor" action="125" enabled="{not state.capture.copy_process.running and state.job.mode == 0}" />
             </Row>
             <If test="{state.capture.preview.ready}">
-              <Video trimControls="false" key="recording-preview" frameRateNum="{state.capture.preview.media.frame_rate_num}" frameRateDen="{state.capture.preview.media.frame_rate_den}" text="{state.capture.saved.clone(a)}" duration="{_convert&lt;i64&gt;(state.capture.preview.media.duration * 1000000.0)}" trimStart="{state.capture.preview_start}" trimEnd="{state.capture.preview_end}" position="{state.capture.preview_position}" changeAction="123" height="360" expandX="true" spacing="12" />
+              <Video trimControls="false" key="recording-preview" frameRateNum="{state.capture.preview.media.frame_rate_num}" frameRateDen="{state.capture.preview.media.frame_rate_den}" text="{try state.capture.saved.clone(a)}" duration="{_convert&lt;i64&gt;(state.capture.preview.media.duration * 1000000.0)}" trimStart="{state.capture.preview_start}" trimEnd="{state.capture.preview_end}" position="{state.capture.preview_position}" changeAction="123" height="360" expandX="true" spacing="12" />
             </If>
             <If test="{not state.capture.preview.ready}">
-              <Label text="{state.capture.preview.message.clone(a)}" horizontal="Start" styleResource="muted" />
+              <Label text="{try state.capture.preview.message.clone(a)}" horizontal="Start" styleResource="muted" />
             </If>
           </If>
         </Column>
