@@ -6,7 +6,7 @@ module video {
   /** Accepts released FFmpeg and ffprobe version banners with the required major version. */
   public function supported_tool_version(banner: const ref String) AllocationResult<bool> {
     var a = make_heap_allocator();
-    var fields = banner.split_whitespace(a);
+    var fields = try banner.split_whitespace(a);
     if (fields.size() < 3) {
       return AllocationResult.Ok(false);
     }
@@ -141,7 +141,7 @@ module video {
         break;
       }
     }
-    var result = match try sun_video_editor_results.access(path.substr(a, 0, length)) {
+    var result = match try sun_video_editor_results.substring(path, a, 0, length) {
       AccessResult.Ok(value) => value,
       AccessResult.OutOfBounds(_) => try path.clone(a)
     };
@@ -206,7 +206,7 @@ module video {
 
   /** Parses finite, nonnegative seconds or a colon-separated time with optional fractional seconds. */
   public function seconds(text: const ref String) SystemResult<f64> {
-    var parts = text.split(make_heap_allocator(), b':');
+    var parts = try text.split(make_heap_allocator(), b':');
     if (parts.size() < 1 or parts.size() > 3 or text.is_empty()) {
       return SystemResult.Error(Error(1, "Enter seconds or HH:MM:SS"));
     }
@@ -225,7 +225,7 @@ module video {
           return SystemResult.Error(Error(1, "Time must contain nonnegative numbers"));
         }
       }
-      var number = match part.parse_f64() {
+      var number = match try part.parse_f64() {
         Option.Some(value) => value,
         Option.None => -1.0
       };
@@ -238,10 +238,10 @@ module video {
   }
 
   /** Reads a bounded rational frame rate, leaving unknown rates available for fallback. */
-  function frame_rate(media: ref Media, text: const ref String) void {
-    var parts = text.split(make_heap_allocator(), b'/');
+  function frame_rate(media: ref Media, text: const ref String) AllocationResult<void> {
+    var parts = try text.split(make_heap_allocator(), b'/');
     if (parts.size() != 2) {
-      return;
+      return AllocationResult.Ok;
     }
     var numerator = match parts[0].parse_i64() {
       Option.Some(value) => value,
@@ -253,18 +253,19 @@ module video {
     };
     if (numerator <= 0 or numerator > 1000000000 or denominator <= 0 or denominator > 1000000000 or
       numerator > denominator * 1000000) {
-      return;
+      return AllocationResult.Ok;
     }
     media.frame_rate_num = numerator;
     media.frame_rate_den = denominator;
+    return AllocationResult.Ok;
   }
 
   /** Converts bounded probe JSON into a supported video description. */
-  function decode(document: ref std.json.Json) std.json.JsonResult<Media> {
-    var result = Media();
+  function decode(document: ref std.json.Json) Result<Media> {
+    var result = try Media();
     var format = try document.get("format");
     var duration = try field(format, "duration");
-    result.duration = match duration.parse_f64() {
+    result.duration = match try duration.parse_f64() {
       Option.Some(value) => value,
       Option.None => 0.0
     };
@@ -281,9 +282,9 @@ module video {
         result.width = integer(stream, "width");
         result.height = integer(stream, "height");
         result.codec = try field(stream, "codec_name");
-        frame_rate(result, try field(stream, "avg_frame_rate"));
+        try frame_rate(result, try field(stream, "avg_frame_rate"));
         if (result.frame_rate_num == 0) {
-          frame_rate(result, try field(stream, "r_frame_rate"));
+          try frame_rate(result, try field(stream, "r_frame_rate"));
         }
         var transfer = try field(stream, "color_transfer");
         var primaries = try field(stream, "color_primaries");
@@ -293,21 +294,39 @@ module video {
         result.audio = try field(stream, "codec_name");
       }
     }
-    return std.json.JsonResult.Ok(result);
+    return Result.Ok(result);
   }
 
   /** Rejects malformed or unbounded input metadata before it reaches export logic. */
   public function parse_probe(text: const ref String) SystemResult<Media> {
     var a = make_heap_allocator();
     var document = match std.json.parse_json(a, text) {
-      std.json.JsonResult.Ok(value) => value,
-      std.json.JsonResult.Error(_) => {
+      Result.Ok(value) => value,
+      Result.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      Result.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      Result.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      },
+      _ => {
         return SystemResult.Error(Error(1, "ffprobe returned invalid metadata"));
       }
     };
     var media = match decode(document) {
-      std.json.JsonResult.Ok(value) => value,
-      std.json.JsonResult.Error(_) => {
+      Result.Ok(value) => value,
+      Result.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      Result.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      Result.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      },
+      _ => {
         return SystemResult.Error(Error(1, "Input has no readable video metadata"));
       }
     };
@@ -538,7 +557,7 @@ module video {
     if (multiple) {
       var graph = try section_filter(settings, media);
       try graph.append(
-        try `[joined]${scale_filter(settings.resolution)}[video]`
+        try `[joined]${try scale_filter(settings.resolution)}[video]`
       );
 
       try command.add_arg("-filter_complex_threads");

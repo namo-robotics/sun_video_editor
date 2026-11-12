@@ -54,13 +54,7 @@ module capture_backend {
     var synthetic: bool = false;
 
     /** Stores settings without requesting permission or creating a file. */
-    init(
-      video: bool,
-      area: bool,
-      window: bool,
-      cursor: bool,
-      delay: i64
-    ) AllocationResult<void> {
+    init(video: bool, area: bool, window: bool, cursor: bool, delay: i64) AllocationResult<void> {
       this.destination = try String("");
 
       this.video = video;
@@ -74,12 +68,18 @@ module capture_backend {
     deinit() {
       this.pipeline.close();
       if (this.video and not this.completed and not this.cancelled) {
-        var recovery = try this.output.preserve();
-        if (not recovery.is_empty()) {
-          std.io.println(try `Recovery: ${recovery}`);
-        }
+        ignore_error(this.report_recovery());
       }
       this.selector.close();
+    }
+
+    /** Preserves unfinished output and reports its location when allocation succeeds. */
+    method report_recovery() AllocationResult<void> {
+      var recovery = try this.output.preserve();
+      if (not recovery.is_empty()) {
+        std.io.println(try `Recovery: ${recovery}`);
+      }
+      return AllocationResult.Ok;
     }
 
     /** Begins the first asynchronous permission step. */
@@ -102,7 +102,7 @@ module capture_backend {
     public method description(source: ref String) AllocationResult<String> {
       var crop = this.width > 0 ? "videoconvert ! video/x-raw,format=RGB ! videocrop name=region ! " : "";
       var visible = this.window ? "videocrop name=window_crop ! " : "";
-      var screen = try `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${String(visible)}${String(crop)}videoconvert`;
+      var screen = try `${source} ! queue name=capture_queue max-size-buffers=4 max-size-bytes=0 max-size-time=0 ! ${try String(visible)}${try String(crop)}videoconvert`;
 
       if (not this.video) {
         return AllocationResult.Ok(
@@ -115,13 +115,13 @@ module capture_backend {
       if (this.presenter.camera) {
         var camera = this.synthetic ? "videotestsrc is-live=true pattern=red ! video/x-raw,width=160,height=120,framerate=30/1" : "v4l2src device=/dev/video0 do-timestamp=true";
         try result.append(
-          try ` ${String(camera)} ! queue name=camera_queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! identity name=camera_geometry ! presenter.sink_1`
+          try ` ${try String(camera)} ! queue name=camera_queue max-size-buffers=2 max-size-bytes=0 max-size-time=0 leaky=downstream ! videoconvert ! identity name=camera_geometry ! presenter.sink_1`
         );
       }
       if (this.presenter.microphone) {
         var audio = this.synthetic ? "audiotestsrc is-live=true wave=sine" : "pulsesrc do-timestamp=true";
         try result.append(
-          try ` ${String(audio)} ! queue name=microphone_queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! avenc_aac bitrate=128000 ! queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! mux.audio_0`
+          try ` ${try String(audio)} ! queue name=microphone_queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=1 ! avenc_aac bitrate=128000 ! queue max-size-buffers=32 max-size-bytes=0 max-size-time=1000000000 ! mux.audio_0`
         );
       }
       return AllocationResult.Ok(result);
@@ -142,11 +142,11 @@ module capture_backend {
       var node = try String("");
       if (not synthetic) {
         remote = try this.portal.remote();
-        target = this.portal.target(true);
-        node = this.portal.target(false);
+        target = try this.portal.target(true);
+        node = try this.portal.target(false);
       }
       try this.output.reserve(directory);
-      var stamp = desktop.filename_stamp();
+      var stamp = try desktop.filename_stamp();
       var name = this.video ? "Screencast" : "Screenshot";
       var extension = this.video ? ".mp4" : ".png";
       this.destination = try `${directory}/${name} ${stamp}${extension}`;
@@ -183,7 +183,7 @@ module capture_backend {
         return SystemResult.Ok;
       }
       if (not this.video or not this.recording) {
-        this.cancel();
+        try this.cancel();
         return SystemResult.Ok;
       }
       this.finishing = true;
@@ -235,7 +235,7 @@ module capture_backend {
         if (this.video and this.recording) {
           try this.stop();
         } else {
-          return SystemResult.Error(this.pipeline.error());
+          return SystemResult.Error(try this.pipeline.error());
         }
       }
       return SystemResult.Ok;
@@ -249,7 +249,7 @@ module capture_backend {
       if (not this.synthetic) {
         var response = try this.portal.poll();
         if (response == 2) {
-          this.cancel();
+          try this.cancel();
           return SystemResult.Ok;
         }
         if (response == 3) {
@@ -274,7 +274,7 @@ module capture_backend {
       if (this.stage == 3) {
         var selected = try this.selector.poll();
         if (selected == 2) {
-          this.cancel();
+          try this.cancel();
           return SystemResult.Ok;
         }
         if (selected == 1) {
@@ -295,7 +295,7 @@ module capture_backend {
           this.previous_seconds = seconds;
         }
         if (this.countdown_ready()) {
-          var root = desktop.media_directory(this.video);
+          var root = try desktop.media_directory(this.video);
           var subdirectory = this.video ? "Screencasts" : "Screenshots";
           var directory = try `${root}/${subdirectory}`;
           var source = try String(

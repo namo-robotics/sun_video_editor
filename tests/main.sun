@@ -4,6 +4,7 @@ function main() i32 {
 }
 manifest {
   test_files: [
+    "results.sun",
     "media.sun",
     "view.sun",
     "recording.sun"

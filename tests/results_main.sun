@@ -1,0 +1,16 @@
+/** Runs checked string-copy tests without application dependencies. */
+function main() i32 {
+  return 0;
+}
+
+manifest {
+  libraries: [
+    "stdlib.moon"
+  ]
+  source_files: [
+    "../src/results.sun"
+  ]
+  test_files: [
+    "results.sun"
+  ]
+}

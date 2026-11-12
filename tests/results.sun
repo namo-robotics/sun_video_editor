@@ -1,0 +1,45 @@
+using std;
+
+/** Checks byte-range copies independently of GTK and media tools. */
+module result_checks {
+
+  /** Copies UTF-8 bytes and accepts an empty range at the end of the input. */
+  test_function substring_valid_ranges() std.test.AssertionResult<void> {
+    var a = make_heap_allocator();
+    var text = try String("aéz");
+    match try sun_video_editor_results.substring(text, a, 1, 2) {
+      AccessResult.Ok(value) => {
+        try std.test.assert(value.equals_literal("é"));
+      },
+      AccessResult.OutOfBounds(_) => {
+        try std.test.fail("Valid range rejected");
+      }
+    };
+    match try sun_video_editor_results.substring(text, a, text.length(), 0) {
+      AccessResult.Ok(value) => {
+        try std.test.assert(value.is_empty());
+      },
+      AccessResult.OutOfBounds(_) => {
+        try std.test.fail("Empty end range rejected");
+      }
+    };
+    return std.test.AssertionResult.Ok;
+  }
+
+  /** Rejects negative, oversized, and overflowing ranges before copying bytes. */
+  test_function substring_invalid_ranges() std.test.AssertionResult<void> {
+    var a = make_heap_allocator();
+    var text = try String("abc");
+    for (var i: i64 = 0; i < 4; i += 1) {
+      var start: i64 = i == 0 ? -1 : (i == 2 ? 4 : 1);
+      var count: i64 = i == 1 ? -1 : (i == 3 ? 9223372036854775807 : 0);
+      match try sun_video_editor_results.substring(text, a, start, count) {
+        AccessResult.Ok(_) => {
+          try std.test.fail("Invalid range accepted");
+        },
+        AccessResult.OutOfBounds(_) => {}
+      };
+    }
+    return std.test.AssertionResult.Ok;
+  }
+}

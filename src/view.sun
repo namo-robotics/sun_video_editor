@@ -33,10 +33,16 @@ module sun_video_editor {
       SystemResult.Error(_) => {
         return std.AllocationResult.Ok(fallback);
       },
-        SystemResult.Allocation(error) => { return std.AllocationResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return std.AllocationResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return std.AllocationResult.Overflow(error); }
-};
+      SystemResult.Allocation(error) => {
+        return std.AllocationResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.AllocationResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.AllocationResult.Overflow(error);
+      }
+    };
     if (value >= _convert<f64>(duration) / 1000000.0) {
       return std.AllocationResult.Ok(duration);
     }
@@ -152,11 +158,19 @@ module sun_video_editor {
         return std.AllocationResult.Ok(false);
       },
       SystemResult.Ok(_) => {},
-        SystemResult.Allocation(error) => { return std.AllocationResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return std.AllocationResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return std.AllocationResult.Overflow(error); }
-};
-    return std.AllocationResult.Ok(state.position >= try start_us(state) + 1000 and state.position <= try end_us(state) - 1000);
+      SystemResult.Allocation(error) => {
+        return std.AllocationResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.AllocationResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.AllocationResult.Overflow(error);
+      }
+    };
+    return std.AllocationResult.Ok(
+      state.position >= try start_us(state) + 1000 and state.position <= try end_us(state) - 1000
+    );
   }
 
   /** Supplies ordered handle pairs for the native timeline while invalid text remains editable. */
@@ -168,13 +182,23 @@ module sun_video_editor {
         return AllocationResult.Ok(ranges);
       },
       SystemResult.Ok(_) => {},
-        SystemResult.Allocation(error) => { return AllocationResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return AllocationResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return AllocationResult.Overflow(error); }
-};
+      SystemResult.Allocation(error) => {
+        return AllocationResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return AllocationResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return AllocationResult.Overflow(error);
+      }
+    };
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
       var first = try time_us(state.settings.sections[i].start, 0, duration_us(state));
-      var last = try time_us(state.settings.sections[i].end, duration_us(state), duration_us(state));
+      var last = try time_us(
+        state.settings.sections[i].end,
+        duration_us(state),
+        duration_us(state)
+      );
       try ranges.push(ui.TrimRange(state.settings.sections[i].id, first, last));
 
       for (var j = ranges.size() - 1; j > 0 and ranges[j].start < ranges[j - 1].start; j -= 1) {
@@ -208,10 +232,16 @@ module sun_video_editor {
           )
         );
       },
-        SystemResult.Allocation(error) => { return AllocationResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return AllocationResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return AllocationResult.Overflow(error); }
-};
+      SystemResult.Allocation(error) => {
+        return AllocationResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return AllocationResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return AllocationResult.Overflow(error);
+      }
+    };
     var time = try timestamp(_convert<i64>(length * 1000000.0));
     if (state.settings.sections.size() == 0) {
       return AllocationResult.Ok(try `Selected clip: ${time}`);
@@ -238,17 +268,17 @@ module sun_video_editor {
   }
 
   /** Keeps status text readable while preserving full errors in the terminal. */
-  function status_text(state: const ref State) std.Result<String> {
+  function status_text(state: const ref State) std.AllocationResult<String> {
     var a = make_heap_allocator();
     var lines = try state.job.message.split(a, b'\n');
     if (lines[0].length() > 110) {
-      var text = match try sun_video_editor_results.access(lines[0].substr(a, 0, 107)) {
+      var text = match try sun_video_editor_results.substring(lines[0], a, 0, 107) {
         AccessResult.Ok(value) => value,
         AccessResult.OutOfBounds(_) => try String("")
       };
       try text.append("…");
-      return std.Result.Ok(text);
+      return std.AllocationResult.Ok(text);
     }
-    return std.Result.Ok(try lines[0].clone(a));
+    return std.AllocationResult.Ok(try lines[0].clone(a));
   }
 }

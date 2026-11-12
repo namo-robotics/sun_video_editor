@@ -5,8 +5,8 @@ module video {
 
   /** Tracks probing, conversion, cancellation, and atomic publication of one result. */
   public class Job {
-    public var process: Process = Process();
-    public var media: Media = Media();
+    public var process: Process;
+    public var media: Media;
     public var loaded: String;
     public var message: String;
     public var ready: bool = false;
@@ -38,7 +38,6 @@ module video {
       }
       this.temporary.clear();
       this.directory.clear();
-
     }
 
     /** Starts probing a local regular file, clearing previously accepted metadata. */
@@ -50,7 +49,7 @@ module video {
       this.percent = 0;
       this.output_size = 0;
       this.loaded = try absolute(path);
-      if (not std.io.is_file(this.loaded)) {
+      if (not try std.io.is_file(this.loaded)) {
         return SystemResult.Error(Error(1, "Input must be a local regular file"));
       }
       var command = try probe_command(this.loaded);
@@ -72,10 +71,10 @@ module video {
       if (this.loaded.equals(this.destination) or try same.status() == 0) {
         return SystemResult.Error(Error(1, "Output must not replace the input video"));
       }
-      if (std.io.is_dir(this.destination)) {
+      if (try std.io.is_dir(this.destination)) {
         return SystemResult.Error(Error(1, "Output is a directory"));
       }
-      if (std.io.exists(this.destination) and not this.overwrite) {
+      if (try std.io.exists(this.destination) and not this.overwrite) {
         this.needs_overwrite = true;
         return SystemResult.Error(
           Error(1, "Destination exists. Check Replace existing output to confirm.")
@@ -121,6 +120,18 @@ module video {
         SystemResult.Error(error) => {
           this.cleanup();
           return SystemResult.Error(error);
+        },
+        SystemResult.Allocation(error) => {
+          this.cleanup();
+          return SystemResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          this.cleanup();
+          return SystemResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          this.cleanup();
+          return SystemResult.Overflow(error);
         }
       };
       this.mode = 2;
@@ -143,7 +154,7 @@ module video {
     }
 
     /** Stops failed work and exposes a user-readable diagnostic. */
-    public method fail(error: Error) AllocationResult<void> {
+    public method fail(error: const ref IError) AllocationResult<void> {
       this.process.stop();
       this.mode = 0;
       this.percent = 0;
@@ -156,9 +167,9 @@ module video {
     /** Consumes complete progress lines, retaining an incomplete suffix for the next turn. */
     method progress() AllocationResult<void> {
       var a = make_heap_allocator();
-      var lines = this.process.text.split(a, b'\n');
+      var lines = try this.process.text.split(a, b'\n');
       for (var i: i64 = 0; i + 1 < lines.size(); i += 1) {
-        var pair = lines[i].split(a, b'=');
+        var pair = try lines[i].split(a, b'=');
         if (pair.size() == 2 and pair[0].equals_literal("out_time_us")) {
           match pair[1].parse_i64() {
             Option.Some(value) => {
@@ -243,6 +254,8 @@ module video {
 
     /** Initializes owned storage and reports allocation failure. */
     init() AllocationResult<void> {
+      this.process = try Process();
+      this.media = try Media();
       this.loaded = try String("");
       this.message = try String("Choose a video to begin.");
       this.destination = try String("");

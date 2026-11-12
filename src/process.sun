@@ -66,7 +66,6 @@ module video {
       this.output.close();
       this.errors.close();
       this.running = false;
-
     }
 
     /** Reads bounded amounts from both ready pipes and observes process completion. */
@@ -107,7 +106,7 @@ module video {
     var buffer = try ContiguousBuffer<u8>(a, 4096);
     for (var round: i64 = 0; round < 8 and file.is_open(); round += 1) {
       var poll = try std.io.Poller(a);
-      poll.add_read(file.get_fd());
+      try poll.add_read(file.get_fd());
       if (try poll.wait(0) == 0) {
         break;
       }
@@ -121,8 +120,11 @@ module video {
             try text.append_char(buffer[i]);
           }
           if (text.length() > limit) {
-            text = match try sun_video_editor_results.access(
-              text.substr(a, text.length() - limit, limit)
+            text = match try sun_video_editor_results.substring(
+              text,
+              a,
+              text.length() - limit,
+              limit
             ) {
               AccessResult.Ok(value) => value,
               AccessResult.OutOfBounds(_) => try String("")
@@ -156,8 +158,11 @@ module video {
     }
     var text = try result.stdout().clone(make_heap_allocator());
     if (text.ends_with("\n")) {
-      text = match try sun_video_editor_results.access(
-        text.substr(make_heap_allocator(), 0, text.length() - 1)
+      text = match try sun_video_editor_results.substring(
+        text,
+        make_heap_allocator(),
+        0,
+        text.length() - 1
       ) {
         AccessResult.Ok(value) => value,
         AccessResult.OutOfBounds(_) => try String("")

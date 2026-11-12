@@ -76,7 +76,7 @@ module screencast {
       }
     }
     if (message.length() > 2048) {
-      message = match try sun_video_editor_results.access(message.substr(a, 0, 2048)) {
+      message = match try sun_video_editor_results.substring(message, a, 0, 2048) {
         AccessResult.Ok(value) => value,
         AccessResult.OutOfBounds(_) => try String("Capture failed")
       };
@@ -93,8 +93,8 @@ module screencast {
 
   /** Keeps capture lifetime separate from the editor's conversion jobs. */
   public class Capture {
-    public var process: video.Process ;
-    public var copy_process: video.Process ;
+    public var process: video.Process;
+    public var copy_process: video.Process;
     var copy_temporary: String;
     var copy_destination: String;
     public var helper: String;
@@ -110,7 +110,7 @@ module screencast {
     public var stopping: bool = false;
     public var message: String;
     public var saved: String;
-    public var preview: video.Job ;
+    public var preview: video.Job;
     public var preview_position: i64 = 0;
     public var preview_start: i64 = 0;
     public var preview_end: i64 = 0;
@@ -139,7 +139,6 @@ module screencast {
         ignore_error(std.io.remove_file(this.copy_temporary));
         this.copy_temporary.clear();
       }
-
     }
 
     /** Copies a completed capture asynchronously; the save chooser confirms replacements. */
@@ -180,10 +179,16 @@ module screencast {
           this.cleanup_copy();
           return SystemResult.Error(error);
         },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+        SystemResult.Allocation(error) => {
+          return SystemResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return SystemResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return SystemResult.Overflow(error);
+        }
+      };
       this.message = try String("Saving a copy…");
       return SystemResult.Ok;
     }
@@ -201,10 +206,16 @@ module screencast {
           this.message = try (try error.message()).clone(make_heap_allocator());
           return SystemResult.Ok(true);
         },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+        SystemResult.Allocation(error) => {
+          return SystemResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return SystemResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return SystemResult.Overflow(error);
+        }
+      };
       if (not this.copy_process.running) {
         if (this.copy_process.status == 0) {
           match std.io.rename_file(this.copy_temporary, this.copy_destination) {
@@ -214,10 +225,16 @@ module screencast {
             SystemResult.Error(error) => {
               this.message = try (try error.message()).clone(make_heap_allocator());
             },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+            SystemResult.Allocation(error) => {
+              return SystemResult.Allocation(error);
+            },
+            SystemResult.InvalidArgument(error) => {
+              return SystemResult.InvalidArgument(error);
+            },
+            SystemResult.Overflow(error) => {
+              return SystemResult.Overflow(error);
+            }
+          };
         } else {
           this.message = try `Save failed: ${this.copy_process.diagnostics}`;
         }
@@ -303,10 +320,16 @@ module screencast {
           SystemResult.Error(error) => {
             try this.preview.fail(error);
           },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+          SystemResult.Allocation(error) => {
+            return SystemResult.Allocation(error);
+          },
+          SystemResult.InvalidArgument(error) => {
+            return SystemResult.InvalidArgument(error);
+          },
+          SystemResult.Overflow(error) => {
+            return SystemResult.Overflow(error);
+          }
+        };
         changed = true;
       }
       var mode = this.preview.mode;
@@ -316,10 +339,16 @@ module screencast {
           SystemResult.Error(error) => {
             try this.preview.fail(error);
           },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+          SystemResult.Allocation(error) => {
+            return SystemResult.Allocation(error);
+          },
+          SystemResult.InvalidArgument(error) => {
+            return SystemResult.InvalidArgument(error);
+          },
+          SystemResult.Overflow(error) => {
+            return SystemResult.Overflow(error);
+          }
+        };
         if (this.preview.mode == 0) {
           if (this.preview.ready) {
             this.preview_end = _convert<i64>(this.preview.media.duration * 1000000.0);
@@ -350,8 +379,11 @@ module screencast {
             this.message = try line.clone(make_heap_allocator());
           }
           if (line.starts_with("Saved: ")) {
-            this.saved = match try sun_video_editor_results.access(
-              line.substr(make_heap_allocator(), 7, line.length() - 7)
+            this.saved = match try sun_video_editor_results.substring(
+              line,
+              make_heap_allocator(),
+              7,
+              line.length() - 7
             ) {
               AccessResult.Ok(value) => value,
               AccessResult.OutOfBounds(_) => try String("")

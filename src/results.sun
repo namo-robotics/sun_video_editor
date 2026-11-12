@@ -1,14 +1,32 @@
-/** Preserves checked access errors while propagating allocation and other failures. */
+/** Provides checked string copies with explicit allocation failures. */
 public module sun_video_editor_results {
 
-  /** Separates a checked bounds failure from errors that the caller must propagate. */
-  public function access<T>(result: std.Result<T>) std.Result<std.AccessResult<T>> {
-    match result {
-      (error: ref std.IndexOutOfBoundsError) => {
-        return std.Result.Ok(std.AccessResult.OutOfBounds(std.IndexOutOfBoundsError(error.index())));
-      },
-      _ => {}
-    };
-    return std.Result.Ok(std.AccessResult.Ok(try result));
+  /** Copies a byte range, returning bounds errors separately from allocation failures. */
+  public function substring(
+    text: const ref std.String,
+    allocator: const ref std.HeapAllocator,
+    start: i64,
+    count: i64
+  ) std.AllocationResult<std.AccessResult<std.String>> {
+    if (start < 0 or count < 0 or start > text.length() or count > text.length() - start) {
+      var invalid: std.AccessResult<std.String> = std.AccessResult.OutOfBounds(
+        std.IndexOutOfBoundsError(start)
+      );
+      return std.AllocationResult.Ok(invalid);
+    }
+    var copy = try std.String(allocator, "");
+    try copy.reserve(count);
+    for (var i: i64 = 0; i < count; i += 1) {
+      var byte = match text.at(start + i) {
+        std.AccessResult.Ok(value) => value,
+        std.AccessResult.OutOfBounds(error) => {
+          var invalid: std.AccessResult<std.String> = std.AccessResult.OutOfBounds(error);
+          return std.AllocationResult.Ok(invalid);
+        }
+      };
+      try copy.append_char(byte);
+    }
+    var result: std.AccessResult<std.String> = std.AccessResult.Ok(copy);
+    return std.AllocationResult.Ok(result);
   }
 }

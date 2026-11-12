@@ -15,7 +15,8 @@ module video_fixtures {
       try temporary.add_arg("-d");
       try temporary.add_arg("tmp/video-test.XXXXXX");
       this.directory = try video.capture(temporary);
-      this.input = this.path("input $sample; clip.mov");
+      this.input = try String("");
+      this.input = try this.path("input $sample; clip.mov");
       var command = try std.process.Command(a, "ffmpeg");
       try command.add_arg("-hide_banner");
       try command.add_arg("-loglevel");
@@ -45,15 +46,21 @@ module video_fixtures {
     }
 
     /** Deletes only this fixture's exclusive directory and its generated outputs. */
-    deinit() {
+    method cleanup() SystemResult<void> {
       if (not this.directory.is_empty()) {
         var command = try std.process.Command(make_heap_allocator(), "rm");
 
         try command.add_arg("-rf");
         try command.add_arg("--");
         try command.add_arg(this.directory);
-        ignore_error(command.status());
+        try command.status();
       }
+      return SystemResult.Ok;
+    }
+
+    /** Attempts to remove disposable test files without throwing during destruction. */
+    deinit() {
+      ignore_error(this.cleanup());
     }
 
     /** Builds a child path without interpreting its characters. */
