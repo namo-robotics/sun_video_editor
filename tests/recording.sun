@@ -3,12 +3,9 @@ using std;
 /** Tests presenter composition with generated media, without requesting camera or microphone access. */
 module presenter_tests {
 
-  /** Preserves both assertions and process failures. */
-  enum TestResult { Ok, Assertion(std.test.AssertionError), System(Error) }
-
   /** Rejects invalid positions, sizes, and screenshot device requests before device access. */
-  test_function arguments() TestResult {
-    var args = (try String("capture record screen 0 cursor camera microphone 0 1")).split_whitespace(
+  test_function arguments() std.test.AssertionResult<void> {
+    var args = try (try String("capture record screen 0 cursor camera microphone 0 1")).split_whitespace(
       make_heap_allocator()
     );
     var settings = try presenter.options(args);
@@ -16,7 +13,7 @@ module presenter_tests {
       settings.camera and settings.microphone and settings.corner == 0 and settings.size == 1
     );
     for (var field: i64 = 0; field < 3; field += 1) {
-      var invalid = (try String(
+      var invalid = try (try String(
         field == 0 ? "capture record screen 0 cursor camera microphone 4 1" : (field == 1 ? "capture record screen 0 cursor camera microphone 0 3" : "capture screenshot screen 0 cursor camera microphone 0 1")
       )).split_whitespace(
         make_heap_allocator()
@@ -25,9 +22,18 @@ module presenter_tests {
         SystemResult.Ok(_) => {
           try std.test.fail("Accepted invalid presenter options");
         },
-        SystemResult.Error(_) => {}
+        SystemResult.Error(_) => {},
+        SystemResult.Allocation(error) => {
+          return std.test.AssertionResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return std.test.AssertionResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return std.test.AssertionResult.Overflow(error);
+        }
       };
     }
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 }

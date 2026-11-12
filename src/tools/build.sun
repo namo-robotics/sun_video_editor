@@ -162,7 +162,7 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
   return AllocationResult.Ok(
     match result {
       SystemResult.Ok => 0,
-      SystemResult.Error(error) => {
+      (error: const ref IError) => {
         std.io.eprintln(try error.message());
         return AllocationResult.Ok(1);
       }

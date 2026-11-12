@@ -3,14 +3,11 @@ using std;
 /** Checks the converter's reusable view without creating native widgets or media jobs. */
 module sun_video_editor {
 
-  /** Combines appearance validation and assertion failures. */
-  enum ViewResult { Ok, Assertion(std.test.AssertionError), System(Error) }
-
   /** Preserves fractional-frame trim times and passes the source rate to the preview. */
-  test_function frame_precision() ViewResult {
+  test_function frame_precision() std.test.AssertionResult<void> {
     for (var value: i64 = 0; value < 1000000; value += 33367) {
       var text = try timestamp(value);
-      try std.test.assert_eq(time_us(text, -1, 4000000), value);
+      try std.test.assert_eq(try time_us(text, -1, 4000000), value);
     }
     var state = try State();
     state.page = 1;
@@ -20,7 +17,7 @@ module sun_video_editor {
     state.job.media.frame_rate_den = 1001;
     state.settings.start = try timestamp(33367);
     state.settings.end = try timestamp(3960623);
-    var description = view(state);
+    var description = try view(state);
     var found = false;
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       var node = description.elements[i];
@@ -36,7 +33,7 @@ module sun_video_editor {
   }
 
   /** Preserves action availability and the shared palette across the export lifecycle. */
-  test_function reusable_converter_states() ViewResult {
+  test_function reusable_converter_states() std.test.AssertionResult<void> {
     for (var stage: i32 = 0; stage < 4; stage += 1) {
       var state = try State();
       state.page = 1;
@@ -45,7 +42,7 @@ module sun_video_editor {
       state.job.loaded = try String("clip.mp4");
       state.job.mode = stage == 2 ? 2 : 0;
       state.job.percent = stage == 3 ? 100 : 0;
-      var description = view(state);
+      var description = try view(state);
       try std.test.assert(description.construction_error.is_empty());
       try description.resources.validate();
       try std.test.assert_eq(description.theme.normal.foreground, 0xdce6f4);
@@ -88,7 +85,7 @@ module sun_video_editor {
         }
       }
       try std.test.assert_eq(controls, 17);
-      var again = view(state);
+      var again = try view(state);
       try std.test.assert_eq(description.elements.size(), again.elements.size());
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
         try std.test.assert(description.elements[i].key.equals(again.elements[i].key));
@@ -97,7 +94,7 @@ module sun_video_editor {
   }
 
   /** Splits and removes kept sections without reusing deleted identities or leaking edits to another file. */
-  test_function section_editing() ViewResult {
+  test_function section_editing() std.test.AssertionResult<void> {
     var state = try State();
     state.page = 1;
     state.job.ready = true;
@@ -111,7 +108,7 @@ module sun_video_editor {
     state.settings.start = try String("3");
     try store_section(state);
     try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 3.0);
-    var description = view(state);
+    var description = try view(state);
     try std.test.assert(description.construction_error.is_empty());
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       var node = description.elements[i];
@@ -125,7 +122,7 @@ module sun_video_editor {
         try std.test.assert_eq(node.trim_ranges.size(), 2);
       }
     }
-    remove_section(state);
+    try remove_section(state);
     try std.test.assert_eq(state.settings.sections.size(), 0);
     try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 2.0);
     state.position = 1000000;
@@ -134,12 +131,12 @@ module sun_video_editor {
   }
 
   /** Disables GIF audio without losing the user's video audio preference. */
-  test_function gif_audio_availability() ViewResult {
+  test_function gif_audio_availability() std.test.AssertionResult<void> {
     var state = try State();
     state.page = 1;
     for (var format: i64 = 5; format >= 0; format -= 5) {
       state.settings.format = format;
-      var description = view(state);
+      var description = try view(state);
       var found = false;
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
         var node = description.elements[i];
@@ -154,7 +151,7 @@ module sun_video_editor {
   }
 
   /** Displays abnormal helper exits and keeps multiline device errors instead of blaming permissions. */
-  test_function capture_failure_diagnostics() ViewResult {
+  test_function capture_failure_diagnostics() std.test.AssertionResult<void> {
     var recovery = try String("Recovery: /recordings/private.mp4\nCapture failed: disk full\n");
 
     var preserved = try screencast.helper_failure(
@@ -188,12 +185,12 @@ module sun_video_editor {
   }
 
   /** Allows an interrupted finalization to retain its partial recording instead of trapping the user. */
-  test_function capture_finalization_controls() ViewResult {
+  test_function capture_finalization_controls() std.test.AssertionResult<void> {
     var state = try State();
     state.page = 2;
     state.capture.process.running = true;
     state.capture.stopping = true;
-    var description = view(state);
+    var description = try view(state);
     state.capture.process.running = false;
     var found = false;
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
@@ -207,7 +204,7 @@ module sun_video_editor {
   }
 
   /** Accepts whole-second delays and rejects malformed or unbounded countdowns. */
-  test_function capture_delay_validation() ViewResult {
+  test_function capture_delay_validation() std.test.AssertionResult<void> {
     try std.test.assert_eq(
       try screencast.delay_seconds(try String("0")),
       0
@@ -216,7 +213,7 @@ module sun_video_editor {
       try screencast.delay_seconds(try String("3600")),
       3600
     );
-    var invalid = (try String("-1 1.5 3601 99999 nope")).split_whitespace(
+    var invalid = try (try String("-1 1.5 3601 99999 nope")).split_whitespace(
       make_heap_allocator()
     );
     try invalid.push(try String(""));
@@ -226,21 +223,30 @@ module sun_video_editor {
         SystemResult.Ok(_) => {
           try std.test.assert(false);
         },
+        SystemResult.Allocation(error) => {
+          return std.test.AssertionResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return std.test.AssertionResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return std.test.AssertionResult.Overflow(error);
+        },
         SystemResult.Error(_) => {}
       };
     }
   }
 
   /** Save as copies both capture types without changing the preview or the original file. */
-  test_function capture_save_copy() ViewResult {
+  test_function capture_save_copy() std.test.AssertionResult<void> {
     var fixture = try video_fixtures.Fixture();
     var a = make_heap_allocator();
     for (var kind: i64 = 0; kind < 3; kind += 1) {
       var capture = try screencast.Capture();
-      var source = fixture.path(
+      var source = try fixture.path(
         kind == 0 ? "original.png" : (kind == 1 ? "original.webm" : "original.mp4")
       );
-      var target = fixture.path(
+      var target = try fixture.path(
         kind == 0 ? "copy with spaces.png" : (kind == 1 ? "copy with spaces.webm" : "copy with spaces.mp4")
       );
       var contents = try String("capture bytes");
@@ -255,16 +261,25 @@ module sun_video_editor {
       try std.test.assert(not capture.copy_process.running);
       var saved = try std.io.read_to_string(a, target);
       try std.test.assert(saved.equals(contents));
-      try std.test.assert(capture.saved.equals(source) and std.io.is_file(source));
+      try std.test.assert(capture.saved.equals(source) and try std.io.is_file(source));
       try std.test.assert(capture.message.starts_with("Saved copy:"));
-      var invalid = fixture.path("missing-dir/copy.png");
+      var invalid = try fixture.path("missing-dir/copy.png");
       match capture.save_copy(source, invalid) {
         SystemResult.Ok => {
           try std.test.assert(false);
         },
+        SystemResult.Allocation(error) => {
+          return std.test.AssertionResult.Allocation(error);
+        },
+        SystemResult.InvalidArgument(error) => {
+          return std.test.AssertionResult.InvalidArgument(error);
+        },
+        SystemResult.Overflow(error) => {
+          return std.test.AssertionResult.Overflow(error);
+        },
         SystemResult.Error(_) => {}
       };
-      try std.test.assert(std.io.is_file(source));
+      try std.test.assert(try std.io.is_file(source));
     }
   }
 }

@@ -20,7 +20,7 @@ module build_targets {
   }
 
   /** Selects a named local entry with explicit paths and a binary or library type. */
-  function select(document: ref std.json.Json, name: static_ptr<u8>) std.json.JsonResult<Target> {
+  function select(document: ref std.json.Json, name: static_ptr<u8>) Result<Target> {
     var a = make_heap_allocator();
     var entries = try document.get("entrypoints");
     for (var i: i64 = 0; i < entries.len(); i += 1) {
@@ -31,7 +31,7 @@ module build_targets {
         var output = try (try entry.get("output_name")).as_string();
         var kind = try (try entry.get("type")).as_string();
         if (kind.equals_literal("library") == false and kind.equals_literal("binary") == false) {
-          return std.json.JsonResult.Error(
+          return Result.Json(
             std.json.JsonError("Expected a binary or library entrypoint", -1)
           );
         }
@@ -41,7 +41,7 @@ module build_targets {
           std.json.JsonResult.Ok(value) => try (try value.as_string()).clone(a),
           std.json.JsonResult.Error(_) => try tests.clone(a)
         };
-        return std.json.JsonResult.Ok(
+        return Result.Ok(
           Target(
             try source.clone(a),
             try output.clone(a),
@@ -51,7 +51,7 @@ module build_targets {
         );
       }
     }
-    return std.json.JsonResult.Error(std.json.JsonError("Unknown build target", -1));
+    return Result.Json(std.json.JsonError("Unknown build target", -1));
   }
 
   /** Queries the compiler so tools share its target selection and resolved paths. */
@@ -74,15 +74,15 @@ module build_targets {
     if (output.status() != 0) {
       std.io.eprint(output.stderr());
       return SystemResult.Error(
-        try Error(output.status(), "Cannot resolve build configuration")
+        Error(output.status(), "Cannot resolve build configuration")
       );
     }
     return SystemResult.Ok(try output.stdout().clone(a));
   }
 
   /** Copies one resolved string property from the compiler's JSON response. */
-  function property(document: ref std.json.Json, key: static_ptr<u8>) std.json.JsonResult<String> {
-    return std.json.JsonResult.Ok(
+  function property(document: ref std.json.Json, key: static_ptr<u8>) Result<String> {
+    return Result.Ok(
       try (try (try document.get(key)).as_string()).clone(make_heap_allocator())
     );
   }
@@ -95,14 +95,14 @@ module build_targets {
   ) SystemResult<String> {
     var text = try query(action, dependency);
     var document = match std.json.parse_json(make_heap_allocator(), text) {
-      std.json.JsonResult.Ok(value) => value,
-      std.json.JsonResult.Error(error) => {
+      Result.Ok(value) => value,
+      (error: const ref IError) => {
         return SystemResult.Error(Error(1, "Invalid compiler configuration response"));
       }
     };
     return match property(document, key) {
-      std.json.JsonResult.Ok(value) => SystemResult.Ok(value),
-      std.json.JsonResult.Error(error) => SystemResult.Error(
+      Result.Ok(value) => SystemResult.Ok(value),
+      (error: const ref IError) => SystemResult.Error(
         Error(1, "Missing compiler configuration property")
       )
     };
@@ -123,15 +123,15 @@ module build_targets {
     var a = make_heap_allocator();
     var text = try query("describe", "");
     var document = match std.json.parse_json(a, text) {
-      std.json.JsonResult.Ok(value) => value,
-      std.json.JsonResult.Error(error) => {
+      Result.Ok(value) => value,
+      (error: const ref IError) => {
         std.io.eprintln(try error.message());
         return SystemResult.Error(Error(1, "Cannot parse sun-config.json"));
       }
     };
     return match select(document, name) {
-      std.json.JsonResult.Ok(value) => SystemResult.Ok(value),
-      std.json.JsonResult.Error(error) => {
+      Result.Ok(value) => SystemResult.Ok(value),
+      (error: const ref IError) => {
         std.io.eprintln(name);
         std.io.eprintln(try error.message());
         return SystemResult.Error(Error(1, "Cannot load configured build target"));

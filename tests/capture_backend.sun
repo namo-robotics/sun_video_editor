@@ -3,9 +3,6 @@ using std;
 /** Exercises real synthetic-frame encoding and the Sun capture lifecycle without desktop access. */
 module capture_tests {
 
-  /** Preserves system errors and assertion failures in capture tests. */
-  enum TestResult<T> { Ok(T), Assertion(std.test.AssertionError), System(Error) }
-
   /** Runs a tool and returns its trimmed standard output, preserving diagnostics on failure. */
   function command(command: ref std.process.Command) SystemResult<String> {
     var output = try command.output();
@@ -34,7 +31,7 @@ module capture_tests {
     window: bool
   ) SystemResult<void> {
     var a = make_heap_allocator();
-    var stamp = desktop.filename_stamp();
+    var stamp = try desktop.filename_stamp();
     var directory = try `build/capture_tests-output/${stamp}`;
     var destination = try String("");
     if (true) {
@@ -57,7 +54,7 @@ module capture_tests {
         if (video and capture.recording and start.elapsed().as_millis() > 600 and
           not capture.finishing) {
           if (cancel) {
-            capture.cancel();
+            try capture.cancel();
           } else if (revoked) {
             try capture.sharing_ended();
             try capture.sharing_ended();
@@ -72,7 +69,7 @@ module capture_tests {
       }
     }
     if (cancel) {
-      if (std.io.is_file(destination)) {
+      if (try std.io.is_file(destination)) {
         return SystemResult.Error(Error(1, "Cancellation published output"));
       }
     } else {
@@ -115,26 +112,26 @@ module capture_tests {
   }
 
   /** Window streams without padding retain their exact size through both output formats. */
-  test_function window_capture() TestResult<void> {
+  test_function window_capture() std.test.AssertionResult<void> {
     try encode(false, false, false, false, false, 321, 241, true);
     try encode(true, false, false, false, false, 321, 241, true);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** A single frame produces a readable lossless screenshot. */
-  test_function screenshot() TestResult<void> {
+  test_function screenshot() std.test.AssertionResult<void> {
     try encode(false, false, false, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Stopping drains the encoder and writes a readable WebM trailer. */
-  test_function recording() TestResult<void> {
+  test_function recording() std.test.AssertionResult<void> {
     try encode(true, false, false, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** The Linux pipeline publishes the combined recording only after both encoders finish. */
-  test_function presenter_recording() TestResult<void> {
+  test_function presenter_recording() std.test.AssertionResult<void> {
     var capture = try capture_backend.Capture(true, false, false, true, 0);
     capture.presenter.camera = true;
     capture.presenter.microphone = true;
@@ -150,7 +147,7 @@ module capture_tests {
       try capture.tick();
       if (capture.recording and not capture.finishing and clock.elapsed().as_millis() > 800) {
         try capture.stop();
-        try std.test.assert(not std.io.is_file(capture.destination));
+        try std.test.assert(not try std.io.is_file(capture.destination));
       }
       std.time.sleep(std.time.create_duration_millis(5));
     }
@@ -166,62 +163,62 @@ module capture_tests {
     try probe.add_arg(capture.destination);
     var streams = try command(probe);
     try std.test.assert(streams.contains("h264,320,240") and streams.contains("aac"));
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Repeated portal revocation finalizes the recording only once. */
-  test_function revoked_recording() TestResult<void> {
+  test_function revoked_recording() std.test.AssertionResult<void> {
     try encode(true, false, false, false, true, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Cancellation never publishes a partial recording. */
-  test_function cancellation() TestResult<void> {
+  test_function cancellation() std.test.AssertionResult<void> {
     try encode(true, true, false, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Odd region dimensions survive PNG encoding without padding or scaling. */
-  test_function area_screenshot() TestResult<void> {
+  test_function area_screenshot() std.test.AssertionResult<void> {
     try encode(false, false, true, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Odd video regions receive at most one padding pixel for H.264 encoding. */
-  test_function area_recording() TestResult<void> {
+  test_function area_recording() std.test.AssertionResult<void> {
     try encode(true, false, true, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Logical monitor coordinates scale to physical stream pixels. */
-  test_function scaled_area() TestResult<void> {
+  test_function scaled_area() std.test.AssertionResult<void> {
     try encode(false, false, true, true, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Cancelling a cropped recording removes its private file. */
-  test_function area_cancellation() TestResult<void> {
+  test_function area_cancellation() std.test.AssertionResult<void> {
     try encode(true, true, true, false, false, 320, 240, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** High-resolution screenshots retain source dimensions. */
-  test_function screenshot_4k() TestResult<void> {
+  test_function screenshot_4k() std.test.AssertionResult<void> {
     try encode(false, false, false, false, false, 3840, 2160, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Full-HD recordings preserve the source resolution. */
-  test_function recording_full_hd() TestResult<void> {
+  test_function recording_full_hd() std.test.AssertionResult<void> {
     try encode(true, false, false, false, false, 1920, 1080, false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Compares decoded captures against deterministic full-resolution reference pixels. */
-  test_function pixel_fidelity() TestResult<void> {
+  test_function pixel_fidelity() std.test.AssertionResult<void> {
     var a = make_heap_allocator();
     for (var mode = 0; mode < 2; mode += 1) {
-      var stamp = desktop.filename_stamp();
+      var stamp = try desktop.filename_stamp();
       var directory = try `build/capture_tests-output/${stamp}`;
       var width = mode == 0 ? 3840 : 1920;
       var height = mode == 0 ? 2160 : 1080;
@@ -320,12 +317,12 @@ module capture_tests {
         try std.test.assert(faithful, "Recording lost source detail");
       }
     }
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Finalizes a recording when source failure and portal closure arrive in either order. */
-  function interrupted_recording(error_first: bool) TestResult<void> {
-    var stamp = desktop.filename_stamp();
+  function interrupted_recording(error_first: bool) std.test.AssertionResult<void> {
+    var stamp = try desktop.filename_stamp();
     var directory = try `build/capture_tests-output/${stamp}`;
     var capture = try capture_backend.Capture(true, false, false, true, 0);
     var source = try String("videotestsrc is-live=true name=source");
@@ -346,19 +343,19 @@ module capture_tests {
       std.time.sleep(std.time.create_duration_millis(2));
     }
     try std.test.assert(capture.completed);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** A source error before portal closure still drains the encoder. */
-  test_function source_error_before_close() TestResult<void> {
+  test_function source_error_before_close() std.test.AssertionResult<void> {
     try interrupted_recording(true);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** A late source error cannot interrupt already requested finalization. */
-  test_function source_error_after_close() TestResult<void> {
+  test_function source_error_after_close() std.test.AssertionResult<void> {
     try interrupted_recording(false);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Runs until a native pipeline error propagates, bounding a broken test fixture. */
@@ -372,8 +369,8 @@ module capture_tests {
   }
 
   /** An error downstream of the desktop source cannot publish incomplete output. */
-  test_function output_error() TestResult<void> {
-    var stamp = desktop.filename_stamp();
+  test_function output_error() std.test.AssertionResult<void> {
+    var stamp = try desktop.filename_stamp();
     var directory = try `build/capture_tests-output/${stamp}`;
     var capture = try capture_backend.Capture(true, false, false, true, 0);
     var source = try String("videotestsrc is-live=true name=source ! identity error-after=15");
@@ -383,36 +380,72 @@ module capture_tests {
       SystemResult.Ok => {
         try std.test.fail("Pipeline error did not propagate");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     try std.test.assert(not capture.completed);
-    var published = std.io.is_file(capture.destination);
+    var published = try std.io.is_file(capture.destination);
     try std.test.assert(not published);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Delay validation rejects malformed, negative, and excessive arguments. */
-  test_function delays() TestResult<void> {
+  test_function delays() std.test.AssertionResult<void> {
     var invalid = try String("-1");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted negative delay");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     invalid = try String("3601");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted excessive delay");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     invalid = try String("1;true");
     match capture_backend.delay_seconds(invalid) {
       SystemResult.Ok(_) => {
         try std.test.fail("Accepted nonnumeric delay");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     var capture = try capture_backend.Capture(false, false, false, true, 1);
     capture.countdown();
@@ -423,11 +456,11 @@ module capture_tests {
     if (not capture.countdown_ready()) {
       try std.test.fail("Countdown did not expire");
     }
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** An area cannot start a pipeline or reserve a file before selection. */
-  test_function selection_required() TestResult<void> {
+  test_function selection_required() std.test.AssertionResult<void> {
     var capture = try capture_backend.Capture(false, true, false, true, 0);
     var source = try String("videotestsrc name=source");
     var directory = try String("build/capture-unselected");
@@ -435,16 +468,25 @@ module capture_tests {
       SystemResult.Ok => {
         try std.test.fail("Captured without selection");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     if (not capture.destination.is_empty()) {
       try std.test.fail("Reserved output before selection");
     }
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Error recovery retains an owned partial file while ordinary cancellation still removes it. */
-  test_function recovery_retains_partial_output() TestResult<void> {
+  test_function recovery_retains_partial_output() std.test.AssertionResult<void> {
     var path = try String("");
     if (true) {
       var output = desktop.Output();
@@ -457,12 +499,12 @@ module capture_tests {
     var saved = try std.io.read_to_string(make_heap_allocator(), path);
     try std.test.assert(saved.equals_literal("recoverable fragments"));
     try std.io.remove_file(path);
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 
   /** Publication cannot replace an existing destination and cleanup removes the private file. */
-  test_function publication_collision() TestResult<void> {
-    var stamp = desktop.filename_stamp();
+  test_function publication_collision() std.test.AssertionResult<void> {
+    var stamp = try desktop.filename_stamp();
     var directory = try `build/capture_tests-output/${stamp}`;
     var output = desktop.Output();
     try output.reserve(directory);
@@ -473,13 +515,22 @@ module capture_tests {
       SystemResult.Ok => {
         try std.test.fail("Replaced existing output");
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return std.test.AssertionResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return std.test.AssertionResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return std.test.AssertionResult.Overflow(error);
+      }
     };
     var contents = try std.io.read_to_string(make_heap_allocator(), destination);
     if (not contents.equals(original)) {
       try std.test.fail("Existing output changed");
     }
-    return TestResult.Ok;
+    return std.test.AssertionResult.Ok;
   }
 }
 
