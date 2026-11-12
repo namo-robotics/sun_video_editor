@@ -11,7 +11,7 @@ module macos_capture {
 
   /** Adds a final name for a complete file, refusing to overwrite any existing destination. */
   function publish_file(source: ref String, destination: ref String) SystemResult<void> {
-    if (unsafe { publish_link(source.c_str(), destination.c_str()); } != 0) {
+    if (unsafe { publish_link(try source.c_str(), try destination.c_str()); } != 0) {
       return SystemResult.Error(
         Error(1, "Cannot publish capture without replacing an existing file")
       );
@@ -56,7 +56,16 @@ module macos_capture {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Publication replaced an existing capture"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     var contents = try std.io.read_to_string(make_heap_allocator(), files.destination);
     if (not contents.equals(original)) {
@@ -160,18 +169,31 @@ module macos_capture {
 
     /** Preserves failed recordings before closing native writers, which may remove their output paths. */
     deinit() {
-      var preserve = this.settings.recording and not this.published and not this.cancelled and
-        not this.stage.is_empty() and std.io.is_file(this.native_file);
-      if (preserve) {
-        ignore_error(publish_file(this.native_file, this.recovery_file));
-        report(try `Recovery: ${this.stage}`);
-      }
+      var preserve = match this.preserve_recording() {
+        SystemResult.Ok(value) => value,
+        (error: const ref IError) => true
+      };
       this.session.close();
       if (not this.stage.is_empty() and not preserve) {
         ignore_error(std.io.remove_file(this.native_file));
         ignore_error(std.io.remove_file(this.recovery_file));
         ignore_error(std.io.remove_dir(this.stage));
       }
+    }
+
+    /** Retains unfinished recordings; failures leave private paths available for recovery. */
+    method preserve_recording() SystemResult<bool> {
+      if (not this.settings.recording or this.published or this.cancelled or this.stage.is_empty()) {
+        return SystemResult.Ok(false);
+      }
+      if (not try std.io.is_file(this.native_file)) {
+        return SystemResult.Ok(false);
+      }
+      ignore_error(publish_file(this.native_file, this.recovery_file));
+      std.io.print("Recovery: ");
+      std.io.println(this.stage);
+      unsafe { flush_streams(null); };
+      return SystemResult.Ok(true);
     }
 
     /** Shows the source picker; no output file exists yet. */
@@ -256,7 +278,7 @@ module macos_capture {
           this.clock = std.time.now();
         },
         apple_screen_capture.Event.Cancelled => {
-          this.interrupt(true);
+          try this.interrupt(true);
         },
         apple_screen_capture.Event.Recording => {
           this.active = true;
@@ -322,6 +344,43 @@ module macos_capture {
     }
   }
 
+  /** Checks that destruction preserves interrupted recordings and removes cancelled files. */
+  function test_recovery() SystemResult<void> {
+    var a = make_heap_allocator();
+    var payload = try String("partial recording");
+    for (var mode: i64 = 0; mode < 2; mode += 1) {
+      var files = try PublicationFixture();
+      var stage = try String("");
+      var native_file = try String("");
+      var recovery_file = try String("");
+      if (true) {
+        var settings = Options();
+        settings.recording = true;
+        var capture = try Capture(settings);
+        try capture.reserve_output(files.directory);
+        stage = try capture.stage.clone(a);
+        native_file = try capture.native_file.clone(a);
+        recovery_file = try capture.recovery_file.clone(a);
+        try std.io.write_string(native_file, payload);
+        if (mode == 1) {
+          try capture.interrupt(true);
+        }
+      }
+      if (mode == 0) {
+        var recovered = try std.io.read_to_string(a, recovery_file);
+        if (not recovered.equals(payload)) {
+          return SystemResult.Error(Error(1, "Interrupted recording was not preserved"));
+        }
+        try std.io.remove_file(native_file);
+        try std.io.remove_file(recovery_file);
+        try std.io.remove_dir(stage);
+      } else if (try std.io.is_dir(stage)) {
+        return SystemResult.Error(Error(1, "Cancelled recording left private files"));
+      }
+    }
+    return SystemResult.Ok;
+  }
+
   /** Checks parsing, publication, and session guards without presenting native capture UI. */
   public function self_test() SystemResult<void> {
     var a = make_heap_allocator();
@@ -374,7 +433,16 @@ module macos_capture {
       SystemResult.Ok(_) => {
         return SystemResult.Error(Error(1, "Invalid delay accepted"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     var session = apple_screen_capture.Session();
     var path = try String("unused.png");
@@ -382,9 +450,19 @@ module macos_capture {
       SystemResult.Ok => {
         return SystemResult.Error(Error(1, "Capture started before selection"));
       },
-      SystemResult.Error(_) => {}
+      SystemResult.Error(_) => {},
+      SystemResult.Allocation(error) => {
+        return SystemResult.Allocation(error);
+      },
+      SystemResult.InvalidArgument(error) => {
+        return SystemResult.InvalidArgument(error);
+      },
+      SystemResult.Overflow(error) => {
+        return SystemResult.Overflow(error);
+      }
     };
     try test_publication();
+    try test_recovery();
     report(
       try String(
         "PASS macOS capture options, output reservation, cleanup, session guards, and publication"
@@ -402,7 +480,7 @@ module macos_capture {
     while (not capture.done) {
       var pending = try signals.take_pending();
       if (pending.any()) {
-        capture.interrupt(pending.terminated());
+        try capture.interrupt(pending.terminated());
       }
       try capture.tick();
       std.time.sleep(std.time.create_duration_millis(5));
@@ -424,9 +502,9 @@ function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
   return AllocationResult.Ok(
     match result {
       SystemResult.Ok => 0,
-      SystemResult.Error(error) => {
+      (error: const ref IError) => {
         macos_capture.report(
-          try `Capture failed: ${error.message()}`
+          try `Capture failed: ${try error.message()}`
         );
         return AllocationResult.Ok(1);
       }
