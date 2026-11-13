@@ -4,54 +4,70 @@ using std;
 module sun_video_editor {
 
   /** Services chooser requests without allowing native objects into application state. */
-  function dialogs(renderer: ref ui_gtk.Renderer, state: ref State) SystemResult<bool> {
+  function dialogs(renderer: ref ui_gtk.Renderer, state: ref State) bool throws {
     var changed = false;
     if (state.open_requested) {
       state.open_requested = false;
-      try renderer.choose_input();
+      renderer.choose_input();
     }
     if (state.save_requested) {
       state.save_requested = false;
-      state.capture_save_source = try String("");
-      var filename = try String("converted");
-      try filename.append(video.extension(state.settings.format));
-      try renderer.choose_output(filename);
+      state.capture_save_source = String("");
+      var filename = String("converted");
+      filename.append(video.extension(state.settings.format));
+      renderer.choose_output(filename);
     }
     if (state.capture_save_requested) {
       state.capture_save_requested = false;
-      state.capture_save_source = try state.capture.saved.clone(make_heap_allocator());
-      var filename = try String(
+      state.capture_save_source = state.capture.saved.clone(make_heap_allocator());
+      var filename = String(
         state.capture.kind == 0 ? "Screenshot.png" : (state.capture.saved.ends_with(".mp4") ? "Recording.mp4" : "Recording.webm")
       );
 
-      match renderer.choose_output(filename) {
-        SystemResult.Ok => {},
-        (error: const ref IError) => {
-          state.capture.message = try (try error.message()).clone(make_heap_allocator());
-          state.capture_save_source = try String("");
-          changed = true;
-        }
-      };
+      try {
+        renderer.choose_output(filename);
+      } catch (error: std.Error) {
+        state.capture.message = (error.message()).clone(make_heap_allocator());
+        state.capture_save_source = String("");
+        changed = true;
+      } catch (error: std.AllocationError) {
+        state.capture.message = (error.message()).clone(make_heap_allocator());
+        state.capture_save_source = String("");
+        changed = true;
+      } catch (error: std.InvalidArgumentError) {
+        state.capture.message = (error.message()).clone(make_heap_allocator());
+        state.capture_save_source = String("");
+        changed = true;
+      } catch (error: std.OverflowError) {
+        state.capture.message = (error.message()).clone(make_heap_allocator());
+        state.capture_save_source = String("");
+        changed = true;
+      }
     }
-    match try renderer.take_input_path() {
+    match renderer.take_input_path() {
       Option.Some(path) => {
         if (state.job.mode == 0) {
-          try open_source(state, path);
+          open_source(state, path);
           changed = true;
         }
       },
       Option.None => {}
     };
-    match try renderer.take_output_path() {
+    match renderer.take_output_path() {
       Option.Some(path) => {
         if (not state.capture_save_source.is_empty()) {
-          match state.capture.save_copy(state.capture_save_source, path) {
-            SystemResult.Ok => {},
-            (error: const ref IError) => {
-              state.capture.message = try (try error.message()).clone(make_heap_allocator());
-            }
-          };
-          state.capture_save_source = try String("");
+          try {
+            state.capture.save_copy(state.capture_save_source, path);
+          } catch (error: std.Error) {
+            state.capture.message = (error.message()).clone(make_heap_allocator());
+          } catch (error: std.AllocationError) {
+            state.capture.message = (error.message()).clone(make_heap_allocator());
+          } catch (error: std.InvalidArgumentError) {
+            state.capture.message = (error.message()).clone(make_heap_allocator());
+          } catch (error: std.OverflowError) {
+            state.capture.message = (error.message()).clone(make_heap_allocator());
+          }
+          state.capture_save_source = String("");
           changed = true;
         } else if (state.job.mode == 0) {
           state.confirm_export = false;
@@ -62,114 +78,200 @@ module sun_video_editor {
       },
       Option.None => {}
     };
-    return SystemResult.Ok(changed);
+    return changed;
   }
 
   /** Checks external tools and the selected encoder before the first conversion. */
-  public function dependencies() SystemResult<void> {
+  public function dependencies() void throws {
     var a = make_heap_allocator();
-    var tools = try (try String("ffmpeg ffprobe")).split_whitespace(a);
+    var tools = (String("ffmpeg ffprobe")).split_whitespace(a);
     for (var tool: ref String in tools) {
-      var version = try std.process.Command(a, tool);
-      try version.add_arg("-version");
-      var banner = try video.capture(version);
-      if (not (try video.supported_tool_version(banner))) {
-        return SystemResult.Error(Error(1, "Install FFmpeg and ffprobe version 8 or newer"));
+      var version = std.process.Command(a, tool);
+      version.add_arg("-version");
+      var banner = video.capture(version);
+      if (not (video.supported_tool_version(banner))) {
+        throw Error(1, "Install FFmpeg and ffprobe version 8 or newer");
       }
     }
-    var command = try std.process.Command(a, "ffmpeg");
-    try command.add_arg("-hide_banner");
-    try command.add_arg("-encoders");
-    var encoders = match video.capture(command) {
-      SystemResult.Ok(value) => value,
-      (_: const ref IError) => {
-        return SystemResult.Error(
-          Error(1, "Install FFmpeg (including ffprobe) before running this example")
-        );
+    var command = std.process.Command(a, "ffmpeg");
+    command.add_arg("-hide_banner");
+    command.add_arg("-encoders");
+    var encoders_outcome: std.Option<String> = std.Option.None;
+
+    try {
+      var value = video.capture(command);
+
+      encoders_outcome = std.Option.Some(value);
+    } catch {
+      throw Error(1, "Install FFmpeg (including ffprobe) before running this example");
+    }
+
+    var encoders = match encoders_outcome {
+      std.Option.Some(value) => value,
+      std.Option.None => {
+        throw std.Error(1, "Exception handler produced no value");
       }
     };
     if (not encoders.contains("libx264") or not encoders.contains(" aac ")) {
-      return SystemResult.Error(Error(1, "Install FFmpeg with libx264 and AAC encoders"));
+      throw Error(1, "Install FFmpeg with libx264 and AAC encoders");
     }
-    var scale = try std.process.Command(a, "ffmpeg");
-    try scale.add_arg("-hide_banner");
-    try scale.add_arg("-h");
-    try scale.add_arg("filter=scale");
-    var capabilities = try video.capture(scale);
+    var scale = std.process.Command(a, "ffmpeg");
+    scale.add_arg("-hide_banner");
+    scale.add_arg("-h");
+    scale.add_arg("filter=scale");
+    var capabilities = video.capture(scale);
     if (not capabilities.contains("reset_sar")) {
-      return SystemResult.Error(
-        Error(
-          1,
-          "This example requires FFmpeg with scale reset_sar support (use FFmpeg 8 or newer)"
-        )
+      throw Error(
+        1,
+        "This example requires FFmpeg with scale reset_sar support (use FFmpeg 8 or newer)"
       );
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Runs a bounded nonblocking turn and redraws only when asynchronous state changes. */
-  function turn(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) Result<void> {
+  function turn(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) void throws {
     var previous_page = session.state.page;
-    try renderer.poll(session.tree, session.queue, false);
+    renderer.poll(session.tree, session.queue, false);
     if (not renderer.running()) {
       session.state.job.process.stop();
-      return Result.Ok;
+      return;
     }
-    try session.dispatch(renderer);
+    session.dispatch(renderer);
     var percent = session.state.job.percent;
     var mode = session.state.job.mode;
     var changed = false;
-    match session.state.capture.tick() {
-      Result.Ok(value) => {
-        changed = value;
-      },
-      (error: const ref IError) => {
-        try session.state.capture.cancel();
-        session.state.capture.message = try (try error.message()).clone(make_heap_allocator());
-        changed = true;
+    try {
+      var value = session.state.capture.tick();
+      changed = value;
+    } catch (error: std.Error) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.AllocationError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.InvalidArgumentError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.OverflowError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.IndexOutOfBoundsError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.NotFoundError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.EmptyError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.IOError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.ConversionError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.DivisionByZeroError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.ArithmeticError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.json.JsonError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.xml.XmlError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    } catch (error: std.ProtoDecodeError) {
+      session.state.capture.cancel();
+      session.state.capture.message = (error.message()).clone(make_heap_allocator());
+      changed = true;
+    }
+    try {
+      var value = dialogs(renderer, session.state);
+      changed = changed or value;
+    } catch (error: std.Error) {
+      if (not session.state.capture_save_source.is_empty()) {
+        session.state.capture.message = (error.message()).clone(make_heap_allocator());
+        session.state.capture_save_source = String("");
+      } else {
+        session.state.job.fail(error);
       }
-    };
-    match dialogs(renderer, session.state) {
-      SystemResult.Ok(value) => {
-        changed = changed or value;
-      },
-      (error: const ref IError) => {
-        if (not session.state.capture_save_source.is_empty()) {
-          session.state.capture.message = try (try error.message()).clone(make_heap_allocator());
-          session.state.capture_save_source = try String("");
-        } else {
-          try session.state.job.fail(error);
-        }
-        changed = true;
+      changed = true;
+    } catch (error: std.AllocationError) {
+      if (not session.state.capture_save_source.is_empty()) {
+        session.state.capture.message = (error.message()).clone(make_heap_allocator());
+        session.state.capture_save_source = String("");
+      } else {
+        session.state.job.fail(error);
       }
-    };
-    match session.state.job.tick() {
-      SystemResult.Ok => {},
-      (error: const ref IError) => {
-        try session.state.job.fail(error);
-        changed = true;
+      changed = true;
+    } catch (error: std.InvalidArgumentError) {
+      if (not session.state.capture_save_source.is_empty()) {
+        session.state.capture.message = (error.message()).clone(make_heap_allocator());
+        session.state.capture_save_source = String("");
+      } else {
+        session.state.job.fail(error);
       }
-    };
+      changed = true;
+    } catch (error: std.OverflowError) {
+      if (not session.state.capture_save_source.is_empty()) {
+        session.state.capture.message = (error.message()).clone(make_heap_allocator());
+        session.state.capture_save_source = String("");
+      } else {
+        session.state.job.fail(error);
+      }
+      changed = true;
+    }
+    try {
+      session.state.job.tick();
+    } catch (error: std.Error) {
+      session.state.job.fail(error);
+      changed = true;
+    } catch (error: std.AllocationError) {
+      session.state.job.fail(error);
+      changed = true;
+    } catch (error: std.InvalidArgumentError) {
+      session.state.job.fail(error);
+      changed = true;
+    } catch (error: std.OverflowError) {
+      session.state.job.fail(error);
+      changed = true;
+    }
     if (mode == 1 and session.state.job.mode == 0 and session.state.job.ready) {
-      session.state.settings.start = try String("0");
-      session.state.settings.end = try timestamp(duration_us(session.state));
+      session.state.settings.start = String("0");
+      session.state.settings.end = timestamp(duration_us(session.state));
       session.state.position = 0;
       if (session.state.settings.output.is_empty()) {
-        session.state.settings.output = try session.state.job.loaded.clone(make_heap_allocator());
-        try session.state.settings.output.append(".converted");
-        try session.state.settings.output.append(video.extension(session.state.settings.format));
+        session.state.settings.output = session.state.job.loaded.clone(make_heap_allocator());
+        session.state.settings.output.append(".converted");
+        session.state.settings.output.append(video.extension(session.state.settings.format));
       }
     }
     if (changed or percent != session.state.job.percent or mode != session.state.job.mode) {
-      try session.render(renderer);
+      session.render(renderer);
     }
     if (previous_page != session.state.page) {
-      try renderer.set_default_size(
+      renderer.set_default_size(
         session.state.page == 0 ? 544 : 1160,
         session.state.page == 0 ? 288 : 860
       );
     }
-    return Result.Ok;
+    return;
   }
 
   /** Runs the interactive application or the headless acceptance scenario. */
@@ -177,61 +279,65 @@ module sun_video_editor {
     automated: bool,
     initial: const ref String,
     helper: const ref String
-  ) Result<void> {
-    try dependencies();
-    var title = try String("Sun Video Editor");
-    var renderer = try ui_gtk.Renderer(
+  ) void throws {
+    dependencies();
+    var title = String("Sun Video Editor");
+    var renderer = ui_gtk.Renderer(
       title,
-      try String("org.namo_robotics.VideoEditor")
+      String("org.namo_robotics.VideoEditor")
     );
-    var state = try State();
-    state.capture.helper = try helper.clone(make_heap_allocator());
+    var state = State();
+    state.capture.helper = helper.clone(make_heap_allocator());
     if (not initial.is_empty()) {
-      try report(state, open_source(state, initial));
+      try {
+        open_source(state, initial);
+      } catch (error: Error) {
+        report(state, error);
+      }
     }
-    try renderer.set_default_size(state.page == 0 ? 544 : 1160, state.page == 0 ? 288 : 860);
-    var session = try ui.Session<State>(state, view, handle);
-    try session.render(renderer);
+    renderer.set_default_size(state.page == 0 ? 544 : 1160, state.page == 0 ? 288 : 860);
+    var session = ui.Session<State>(state, view, handle);
+    session.render(renderer);
     if (automated) {
       return acceptance(renderer, session);
     }
     while (renderer.running()) {
-      try renderer.wait_events(
+      renderer.wait_events(
         session.tree,
         session.queue,
         session.state.job.mode == 0 and not session.state.capture.process.running and
           session.state.capture.preview.mode == 0 and
           not session.state.capture.copy_process.running ? 0 : 20
       );
-      try turn(renderer, session);
+      turn(renderer, session);
     }
     session.state.job.process.stop();
     session.tree.shutdown(renderer);
-    return Result.Ok;
+    return;
   }
 }
 
 /** Reports startup failures and selects the native acceptance test when requested. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) Result<i32> {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
   if (args.size() == 2 and args[1].equals_literal("--check-dependencies")) {
-    try sun_video_editor.dependencies();
+    sun_video_editor.dependencies();
     std.io.println("FFmpeg 8+ ready");
-    return Result.Ok(0);
+    return 0;
   }
   var automated = args.size() == 2 and args[1].equals_literal("--self-test");
-  var initial = try String("");
+  var initial = String("");
   if (args.size() == 2 and not automated) {
-    initial = try args[1].clone(a);
+    initial = args[1].clone(a);
   }
   if (args.size() > 2) {
     std.io.eprintln("Usage: sun_video_editor [VIDEO|--self-test]");
-    return Result.Ok(1);
+    return 1;
   }
-  try sun_video_editor.run(automated, initial, try screencast.helper_path(args[0]));
-  return Result.Ok(0);
+  sun_video_editor.run(automated, initial, screencast.helper_path(args[0]));
+  return 0;
 }
 manifest {
   libraries: [

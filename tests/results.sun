@@ -4,42 +4,29 @@ using std;
 module result_checks {
 
   /** Copies UTF-8 bytes and accepts an empty range at the end of the input. */
-  test_function substring_valid_ranges() std.test.AssertionResult<void> {
+  test_function substring_valid_ranges() {
     var a = make_heap_allocator();
-    var text = try String("aéz");
-    match try sun_video_editor_results.substring(text, a, 1, 2) {
-      AccessResult.Ok(value) => {
-        try std.test.assert(value.equals_literal("é"));
-      },
-      AccessResult.OutOfBounds(_) => {
-        try std.test.fail("Valid range rejected");
-      }
-    };
-    match try sun_video_editor_results.substring(text, a, text.length(), 0) {
-      AccessResult.Ok(value) => {
-        try std.test.assert(value.is_empty());
-      },
-      AccessResult.OutOfBounds(_) => {
-        try std.test.fail("Empty end range rejected");
-      }
-    };
-    return std.test.AssertionResult.Ok;
+    var text = String("aéz");
+    var middle = sun_video_editor_results.substring(text, a, 1, 2);
+    std.test.assert(middle.equals_literal("é"));
+    var empty = sun_video_editor_results.substring(text, a, text.length(), 0);
+    std.test.assert(empty.is_empty());
   }
 
   /** Rejects negative, oversized, and overflowing ranges before copying bytes. */
-  test_function substring_invalid_ranges() std.test.AssertionResult<void> {
+  test_function substring_invalid_ranges() {
     var a = make_heap_allocator();
-    var text = try String("abc");
+    var text = String("abc");
     for (var i: i64 = 0; i < 4; i += 1) {
       var start: i64 = i == 0 ? -1 : (i == 2 ? 4 : 1);
       var count: i64 = i == 1 ? -1 : (i == 3 ? 9223372036854775807 : 0);
-      match try sun_video_editor_results.substring(text, a, start, count) {
-        AccessResult.Ok(_) => {
-          try std.test.fail("Invalid range accepted");
-        },
-        AccessResult.OutOfBounds(_) => {}
-      };
+      var rejected = false;
+      try {
+        sun_video_editor_results.substring(text, a, start, count);
+      } catch (error: IndexOutOfBoundsError) {
+        rejected = true;
+      }
+      std.test.assert(rejected, "Invalid range accepted");
     }
-    return std.test.AssertionResult.Ok;
   }
 }

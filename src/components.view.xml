@@ -7,7 +7,7 @@
     <Param name="selected" type="bool" />
     <Param name="width" type="i32" />
     <Param name="fontSize" type="i32" />
-    <Button text="{text}" action="{action}" enabled="{enabled}" width="{width}" height="64" fontSize="{fontSize}" styleResource="{try String(selected ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
+    <Button text="{text}" action="{action}" enabled="{enabled}" width="{width}" height="64" fontSize="{fontSize}" styleResource="{String(selected ? &quot;selectedChoice&quot; : &quot;choice&quot;)}" />
   </Component>
   <Component name="Panel">
     <Param name="column" type="i32" />

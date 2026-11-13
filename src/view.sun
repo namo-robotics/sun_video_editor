@@ -4,14 +4,12 @@ using std;
 module sun_video_editor {
 
   /** Finds packaged vector icons beside the capture helper, independent of fonts. */
-  function capture_icon(state: const ref State, name: static_ptr<u8>) AllocationResult<String> {
-    return AllocationResult.Ok(
-      try `${state.capture.helper}.icons/${try String(name)}.svg`
-    );
+  function capture_icon(state: const ref State, name: static_ptr<u8>) String throws {
+    return `${state.capture.helper}.icons/${String(name)}.svg`;
   }
 
   /** Selects the active screen while preserving the editor's owned state. */
-  function view(state: const ref State) SystemResult<ui.View> {
+  function view(state: const ref State) ui.View throws {
     if (state.page == 0) {
       return home_view(state);
     }
@@ -27,179 +25,146 @@ module sun_video_editor {
   }
 
   /** Clamps editable time fields to a valid preview while leaving validation to the exporter. */
-  function time_us(text: const ref String, fallback: i64, duration: i64) std.AllocationResult<i64> {
-    var value = match video.seconds(text) {
-      SystemResult.Ok(value) => value,
-      SystemResult.Error(_) => {
-        return std.AllocationResult.Ok(fallback);
-      },
-      SystemResult.Allocation(error) => {
-        return std.AllocationResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.AllocationResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.AllocationResult.Overflow(error);
-      }
-    };
-    if (value >= _convert<f64>(duration) / 1000000.0) {
-      return std.AllocationResult.Ok(duration);
+  function time_us(text: const ref String, fallback: i64, duration: i64) i64 throws {
+    var value: f64 = 0.0;
+
+    try {
+      value = video.seconds(text);
+    } catch (error: std.Error) {
+      return fallback;
     }
-    return std.AllocationResult.Ok(_convert<i64>(value * 1000000.0 + 0.5));
+
+    if (value >= _convert<f64>(duration) / 1000000.0) {
+      return duration;
+    }
+    return _convert<i64>(value * 1000000.0 + 0.5);
   }
 
   /** Resolves an in point without letting an invalid manual edit collapse the native range. */
-  function start_us(state: const ref State) std.AllocationResult<i64> {
+  function start_us(state: const ref State) i64 throws {
     var duration = duration_us(state);
-    var start = try time_us(state.settings.start, 0, duration);
-    var end = try time_us(state.settings.end, duration, duration);
-    return std.AllocationResult.Ok(start < end ? start : 0);
+    var start = time_us(state.settings.start, 0, duration);
+    var end = time_us(state.settings.end, duration, duration);
+    return start < end ? start : 0;
   }
 
   /** Resolves an out point, treating a blank field as the full duration. */
-  function end_us(state: const ref State) std.AllocationResult<i64> {
+  function end_us(state: const ref State) i64 throws {
     var duration = duration_us(state);
-    var end = try time_us(state.settings.end, duration, duration);
-    return std.AllocationResult.Ok(end > try start_us(state) ? end : duration);
+    var end = time_us(state.settings.end, duration, duration);
+    return end > start_us(state) ? end : duration;
   }
 
   /** Returns a source only after probing succeeded, keeping preview errors separate from export. */
-  function preview_source(state: const ref State) AllocationResult<String> {
+  function preview_source(state: const ref State) String throws {
     if (state.job.ready) {
-      return AllocationResult.Ok(try state.job.loaded.clone(make_heap_allocator()));
+      return state.job.loaded.clone(make_heap_allocator());
     }
-    return AllocationResult.Ok(try String(""));
+    return String("");
   }
 
   /** Preserves microsecond frame boundaries while keeping millisecond values compact. */
-  function timestamp(value: i64) AllocationResult<String> {
+  function timestamp(value: i64) String throws {
     var milliseconds = value / 1000;
     var hours = milliseconds / 3600000;
     var minutes = milliseconds / 60000 % 60;
     var seconds = milliseconds / 1000 % 60;
     var fraction = milliseconds % 1000;
-    var result = try String("");
+    var result = String("");
     if (hours < 10) {
-      try result.append("0");
+      result.append("0");
     }
-    try result.append(hours);
-    try result.append(":");
+    result.append(hours);
+    result.append(":");
     if (minutes < 10) {
-      try result.append("0");
+      result.append("0");
     }
-    try result.append(minutes);
-    try result.append(":");
+    result.append(minutes);
+    result.append(":");
     if (seconds < 10) {
-      try result.append("0");
+      result.append("0");
     }
-    try result.append(seconds);
-    try result.append(".");
+    result.append(seconds);
+    result.append(".");
     if (fraction < 100) {
-      try result.append("0");
+      result.append("0");
     }
     if (fraction < 10) {
-      try result.append("0");
+      result.append("0");
     }
-    try result.append(fraction);
+    result.append(fraction);
     var remainder = value % 1000;
     if (remainder != 0) {
       if (remainder < 100) {
-        try result.append("0");
+        result.append("0");
       }
       if (remainder < 10) {
-        try result.append("0");
+        result.append("0");
       }
-      try result.append(remainder);
+      result.append(remainder);
     }
-    return AllocationResult.Ok(result);
+    return result;
   }
 
   /** Shows the selected filename or a prompt to use the file chooser. */
-  function source_name(state: const ref State) AllocationResult<String> {
+  function source_name(state: const ref State) String throws {
     if (state.settings.input.is_empty()) {
-      return AllocationResult.Ok(try String("Choose Open video… to get started."));
+      return String("Choose Open video… to get started.");
     }
     var a = make_heap_allocator();
-    var parts = try state.settings.input.split(a, b'/');
-    return AllocationResult.Ok(try parts[parts.size() - 1].clone(a));
+    var parts = state.settings.input.split(a, b'/');
+    return parts[parts.size() - 1].clone(a);
   }
 
   /** Presents compact source information after loading. */
-  function metadata(state: const ref State) AllocationResult<String> {
+  function metadata(state: const ref State) String throws {
     if (not state.job.ready) {
-      return AllocationResult.Ok(
-        try String("MOV or MP4 · local processing · no upload")
-      );
+      return String("MOV or MP4 · local processing · no upload");
     }
-    var length = try timestamp(duration_us(state));
-    return AllocationResult.Ok(
-      try `${state.job.media.width} × ${state.job.media.height}   ·   ${length}   ·   ${state.job.media.size / 1024} KB`
-    );
+    var length = timestamp(duration_us(state));
+    return `${state.job.media.width} × ${state.job.media.height}   ·   ${length}   ·   ${state.job.media.size / 1024} KB`;
   }
 
   /** Copies stable section identifiers for keyed selector controls without moving application state. */
-  function section_keys(state: const ref State) AllocationResult<Vec<i64>> {
-    var ids = try Vec<i64>(make_heap_allocator(), state.settings.sections.size());
+  function section_keys(state: const ref State) Vec<i64> throws {
+    var ids = Vec<i64>(make_heap_allocator(), state.settings.sections.size());
 
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
-      try ids.push(state.settings.sections[i].id);
+      ids.push(state.settings.sections[i].id);
     }
-    return AllocationResult.Ok(ids);
+    return ids;
   }
 
   /** Enables splitting only inside a valid kept interval with room on both sides. */
-  function can_split(state: const ref State) std.AllocationResult<bool> {
+  function can_split(state: const ref State) bool throws {
     if (not state.job.ready or state.job.mode != 0 or state.settings.sections.size() >= 64) {
-      return std.AllocationResult.Ok(false);
+      return false;
     }
-    match video.trim_length(state.settings, state.job.media) {
-      SystemResult.Error(_) => {
-        return std.AllocationResult.Ok(false);
-      },
-      SystemResult.Ok(_) => {},
-      SystemResult.Allocation(error) => {
-        return std.AllocationResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.AllocationResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.AllocationResult.Overflow(error);
-      }
-    };
-    return std.AllocationResult.Ok(
-      state.position >= try start_us(state) + 1000 and state.position <= try end_us(state) - 1000
-    );
+    try {
+      video.trim_length(state.settings, state.job.media);
+    } catch (error: std.Error) {
+      return false;
+    }
+    return state.position >= start_us(state) + 1000 and state.position <= end_us(state) - 1000;
   }
 
   /** Supplies ordered handle pairs for the native timeline while invalid text remains editable. */
-  function timeline_ranges(state: const ref State) AllocationResult<Vec<ui.TrimRange>> {
+  function timeline_ranges(state: const ref State) Vec<ui.TrimRange> throws {
     var a = make_heap_allocator();
-    var ranges = try Vec<ui.TrimRange>(a, 4);
-    match video.kept_intervals(state.settings, state.job.media) {
-      SystemResult.Error(_) => {
-        return AllocationResult.Ok(ranges);
-      },
-      SystemResult.Ok(_) => {},
-      SystemResult.Allocation(error) => {
-        return AllocationResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return AllocationResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return AllocationResult.Overflow(error);
-      }
-    };
+    var ranges = Vec<ui.TrimRange>(a, 4);
+    try {
+      video.kept_intervals(state.settings, state.job.media);
+    } catch (error: std.Error) {
+      return ranges;
+    }
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
-      var first = try time_us(state.settings.sections[i].start, 0, duration_us(state));
-      var last = try time_us(
+      var first = time_us(state.settings.sections[i].start, 0, duration_us(state));
+      var last = time_us(
         state.settings.sections[i].end,
         duration_us(state),
         duration_us(state)
       );
-      try ranges.push(ui.TrimRange(state.settings.sections[i].id, first, last));
+      ranges.push(ui.TrimRange(state.settings.sections[i].id, first, last));
 
       for (var j = ranges.size() - 1; j > 0 and ranges[j].start < ranges[j - 1].start; j -= 1) {
         var id = ranges[j].id;
@@ -213,72 +178,71 @@ module sun_video_editor {
         ranges[j - 1].end = end;
       }
     }
-    return AllocationResult.Ok(ranges);
+    return ranges;
   }
 
   /** Reports exactly the selected interval's length, or flags invalid manual times. */
-  function selection_summary(state: const ref State) AllocationResult<String> {
+  function selection_summary(state: const ref State) String throws {
     if (not state.job.ready) {
-      return AllocationResult.Ok(
-        try String("Open a video to select the part you want to keep.")
+      return String("Open a video to select the part you want to keep.");
+    }
+    var length: f64 = 0.0;
+
+    try {
+      var value = video.trim_length(state.settings, state.job.media);
+
+      length = value;
+    } catch (error: std.Error) {
+      return String(
+        "Check section times: kept sections must be within the video and must not overlap."
       );
     }
-    var length = match video.trim_length(state.settings, state.job.media) {
-      SystemResult.Ok(value) => value,
-      SystemResult.Error(_) => {
-        return AllocationResult.Ok(
-          try String(
-            "Check section times: kept sections must be within the video and must not overlap."
-          )
-        );
-      },
-      SystemResult.Allocation(error) => {
-        return AllocationResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return AllocationResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return AllocationResult.Overflow(error);
-      }
-    };
-    var time = try timestamp(_convert<i64>(length * 1000000.0));
+
+    var time = timestamp(_convert<i64>(length * 1000000.0));
     if (state.settings.sections.size() == 0) {
-      return AllocationResult.Ok(try `Selected clip: ${time}`);
+      return `Selected clip: ${time}`;
     }
-    return AllocationResult.Ok(
-      try `${state.settings.sections.size()} kept sections · Export length: ${time}`
-    );
+    return `${state.settings.sections.size()} kept sections · Export length: ${time}`;
   }
 
   /** Shows export progress without implying completion before the file is published. */
-  function progress_label(state: const ref State) AllocationResult<String> {
+  function progress_label(state: const ref State) String throws {
     if (state.job.mode == 1) {
-      return AllocationResult.Ok(try String("Reading video…"));
+      return String("Reading video…");
     }
     if (state.job.mode == 2) {
-      return AllocationResult.Ok(try `Exporting ${state.job.percent}%`);
+      return `Exporting ${state.job.percent}%`;
     }
     if (state.job.percent == 100) {
-      return AllocationResult.Ok(try String("Export complete"));
+      return String("Export complete");
     }
-    return AllocationResult.Ok(
-      try video.encoding_label(state.settings.format, state.settings.audio)
-    );
+    return video.encoding_label(state.settings.format, state.settings.audio);
   }
 
   /** Keeps status text readable while preserving full errors in the terminal. */
-  function status_text(state: const ref State) std.AllocationResult<String> {
+  function status_text(state: const ref State) String throws {
     var a = make_heap_allocator();
-    var lines = try state.job.message.split(a, b'\n');
+    var lines = state.job.message.split(a, b'\n');
     if (lines[0].length() > 110) {
-      var text = match try sun_video_editor_results.substring(lines[0], a, 0, 107) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => try String("")
+      var text_outcome: std.Option<String> = std.Option.None;
+
+      try {
+        var value = sun_video_editor_results.substring(lines[0], a, 0, 107);
+
+        text_outcome = std.Option.Some(value);
+      } catch (error: std.IndexOutOfBoundsError) {
+        text_outcome = std.Option.Some(String(""));
+      }
+
+      var text = match text_outcome {
+        std.Option.Some(value) => value,
+        std.Option.None => {
+          throw std.Error(1, "Exception handler produced no value");
+        }
       };
-      try text.append("…");
-      return std.AllocationResult.Ok(text);
+      text.append("…");
+      return text;
     }
-    return std.AllocationResult.Ok(try lines[0].clone(a));
+    return lines[0].clone(a);
   }
 }

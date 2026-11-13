@@ -4,38 +4,42 @@ using std;
 module video {
 
   /** Accepts released FFmpeg and ffprobe version banners with the required major version. */
-  public function supported_tool_version(banner: const ref String) AllocationResult<bool> {
+  public function supported_tool_version(banner: const ref String) bool throws {
     var a = make_heap_allocator();
-    var fields = try banner.split_whitespace(a);
+    var fields = banner.split_whitespace(a);
     if (fields.size() < 3) {
-      return AllocationResult.Ok(false);
+      return false;
     }
     if (not fields[0].equals_literal("ffmpeg") and not fields[0].equals_literal("ffprobe")) {
-      return AllocationResult.Ok(false);
+      return false;
     }
     if (not fields[1].equals_literal("version")) {
-      return AllocationResult.Ok(false);
+      return false;
     }
-    var major = try String("");
+    var major = String("");
     for (var i: i64 = 0; i < fields[2].length(); i += 1) {
-      var c = match fields[2].at(i) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => 0
-      };
+      var c: u8 = 0;
+
+      try {
+        var value = fields[2].at(i);
+
+        c = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        c = 0;
+      }
+
       if (c == 46 or c == 45) {
         break;
       }
       if (c < 48 or c > 57) {
-        return AllocationResult.Ok(false);
+        return false;
       }
-      try major.append_char(c);
+      major.append_char(c);
     }
-    return AllocationResult.Ok(
-      match major.parse_i64() {
-        Option.Some(value) => value >= 8,
-        Option.None => false
-      }
-    );
+    return match major.parse_i64() {
+      Option.Some(value) => value >= 8,
+      Option.None => false
+    };
   }
 
   /** Stores the supported input stream and container properties. */
@@ -51,9 +55,9 @@ module video {
     public var hdr: bool = false;
 
     /** Initializes owned storage and reports allocation failure. */
-    init() AllocationResult<void> {
-      this.codec = try String("");
-      this.audio = try String("none");
+    init() throws {
+      this.codec = String("");
+      this.audio = String("none");
     }
   }
 
@@ -97,14 +101,14 @@ module video {
     public var sections: Vec<Section>;
 
     /** Allocates owned section storage for this export configuration. */
-    init() AllocationResult<void> {
-      this.input = try String("");
-      this.output = try String("");
-      this.start = try String("0");
-      this.end = try String("");
+    init() throws {
+      this.input = String("");
+      this.output = String("");
+      this.start = String("0");
+      this.end = String("");
 
       var a = make_heap_allocator();
-      this.sections = try Vec<Section>(a, 4);
+      this.sections = Vec<Section>(a, 4);
     }
   }
 
@@ -129,10 +133,10 @@ module video {
   }
 
   /** Updates a known video suffix, preserving the directory and filename stem. */
-  public function output_path(path: const ref String, format: i64) AllocationResult<String> {
+  public function output_path(path: const ref String, format: i64) String throws {
     var a = make_heap_allocator();
     if (path.is_empty()) {
-      return AllocationResult.Ok(try String(""));
+      return String("");
     }
     var length = path.length();
     for (var i: i64 = 0; i < 6; i += 1) {
@@ -141,107 +145,131 @@ module video {
         break;
       }
     }
-    var result = match try sun_video_editor_results.substring(path, a, 0, length) {
-      AccessResult.Ok(value) => value,
-      AccessResult.OutOfBounds(_) => try path.clone(a)
+    var result_outcome: std.Option<String> = std.Option.None;
+
+    try {
+      var value = sun_video_editor_results.substring(path, a, 0, length);
+
+      result_outcome = std.Option.Some(value);
+    } catch (error: std.IndexOutOfBoundsError) {
+      result_outcome = std.Option.Some(path.clone(a));
+    }
+
+    var result = match result_outcome {
+      std.Option.Some(value) => value,
+      std.Option.None => {
+        throw std.Error(1, "Exception handler produced no value");
+      }
     };
-    try result.append(extension(format));
-    return AllocationResult.Ok(result);
+    result.append(extension(format));
+    return result;
   }
 
   /** Describes the compatible codecs chosen automatically for the container. */
-  public function encoding_label(format: i64, audio: bool) AllocationResult<String> {
+  public function encoding_label(format: i64, audio: bool) String throws {
     if (format == 5) {
-      return AllocationResult.Ok(
-        try String("Animated GIF · loops forever · no audio")
-      );
+      return String("Animated GIF · loops forever · no audio");
     }
     if (format == 2) {
-      return AllocationResult.Ok(
-        try String(audio ? "VP9 video · Opus audio" : "VP9 video · no audio")
-      );
+      return String(audio ? "VP9 video · Opus audio" : "VP9 video · no audio");
     }
     if (format == 4) {
-      return AllocationResult.Ok(
-        try String(audio ? "MPEG-4 video · MP3 audio" : "MPEG-4 video · no audio")
-      );
+      return String(audio ? "MPEG-4 video · MP3 audio" : "MPEG-4 video · no audio");
     }
-    return AllocationResult.Ok(
-      try String(audio ? "H.264 video · AAC audio" : "H.264 video · no audio")
-    );
+    return String(audio ? "H.264 video · AAC audio" : "H.264 video · no audio");
   }
 
   /** Reads an optional string field without retaining a reference into JSON storage. */
-  function field(object: ref std.json.Json, key: static_ptr<u8>) AllocationResult<String> {
+  function field(object: ref std.json.Json, key: static_ptr<u8>) String throws {
     var a = make_heap_allocator();
-    match object.get(key) {
-      std.json.JsonResult.Ok(value) => {
-        match value.as_string() {
-          std.json.JsonResult.Ok(text) => {
-            return AllocationResult.Ok(try text.clone(a));
-          },
-          std.json.JsonResult.Error(_) => {}
-        };
-      },
-      std.json.JsonResult.Error(_) => {}
-    };
-    return AllocationResult.Ok(try String(""));
+
+    var operation_completed_6 = false;
+    try {
+      var value = object.get(key);
+      operation_completed_6 = true;
+
+      var operation_completed_5 = false;
+      try {
+        var text = value.as_string();
+        operation_completed_5 = true;
+        return text.clone(a);
+      } catch (error: std.json.JsonError) {
+        if (operation_completed_5) {
+          throw;
+        }
+      }
+    } catch (error: std.json.JsonError) {
+      if (operation_completed_6) {
+        throw;
+      }
+    }
+
+    return String("");
   }
 
   /** Reads an optional integer field from ffprobe output. */
-  function integer(object: ref std.json.Json, key: static_ptr<u8>) i64 {
-    match object.get(key) {
-      std.json.JsonResult.Ok(value) => {
-        match value.as_i64() {
-          std.json.JsonResult.Ok(number) => {
-            return number;
-          },
-          std.json.JsonResult.Error(_) => {}
-        };
-      },
-      std.json.JsonResult.Error(_) => {}
-    };
+  function integer(object: ref std.json.Json, key: static_ptr<u8>) i64 throws {
+    var operation_completed_4 = false;
+    try {
+      var value = object.get(key);
+      operation_completed_4 = true;
+      try {
+        var number = value.as_i64();
+        return number;
+      } catch (error: std.json.JsonError) {}
+    } catch (error: std.json.JsonError) {
+      if (operation_completed_4) {
+        throw;
+      }
+    }
+
     return 0;
   }
 
   /** Parses finite, nonnegative seconds or a colon-separated time with optional fractional seconds. */
-  public function seconds(text: const ref String) SystemResult<f64> {
-    var parts = try text.split(make_heap_allocator(), b':');
+  public function seconds(text: const ref String) f64 throws {
+    var parts = text.split(make_heap_allocator(), b':');
     if (parts.size() < 1 or parts.size() > 3 or text.is_empty()) {
-      return SystemResult.Error(Error(1, "Enter seconds or HH:MM:SS"));
+      throw Error(1, "Enter seconds or HH:MM:SS");
     }
     var total: f64 = 0.0;
     for (var i: i64 = 0; i < parts.size(); i += 1) {
-      var part = try parts[i].clone(make_heap_allocator());
+      var part = parts[i].clone(make_heap_allocator());
       if (part.is_empty()) {
-        return SystemResult.Error(Error(1, "Time contains an empty field"));
+        throw Error(1, "Time contains an empty field");
       }
       for (var j: i64 = 0; j < part.length(); j += 1) {
-        var ch = match part.at(j) {
-          AccessResult.Ok(value) => value,
-          AccessResult.OutOfBounds(_) => b' '
-        };
+        var ch: u8 = 0;
+
+        try {
+          var value = part.at(j);
+
+          ch = value;
+        } catch (error: std.IndexOutOfBoundsError) {
+          ch = b' ';
+        }
+
         if ((ch < b'0' or ch > b'9') and not (ch == b'.' and i == parts.size() - 1)) {
-          return SystemResult.Error(Error(1, "Time must contain nonnegative numbers"));
+          throw Error(1, "Time must contain nonnegative numbers");
         }
       }
-      var number = match try part.parse_f64() {
+      var number = match part.parse_f64() {
         Option.Some(value) => value,
         Option.None => -1.0
       };
       if (number < 0.0 or number != number or number > 1000000000.0 or (i > 0 and number >= 60.0)) {
-        return SystemResult.Error(Error(1, "Invalid time value"));
+        throw Error(1, "Invalid time value");
       }
       total = total * 60.0 + number;
     }
-    return SystemResult.Ok(total);
+    return total;
   }
 
   /** Reads a bounded rational frame rate, leaving unknown rates available for fallback. */
-  function frame_rate(media: ref Media, text: const ref String) AllocationResult<void> {
-    var parts = try text.split(make_heap_allocator(), b'/');
+  function frame_rate(media: ref Media, text: const ref String) void throws {
+    var parts = text.split(make_heap_allocator(), b'/');
     if (parts.size() != 2) {
-      return AllocationResult.Ok;
+      return;
     }
     var numerator = match parts[0].parse_i64() {
       Option.Some(value) => value,
@@ -253,163 +281,171 @@ module video {
     };
     if (numerator <= 0 or numerator > 1000000000 or denominator <= 0 or denominator > 1000000000 or
       numerator > denominator * 1000000) {
-      return AllocationResult.Ok;
+      return;
     }
     media.frame_rate_num = numerator;
     media.frame_rate_den = denominator;
-    return AllocationResult.Ok;
+    return;
   }
 
   /** Converts bounded probe JSON into a supported video description. */
-  function decode(document: ref std.json.Json) Result<Media> {
-    var result = try Media();
-    var format = try document.get("format");
-    var duration = try field(format, "duration");
-    result.duration = match try duration.parse_f64() {
+  function decode(document: ref std.json.Json) Media throws {
+    var result = Media();
+    var format = document.get("format");
+    var duration = field(format, "duration");
+    result.duration = match duration.parse_f64() {
       Option.Some(value) => value,
       Option.None => 0.0
     };
-    var size = try field(format, "size");
+    var size = field(format, "size");
     result.size = match size.parse_i64() {
       Option.Some(value) => value,
       Option.None => 0
     };
-    var streams = try document.get("streams");
+    var streams = document.get("streams");
     for (var i: i64 = 0; i < streams.len(); i += 1) {
-      var stream = try streams.at(i);
-      var kind = try field(stream, "codec_type");
+      var stream = streams.at(i);
+      var kind = field(stream, "codec_type");
       if (kind.equals_literal("video") and result.width == 0) {
         result.width = integer(stream, "width");
         result.height = integer(stream, "height");
-        result.codec = try field(stream, "codec_name");
-        try frame_rate(result, try field(stream, "avg_frame_rate"));
+        result.codec = field(stream, "codec_name");
+        frame_rate(result, field(stream, "avg_frame_rate"));
         if (result.frame_rate_num == 0) {
-          try frame_rate(result, try field(stream, "r_frame_rate"));
+          frame_rate(result, field(stream, "r_frame_rate"));
         }
-        var transfer = try field(stream, "color_transfer");
-        var primaries = try field(stream, "color_primaries");
+        var transfer = field(stream, "color_transfer");
+        var primaries = field(stream, "color_primaries");
         result.hdr = transfer.equals_literal("smpte2084") or
           transfer.equals_literal("arib-std-b67") or primaries.equals_literal("bt2020");
       } else if (kind.equals_literal("audio") and result.audio.equals_literal("none")) {
-        result.audio = try field(stream, "codec_name");
+        result.audio = field(stream, "codec_name");
       }
     }
-    return Result.Ok(result);
+    return result;
   }
 
   /** Rejects malformed or unbounded input metadata before it reaches export logic. */
-  public function parse_probe(text: const ref String) SystemResult<Media> {
+  public function parse_probe(text: const ref String) Media throws {
     var a = make_heap_allocator();
-    var document = match std.json.parse_json(a, text) {
-      Result.Ok(value) => value,
-      Result.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      Result.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      Result.Overflow(error) => {
-        return SystemResult.Overflow(error);
-      },
-      _ => {
-        return SystemResult.Error(Error(1, "ffprobe returned invalid metadata"));
+    var document_outcome: std.Option<std.json.Json> = std.Option.None;
+
+    try {
+      var value = std.json.parse_json(a, text);
+
+      document_outcome = std.Option.Some(value);
+    } catch (error: std.AllocationError) {
+      throw error;
+    } catch (error: std.InvalidArgumentError) {
+      throw error;
+    } catch (error: std.OverflowError) {
+      throw error;
+    } catch {
+      throw Error(1, "ffprobe returned invalid metadata");
+    }
+
+    var document = match document_outcome {
+      std.Option.Some(value) => value,
+      std.Option.None => {
+        throw std.Error(1, "Exception handler produced no value");
       }
     };
-    var media = match decode(document) {
-      Result.Ok(value) => value,
-      Result.Allocation(error) => {
-        return SystemResult.Allocation(error);
-      },
-      Result.InvalidArgument(error) => {
-        return SystemResult.InvalidArgument(error);
-      },
-      Result.Overflow(error) => {
-        return SystemResult.Overflow(error);
-      },
-      _ => {
-        return SystemResult.Error(Error(1, "Input has no readable video metadata"));
+    var media_outcome: std.Option<Media> = std.Option.None;
+
+    try {
+      var value = decode(document);
+
+      media_outcome = std.Option.Some(value);
+    } catch (error: std.AllocationError) {
+      throw error;
+    } catch (error: std.InvalidArgumentError) {
+      throw error;
+    } catch (error: std.OverflowError) {
+      throw error;
+    } catch {
+      throw Error(1, "Input has no readable video metadata");
+    }
+
+    var media = match media_outcome {
+      std.Option.Some(value) => value,
+      std.Option.None => {
+        throw std.Error(1, "Exception handler produced no value");
       }
     };
     if (media.width < 2 or media.height < 2 or media.duration <= 0.0 or
       media.duration != media.duration or media.duration > 1000000000.0) {
-      return SystemResult.Error(Error(1, "Input must contain a video with a finite duration"));
+      throw Error(1, "Input must contain a video with a finite duration");
     }
     if (media.hdr) {
-      return SystemResult.Error(
-        Error(1, "HDR / BT.2020 conversion is not supported yet; use an SDR source")
-      );
+      throw Error(1, "HDR / BT.2020 conversion is not supported yet; use an SDR source");
     }
-    return SystemResult.Ok(media);
+    return media;
   }
 
   /** Selects GNU coreutils by their Homebrew-prefixed names on macOS. */
-  public function coreutils_command(tool: static_ptr<u8>) SystemResult<std.process.Command> {
+  public function coreutils_command(tool: static_ptr<u8>) std.process.Command throws {
     var a = make_heap_allocator();
-    var platform = try std.process.Command(a, "uname");
-    try platform.add_arg("-s");
-    var name = try capture(platform);
-    var executable = try String(name.equals_literal("Darwin") ? "g" : "");
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var name = capture(platform);
+    var executable = String(name.equals_literal("Darwin") ? "g" : "");
 
-    try executable.append(tool);
-    return SystemResult.Ok(
-      try std.process.Command(a, executable)
-    );
+    executable.append(tool);
+    return std.process.Command(a, executable);
   }
 
   /** Resolves local paths, including missing outputs, with GNU coreutils and literal arguments. */
-  public function absolute(path: ref String) SystemResult<String> {
+  public function absolute(path: ref String) String throws {
     if (path.is_empty() or path.contains("\0")) {
-      return SystemResult.Error(Error(1, "Choose a local file path"));
+      throw Error(1, "Choose a local file path");
     }
-    var command = try coreutils_command("realpath");
-    try command.add_arg("-m");
-    try command.add_arg("--");
-    try command.add_arg(path);
+    var command = coreutils_command("realpath");
+    command.add_arg("-m");
+    command.add_arg("--");
+    command.add_arg(path);
     return capture(command);
   }
 
   /** Builds a probe command restricted to the metadata used by this example. */
-  public function probe_command(input: const ref String) AllocationResult<std.process.Command> {
-    var command = try std.process.Command(make_heap_allocator(), "ffprobe");
+  public function probe_command(input: const ref String) std.process.Command throws {
+    var command = std.process.Command(make_heap_allocator(), "ffprobe");
 
-    try command.add_arg("-v");
-    try command.add_arg("error");
-    try command.add_arg("-show_entries");
-    try command.add_arg(
+    command.add_arg("-v");
+    command.add_arg("error");
+    command.add_arg("-show_entries");
+    command.add_arg(
       "format=duration,size:stream=codec_type,codec_name,width,height,color_transfer,color_primaries,avg_frame_rate,r_frame_rate"
     );
-    try command.add_arg("-of");
-    try command.add_arg("json");
-    try command.add_arg(input);
-    return AllocationResult.Ok(command);
+    command.add_arg("-of");
+    command.add_arg("json");
+    command.add_arg(input);
+    return command;
   }
 
   /** Validates kept sections and orders them without duplicating overlapping source material. */
   public function kept_intervals(
     settings: const ref Settings,
     media: const ref Media
-  ) SystemResult<Vec<Interval>> {
+  ) Vec<Interval> throws {
     var a = make_heap_allocator();
-    var result = try Vec<Interval>(a, 4);
+    var result = Vec<Interval>(a, 4);
     if (settings.sections.size() > 64) {
-      return SystemResult.Error(Error(1, "A clip can contain at most 64 kept sections"));
+      throw Error(1, "A clip can contain at most 64 kept sections");
     }
     var count = settings.sections.size() == 0 ? 1 : settings.sections.size();
     for (var i: i64 = 0; i < count; i += 1) {
-      var first_text = try settings.start.clone(a);
-      var text = try settings.end.clone(a);
+      var first_text = settings.start.clone(a);
+      var text = settings.end.clone(a);
       if (settings.sections.size() > 0) {
-        first_text = try settings.sections[i].start.clone(a);
-        text = try settings.sections[i].end.clone(a);
+        first_text = settings.sections[i].start.clone(a);
+        text = settings.sections[i].end.clone(a);
       }
-      var start = try seconds(first_text);
-      var end = text.is_empty() ? media.duration : try seconds(text);
+      var start = seconds(first_text);
+      var end = text.is_empty() ? media.duration : seconds(text);
       if (start >= end or end > media.duration + 0.001) {
-        return SystemResult.Error(
-          Error(1, "Each kept section must satisfy 0 <= start < end <= video duration")
-        );
+        throw Error(1, "Each kept section must satisfy 0 <= start < end <= video duration");
       }
-      try result.push(Interval(start, end));
+      result.push(Interval(start, end));
       for (var j = result.size() - 1; j > 0 and result[j].start < result[j - 1].start; j -= 1) {
         var first = result[j].start;
         var last = result[j].end;
@@ -421,75 +457,67 @@ module video {
     }
     for (var i: i64 = 1; i < result.size(); i += 1) {
       if (result[i].start < result[i - 1].end) {
-        return SystemResult.Error(Error(1, "Kept sections must not overlap"));
+        throw Error(1, "Kept sections must not overlap");
       }
     }
-    return SystemResult.Ok(result);
+    return result;
   }
 
   /** Totals kept duration and validates presets before starting an export. */
-  public function trim_length(
-    settings: const ref Settings,
-    media: const ref Media
-  ) SystemResult<f64> {
-    var intervals = try kept_intervals(settings, media);
+  public function trim_length(settings: const ref Settings, media: const ref Media) f64 throws {
+    var intervals = kept_intervals(settings, media);
     if (settings.format < 0 or settings.format > 5 or settings.quality < 0 or settings.quality > 4 or
       settings.resolution < 0 or settings.resolution > 4) {
-      return SystemResult.Error(Error(1, "Invalid export preset"));
+      throw Error(1, "Invalid export preset");
     }
     var duration: f64 = 0.0;
     for (var interval: ref Interval in intervals) {
       duration += interval.end - interval.start;
     }
-    return SystemResult.Ok(duration);
+    return duration;
   }
 
   /** Joins frame-accurate kept video and optional audio intervals with timestamps reset per section. */
-  function section_filter(
-    settings: const ref Settings,
-    media: const ref Media
-  ) SystemResult<String> {
-    var intervals = try kept_intervals(settings, media);
+  function section_filter(settings: const ref Settings, media: const ref Media) String throws {
+    var intervals = kept_intervals(settings, media);
     var audio = settings.audio and settings.format != 5 and not media.audio.equals_literal("none");
-    var graph = try String("");
-    var inputs = try String("");
+    var graph = String("");
+    var inputs = String("");
     for (var i: i64 = 0; i < intervals.size(); i += 1) {
       var first = intervals[i].start;
       var last = intervals[i].end;
-      try graph.append(
-        try `[0:v:0]trim=start=${first}:end=${last},setpts=PTS-STARTPTS[v${i}];`
+      graph.append(
+        `[0:v:0]trim=start=${first}:end=${last},setpts=PTS-STARTPTS[v${i}];`
       );
 
-      try inputs.append(try `[v${i}]`);
+      inputs.append(`[v${i}]`);
 
       if (audio) {
-        try graph.append(
-          try `[0:a:0]atrim=start=${first}:end=${last},asetpts=PTS-STARTPTS[a${i}];`
+        graph.append(
+          `[0:a:0]atrim=start=${first}:end=${last},asetpts=PTS-STARTPTS[a${i}];`
         );
 
-        try inputs.append(try `[a${i}]`);
+        inputs.append(`[a${i}]`);
       }
     }
-    try graph.append(
-      try `${inputs}concat=n=${intervals.size()}:v=1:a=${audio ? 1 : 0}[joined]`
+    graph.append(
+      `${inputs}concat=n=${intervals.size()}:v=1:a=${audio ? 1 : 0}[joined]`
     );
 
     if (audio) {
-      try graph.append("[audio]");
+      graph.append("[audio]");
     }
-    try graph.append(";");
-    return SystemResult.Ok(graph);
+    graph.append(";");
+    return graph;
   }
 
   /** Shares aspect-preserving resolution limits between video and animation exports. */
-  function scale_filter(resolution: i64) AllocationResult<String> {
+  function scale_filter(resolution: i64) String throws {
     if (resolution == 0) {
-      return AllocationResult.Ok(try String("scale=w=-2:h=trunc(ih/2)*2:reset_sar=1"));
+      return String("scale=w=-2:h=trunc(ih/2)*2:reset_sar=1");
     }
     var limit = resolution == 1 ? 2160 : (resolution == 2 ? 1080 : (resolution == 3 ? 720 : 480));
-    return AllocationResult.Ok(
-      try `scale=w='min(iw,${limit})':h='min(ih,${limit})':force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1`
-    );
+    return `scale=w='min(iw,${limit})':h='min(ih,${limit})':force_original_aspect_ratio=decrease:force_divisible_by=2:reset_sar=1`;
   }
 
   /** Constructs a container-compatible export with frame-accurate transcoding and bounded CPU use. */
@@ -497,138 +525,138 @@ module video {
     settings: const ref Settings,
     media: const ref Media,
     temporary: const ref String
-  ) SystemResult<std.process.Command> {
-    var duration = try trim_length(settings, media);
-    var start = try seconds(settings.start);
-    var command = try std.process.Command(make_heap_allocator(), "ffmpeg");
+  ) std.process.Command throws {
+    var duration = trim_length(settings, media);
+    var start = seconds(settings.start);
+    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
 
-    try command.add_arg("-hide_banner");
-    try command.add_arg("-loglevel");
-    try command.add_arg("error");
-    try command.add_arg("-nostdin");
-    try command.add_arg("-nostats");
-    try command.add_arg("-n");
-    try command.add_arg("-progress");
-    try command.add_arg("pipe:1");
+    command.add_arg("-hide_banner");
+    command.add_arg("-loglevel");
+    command.add_arg("error");
+    command.add_arg("-nostdin");
+    command.add_arg("-nostats");
+    command.add_arg("-n");
+    command.add_arg("-progress");
+    command.add_arg("pipe:1");
     var multiple = settings.sections.size() > 0;
     if (not multiple) {
-      try command.add_arg("-ss");
-      try command.add_arg(try `${start}`);
+      command.add_arg("-ss");
+      command.add_arg(`${start}`);
     }
-    try command.add_arg("-i");
-    try command.add_arg(settings.input);
-    try command.add_arg("-t");
-    try command.add_arg(try `${duration}`);
+    command.add_arg("-i");
+    command.add_arg(settings.input);
+    command.add_arg("-t");
+    command.add_arg(`${duration}`);
     if (settings.format == 5) {
       var fps = settings.quality == 0 ? 30 : (settings.quality == 1 ? 24 : (settings.quality == 2 ? 20 : (settings.quality ==
         3 ? 15 : 10)));
       var colors = settings.quality < 2 ? 256 : (settings.quality == 2 ? 128 : (settings.quality ==
         3 ? 96 : 64));
-      var scale = try scale_filter(settings.resolution);
-      try command.add_arg("-filter_complex_threads");
-      try command.add_arg("1");
-      try command.add_arg("-filter_complex");
-      var graph = try String("");
+      var scale = scale_filter(settings.resolution);
+      command.add_arg("-filter_complex_threads");
+      command.add_arg("1");
+      command.add_arg("-filter_complex");
+      var graph = String("");
       if (multiple) {
-        graph = try section_filter(settings, media);
+        graph = section_filter(settings, media);
       }
-      var source = try String(multiple ? "[joined]" : "[0:v:0]");
-      try graph.append(
-        try `${source}trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`
+      var source = String(multiple ? "[joined]" : "[0:v:0]");
+      graph.append(
+        `${source}trim=duration=${duration},setpts=PTS-STARTPTS,fps=${fps},${scale},split[frames][colors];[colors]palettegen=max_colors=${colors}:reserve_transparent=0[palette];[frames][palette]paletteuse=dither=sierra2_4a[gif]`
       );
 
-      try command.add_arg(graph);
-      try command.add_arg("-map");
-      try command.add_arg("[gif]");
-      try command.add_arg("-an");
-      try command.add_arg("-c:v");
-      try command.add_arg("gif");
-      try command.add_arg("-threads");
-      try command.add_arg("2");
-      try command.add_arg("-loop");
-      try command.add_arg("0");
-      try command.add_arg("-map_metadata");
-      try command.add_arg("-1");
-      try command.add_arg("-f");
-      try command.add_arg("gif");
-      try command.add_arg(temporary);
-      return SystemResult.Ok(command);
+      command.add_arg(graph);
+      command.add_arg("-map");
+      command.add_arg("[gif]");
+      command.add_arg("-an");
+      command.add_arg("-c:v");
+      command.add_arg("gif");
+      command.add_arg("-threads");
+      command.add_arg("2");
+      command.add_arg("-loop");
+      command.add_arg("0");
+      command.add_arg("-map_metadata");
+      command.add_arg("-1");
+      command.add_arg("-f");
+      command.add_arg("gif");
+      command.add_arg(temporary);
+      return command;
     }
     if (multiple) {
-      var graph = try section_filter(settings, media);
-      try graph.append(
-        try `[joined]${try scale_filter(settings.resolution)}[video]`
+      var graph = section_filter(settings, media);
+      graph.append(
+        `[joined]${scale_filter(settings.resolution)}[video]`
       );
 
-      try command.add_arg("-filter_complex_threads");
-      try command.add_arg("1");
-      try command.add_arg("-filter_complex");
-      try command.add_arg(graph);
+      command.add_arg("-filter_complex_threads");
+      command.add_arg("1");
+      command.add_arg("-filter_complex");
+      command.add_arg(graph);
     }
-    try command.add_arg("-map");
-    try command.add_arg(multiple ? "[video]" : "0:v:0");
+    command.add_arg("-map");
+    command.add_arg(multiple ? "[video]" : "0:v:0");
     if (settings.audio and (not multiple or not media.audio.equals_literal("none"))) {
-      try command.add_arg("-map");
-      try command.add_arg(multiple ? "[audio]" : "0:a:0?");
+      command.add_arg("-map");
+      command.add_arg(multiple ? "[audio]" : "0:a:0?");
     }
-    try command.add_arg("-c:v");
-    try command.add_arg(
+    command.add_arg("-c:v");
+    command.add_arg(
       settings.format == 2 ? "libvpx-vp9" : (settings.format == 4 ? "mpeg4" : "libx264")
     );
-    try command.add_arg("-threads");
-    try command.add_arg("2");
-    try command.add_arg("-filter_threads");
-    try command.add_arg("1");
+    command.add_arg("-threads");
+    command.add_arg("2");
+    command.add_arg("-filter_threads");
+    command.add_arg("1");
     if (settings.format == 2) {
-      try command.add_arg("-deadline");
-      try command.add_arg("good");
-      try command.add_arg("-cpu-used");
-      try command.add_arg("3");
-      try command.add_arg("-b:v");
-      try command.add_arg("0");
-      try command.add_arg("-crf");
-      try command.add_arg(try `${24 + settings.quality * 4}`);
+      command.add_arg("-deadline");
+      command.add_arg("good");
+      command.add_arg("-cpu-used");
+      command.add_arg("3");
+      command.add_arg("-b:v");
+      command.add_arg("0");
+      command.add_arg("-crf");
+      command.add_arg(`${24 + settings.quality * 4}`);
     } else if (settings.format == 4) {
-      try command.add_arg("-q:v");
+      command.add_arg("-q:v");
       var quality = settings.quality == 0 ? 2 : (settings.quality == 1 ? 3 : (settings.quality ==
         2 ? 5 : (settings.quality == 3 ? 8 : 12)));
-      try command.add_arg(try `${quality}`);
+      command.add_arg(`${quality}`);
     } else {
-      try command.add_arg("-preset");
-      try command.add_arg("medium");
-      try command.add_arg("-crf");
+      command.add_arg("-preset");
+      command.add_arg("medium");
+      command.add_arg("-crf");
       var quality = settings.quality == 0 ? 18 : (settings.quality == 1 ? 21 : (settings.quality ==
         2 ? 23 : (settings.quality == 3 ? 26 : 30)));
-      try command.add_arg(try `${quality}`);
+      command.add_arg(`${quality}`);
     }
-    try command.add_arg("-pix_fmt");
-    try command.add_arg("yuv420p");
+    command.add_arg("-pix_fmt");
+    command.add_arg("yuv420p");
     if (not multiple) {
-      try command.add_arg("-vf");
-      try command.add_arg(try scale_filter(settings.resolution));
+      command.add_arg("-vf");
+      command.add_arg(scale_filter(settings.resolution));
     }
     if (settings.audio) {
-      try command.add_arg("-c:a");
-      try command.add_arg(
+      command.add_arg("-c:a");
+      command.add_arg(
         settings.format == 2 ? "libopus" : (settings.format == 4 ? "libmp3lame" : "aac")
       );
-      try command.add_arg("-b:a");
-      try command.add_arg("128k");
+      command.add_arg("-b:a");
+      command.add_arg("128k");
     } else {
-      try command.add_arg("-an");
+      command.add_arg("-an");
     }
-    try command.add_arg("-map_metadata");
-    try command.add_arg("-1");
+    command.add_arg("-map_metadata");
+    command.add_arg("-1");
     if (settings.format == 0 or settings.format == 1) {
-      try command.add_arg("-movflags");
-      try command.add_arg("+faststart");
+      command.add_arg("-movflags");
+      command.add_arg("+faststart");
     }
-    try command.add_arg("-f");
-    try command.add_arg(
+    command.add_arg("-f");
+    command.add_arg(
       settings.format == 0 ? "mp4" : (settings.format == 1 ? "mov" : (settings.format == 2 ? "webm" : (settings.format ==
         3 ? "matroska" : "avi")))
     );
-    try command.add_arg(temporary);
-    return SystemResult.Ok(command);
+    command.add_arg(temporary);
+    return command;
   }
 }

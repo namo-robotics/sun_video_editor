@@ -4,36 +4,32 @@ using std;
 module presenter_tests {
 
   /** Rejects invalid positions, sizes, and screenshot device requests before device access. */
-  test_function arguments() std.test.AssertionResult<void> {
-    var args = try (try String("capture record screen 0 cursor camera microphone 0 1")).split_whitespace(
+  test_function arguments() {
+    var args = (String("capture record screen 0 cursor camera microphone 0 1")).split_whitespace(
       make_heap_allocator()
     );
-    var settings = try presenter.options(args);
-    try std.test.assert(
+    var settings = presenter.options(args);
+    std.test.assert(
       settings.camera and settings.microphone and settings.corner == 0 and settings.size == 1
     );
     for (var field: i64 = 0; field < 3; field += 1) {
-      var invalid = try (try String(
+      var invalid = (String(
         field == 0 ? "capture record screen 0 cursor camera microphone 4 1" : (field == 1 ? "capture record screen 0 cursor camera microphone 0 3" : "capture screenshot screen 0 cursor camera microphone 0 1")
       )).split_whitespace(
         make_heap_allocator()
       );
-      match presenter.options(invalid) {
-        SystemResult.Ok(_) => {
-          try std.test.fail("Accepted invalid presenter options");
-        },
-        SystemResult.Error(_) => {},
-        SystemResult.Allocation(error) => {
-          return std.test.AssertionResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return std.test.AssertionResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return std.test.AssertionResult.Overflow(error);
+
+      var operation_completed_1 = false;
+      try {
+        presenter.options(invalid);
+        operation_completed_1 = true;
+        std.test.fail("Accepted invalid presenter options");
+      } catch (error: std.Error) {
+        if (operation_completed_1) {
+          throw;
         }
-      };
+      }
     }
-    return std.test.AssertionResult.Ok;
+    return;
   }
 }

@@ -22,14 +22,14 @@ module video {
     }
 
     /** Starts an argument-vector command with independent output and error pipes. */
-    public method start(command: ref std.process.Command) SystemResult<void> {
+    public method start(command: ref std.process.Command) void throws {
       if (this.running) {
-        return SystemResult.Error(Error(1, "A process is already running"));
+        throw Error(1, "A process is already running");
       }
       command.set_stdin(std.process.Stdio.Null);
       command.set_stdout(std.process.Stdio.Piped);
       command.set_stderr(std.process.Stdio.Piped);
-      this.child = try command.start();
+      this.child = command.start();
       this.output.adopt(this.child.take_stdout());
       this.errors.adopt(this.child.take_stderr());
       this.text.clear();
@@ -38,13 +38,15 @@ module video {
       this.exited = false;
       this.cancelling = false;
       this.status = -1;
-      return SystemResult.Ok;
+      return;
     }
 
     /** Sends an interrupt so a capture helper can finalize its recording. */
     public method interrupt() void {
       if (this.running) {
-        ignore_error(this.child.kill(2));
+        try {
+          this.child.kill(2);
+        } catch {}
       }
     }
 
@@ -53,15 +55,21 @@ module video {
       if (this.running and not this.cancelling) {
         this.cancelling = true;
         this.cancelled_at = std.time.now();
-        ignore_error(this.child.kill(15));
+        try {
+          this.child.kill(15);
+        } catch {}
       }
     }
 
     /** Releases a running process during shutdown, including error paths. */
     public method stop() void {
       if (this.running and not this.exited) {
-        ignore_error(this.child.kill(9));
-        ignore_error(this.child.wait());
+        try {
+          this.child.kill(9);
+        } catch {}
+        try {
+          this.child.wait();
+        } catch {}
       }
       this.output.close();
       this.errors.close();
@@ -69,17 +77,19 @@ module video {
     }
 
     /** Reads bounded amounts from both ready pipes and observes process completion. */
-    public method tick() SystemResult<void> {
+    public method tick() void throws {
       if (not this.running) {
-        return SystemResult.Ok;
+        return;
       }
       if (this.cancelling and this.cancelled_at.elapsed().as_millis() > 1500) {
-        ignore_error(this.child.kill(9));
+        try {
+          this.child.kill(9);
+        } catch {}
       }
-      try drain(this.output, this.text, 1048576);
-      try drain(this.errors, this.diagnostics, 16384);
+      drain(this.output, this.text, 1048576);
+      drain(this.errors, this.diagnostics, 16384);
       if (not this.exited) {
-        match try this.child.try_wait() {
+        match this.child.try_wait() {
           Option.Some(code) => {
             this.exited = true;
             this.status = code;
@@ -90,45 +100,47 @@ module video {
       if (this.exited and not this.output.is_open() and not this.errors.is_open()) {
         this.running = false;
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Initializes owned storage and reports allocation failure. */
-    init() AllocationResult<void> {
-      this.text = try String("");
-      this.diagnostics = try String("");
+    init() throws {
+      this.text = String("");
+      this.diagnostics = String("");
     }
   }
 
   /** Drains only ready bytes, bounding both memory and work per UI turn. */
-  function drain(file: ref std.io.File, text: ref String, limit: i64) SystemResult<void> {
+  function drain(file: ref std.io.File, text: ref String, limit: i64) void throws {
     var a = make_heap_allocator();
-    var buffer = try ContiguousBuffer<u8>(a, 4096);
+    var buffer = ContiguousBuffer<u8>(a, 4096);
     for (var round: i64 = 0; round < 8 and file.is_open(); round += 1) {
-      var poll = try std.io.Poller(a);
-      try poll.add_read(file.get_fd());
-      if (try poll.wait(0) == 0) {
+      var poll = std.io.Poller(a);
+      poll.add_read(file.get_fd());
+      if (poll.wait(0) == 0) {
         break;
       }
       if (not poll.is_readable(0) and not poll.is_hup(0)) {
-        return SystemResult.Error(Error(1, "Cannot read child process output"));
+        throw Error(1, "Cannot read child process output");
       }
       var bytes = MutableByteSlice(buffer);
       match file.read(bytes) {
         std.io.ReadResult.Data(count) => {
           for (var i: i64 = 0; i < count; i += 1) {
-            try text.append_char(buffer[i]);
+            text.append_char(buffer[i]);
           }
           if (text.length() > limit) {
-            text = match try sun_video_editor_results.substring(
-              text,
-              a,
-              text.length() - limit,
-              limit
-            ) {
-              AccessResult.Ok(value) => value,
-              AccessResult.OutOfBounds(_) => try String("")
-            };
+            try {
+              var value = sun_video_editor_results.substring(
+                text,
+                a,
+                text.length() - limit,
+                limit
+              );
+              text = value;
+            } catch (error: std.IndexOutOfBoundsError) {
+              text = String("");
+            }
           }
         },
         std.io.ReadResult.Eof => {
@@ -136,38 +148,35 @@ module video {
         },
         std.io.ReadResult.WouldBlock => {
           break;
-        },
-        std.io.ReadResult.Error(error) => {
-          return SystemResult.Error(error);
         }
       };
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Runs a small filesystem utility with checked status and no shell expansion. */
-  public function capture(command: ref std.process.Command) SystemResult<String> {
-    var result = try command.output();
+  public function capture(command: ref std.process.Command) String throws {
+    var result = command.output();
     if (result.status() != 0) {
-      return SystemResult.Error(
-        try Error(
-          result.status(),
-          try result.stderr().clone(make_heap_allocator())
-        )
+      throw Error(
+        result.status(),
+        result.stderr().clone(make_heap_allocator())
       );
     }
-    var text = try result.stdout().clone(make_heap_allocator());
+    var text = result.stdout().clone(make_heap_allocator());
     if (text.ends_with("\n")) {
-      text = match try sun_video_editor_results.substring(
-        text,
-        make_heap_allocator(),
-        0,
-        text.length() - 1
-      ) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => try String("")
-      };
+      try {
+        var value = sun_video_editor_results.substring(
+          text,
+          make_heap_allocator(),
+          0,
+          text.length() - 1
+        );
+        text = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        text = String("");
+      }
     }
-    return SystemResult.Ok(text);
+    return text;
   }
 }

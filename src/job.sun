@@ -31,145 +31,143 @@ module video {
     /** Removes a partial export and its private directory after failure or completion. */
     method cleanup() void {
       if (not this.temporary.is_empty()) {
-        ignore_error(std.io.remove_file(this.temporary));
+        try {
+          std.io.remove_file(this.temporary);
+        } catch {}
       }
       if (not this.directory.is_empty()) {
-        ignore_error(std.io.remove_dir(this.directory));
+        try {
+          std.io.remove_dir(this.directory);
+        } catch {}
       }
       this.temporary.clear();
       this.directory.clear();
     }
 
     /** Starts probing a local regular file, clearing previously accepted metadata. */
-    public method probe(path: ref String) SystemResult<void> {
+    public method probe(path: ref String) void throws {
       if (this.mode != 0) {
-        return SystemResult.Error(Error(1, "Wait for the current operation"));
+        throw Error(1, "Wait for the current operation");
       }
       this.ready = false;
       this.percent = 0;
       this.output_size = 0;
-      this.loaded = try absolute(path);
-      if (not try std.io.is_file(this.loaded)) {
-        return SystemResult.Error(Error(1, "Input must be a local regular file"));
+      this.loaded = absolute(path);
+      if (not std.io.is_file(this.loaded)) {
+        throw Error(1, "Input must be a local regular file");
       }
-      var command = try probe_command(this.loaded);
-      try this.process.start(command);
+      var command = probe_command(this.loaded);
+      this.process.start(command);
       this.mode = 1;
       this.cancelled = false;
       this.started = std.time.now();
-      this.message = try String("Reading video information...");
-      return SystemResult.Ok;
+      this.message = String("Reading video information...");
+      return;
     }
 
     /** Rejects the source itself, including aliases and hard links, as a destination. */
-    method check_destination() SystemResult<void> {
-      var same = try std.process.Command(make_heap_allocator(), "test");
+    method check_destination() void throws {
+      var same = std.process.Command(make_heap_allocator(), "test");
 
-      try same.add_arg(this.loaded);
-      try same.add_arg("-ef");
-      try same.add_arg(this.destination);
-      if (this.loaded.equals(this.destination) or try same.status() == 0) {
-        return SystemResult.Error(Error(1, "Output must not replace the input video"));
+      same.add_arg(this.loaded);
+      same.add_arg("-ef");
+      same.add_arg(this.destination);
+      if (this.loaded.equals(this.destination) or same.status() == 0) {
+        throw Error(1, "Output must not replace the input video");
       }
-      if (try std.io.is_dir(this.destination)) {
-        return SystemResult.Error(Error(1, "Output is a directory"));
+      if (std.io.is_dir(this.destination)) {
+        throw Error(1, "Output is a directory");
       }
-      if (try std.io.exists(this.destination) and not this.overwrite) {
+      if (std.io.exists(this.destination) and not this.overwrite) {
         this.needs_overwrite = true;
-        return SystemResult.Error(
-          Error(1, "Destination exists. Check Replace existing output to confirm.")
-        );
+        throw Error(1, "Destination exists. Check Replace existing output to confirm.");
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Validates settings and starts conversion into an exclusive directory beside the destination. */
-    public method convert(settings: ref Settings) SystemResult<void> {
+    public method convert(settings: ref Settings) void throws {
       if (this.mode != 0 or not this.ready) {
-        return SystemResult.Error(Error(1, "Load a video before converting"));
+        throw Error(1, "Load a video before converting");
       }
       this.needs_overwrite = false;
       this.percent = 0;
-      var input = try absolute(settings.input);
+      var input = absolute(settings.input);
       if (not input.equals(this.loaded)) {
-        return SystemResult.Error(Error(1, "Input changed. Load its information first."));
+        throw Error(1, "Input changed. Load its information first.");
       }
-      this.duration = try trim_length(settings, this.media);
-      this.destination = try absolute(settings.output);
+      this.duration = trim_length(settings, this.media);
+      this.destination = absolute(settings.output);
       if (not this.destination.ends_with(extension(settings.format))) {
-        return SystemResult.Error(Error(1, "Output extension must match the selected format"));
+        throw Error(1, "Output extension must match the selected format");
       }
       this.overwrite = settings.overwrite;
-      try this.check_destination();
+      this.check_destination();
       this.cleanup();
-      var directory = try std.process.Command(make_heap_allocator(), "mktemp");
+      var directory = std.process.Command(make_heap_allocator(), "mktemp");
 
-      try directory.add_arg("-d");
-      try directory.add_arg("--");
-      var pattern = try this.destination.clone(make_heap_allocator());
+      directory.add_arg("-d");
+      directory.add_arg("--");
+      var pattern = this.destination.clone(make_heap_allocator());
 
-      try pattern.append(".sun-video.XXXXXX");
-      try directory.add_arg(pattern);
-      this.directory = try capture(directory);
-      this.temporary = try this.directory.clone(make_heap_allocator());
-      try this.temporary.append("/output");
+      pattern.append(".sun-video.XXXXXX");
+      directory.add_arg(pattern);
+      this.directory = capture(directory);
+      this.temporary = this.directory.clone(make_heap_allocator());
+      this.temporary.append("/output");
       settings.input = input;
-      var command = try export_command(settings, this.media, this.temporary);
-      match this.process.start(command) {
-        SystemResult.Ok => {},
-        SystemResult.Error(error) => {
-          this.cleanup();
-          return SystemResult.Error(error);
-        },
-        SystemResult.Allocation(error) => {
-          this.cleanup();
-          return SystemResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          this.cleanup();
-          return SystemResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          this.cleanup();
-          return SystemResult.Overflow(error);
-        }
-      };
+      var command = export_command(settings, this.media, this.temporary);
+      try {
+        this.process.start(command);
+      } catch (error: std.Error) {
+        this.cleanup();
+        throw error;
+      } catch (error: std.AllocationError) {
+        this.cleanup();
+        throw error;
+      } catch (error: std.InvalidArgumentError) {
+        this.cleanup();
+        throw error;
+      } catch (error: std.OverflowError) {
+        this.cleanup();
+        throw error;
+      }
       this.mode = 2;
       this.cancelled = false;
       this.percent = 0;
       this.output_size = 0;
-      this.message = try String("Converting...");
-      return SystemResult.Ok;
+      this.message = String("Converting...");
+      return;
     }
 
     /** Requests cancellation while leaving the event loop free to drain and reap the child. */
-    public method cancel() AllocationResult<void> {
+    public method cancel() void throws {
       if (this.mode != 0) {
         this.cancelled = true;
         this.process.cancel();
-        this.message = try String("Cancelling...");
+        this.message = String("Cancelling...");
       }
 
-      return AllocationResult.Ok;
+      return;
     }
 
     /** Stops failed work and exposes a user-readable diagnostic. */
-    public method fail(error: const ref IError) AllocationResult<void> {
+    public method fail(error: const ref IError) void throws {
       this.process.stop();
       this.mode = 0;
       this.percent = 0;
       this.cleanup();
-      this.message = try (try error.message()).clone(make_heap_allocator());
+      this.message = (error.message()).clone(make_heap_allocator());
 
-      return AllocationResult.Ok;
+      return;
     }
 
     /** Consumes complete progress lines, retaining an incomplete suffix for the next turn. */
-    method progress() AllocationResult<void> {
+    method progress() void throws {
       var a = make_heap_allocator();
-      var lines = try this.process.text.split(a, b'\n');
+      var lines = this.process.text.split(a, b'\n');
       for (var i: i64 = 0; i + 1 < lines.size(); i += 1) {
-        var pair = try lines[i].split(a, b'=');
+        var pair = lines[i].split(a, b'=');
         if (pair.size() == 2 and pair[0].equals_literal("out_time_us")) {
           match pair[1].parse_i64() {
             Option.Some(value) => {
@@ -182,85 +180,83 @@ module video {
           };
         }
       }
-      this.process.text = try lines[lines.size() - 1].clone(a);
+      this.process.text = lines[lines.size() - 1].clone(a);
 
-      return AllocationResult.Ok;
+      return;
     }
 
     /** Polls work, updates progress, and publishes only a successful nonempty output. */
-    public method tick() SystemResult<void> {
+    public method tick() void throws {
       if (this.mode == 0) {
-        return SystemResult.Ok;
+        return;
       }
-      try this.process.tick();
+      this.process.tick();
       if (this.mode == 1 and this.started.elapsed().as_secs() > 15) {
         this.process.stop();
         this.mode = 0;
-        return SystemResult.Error(Error(1, "Reading video information timed out"));
+        throw Error(1, "Reading video information timed out");
       }
       if (this.mode == 2) {
-        try this.progress();
+        this.progress();
       }
       if (this.process.running) {
-        return SystemResult.Ok;
+        return;
       }
       var previous = this.mode;
       this.mode = 0;
       if (this.cancelled) {
         this.cleanup();
-        this.message = try String("Cancelled. No output was published.");
-        return SystemResult.Ok;
+        this.message = String("Cancelled. No output was published.");
+        return;
       }
       if (this.process.status != 0) {
         this.cleanup();
-        var message = try String("Media operation failed: ");
-        try message.append(this.process.diagnostics);
-        return SystemResult.Error(
-          try Error(this.process.status, message)
-        );
+        var message = String("Media operation failed: ");
+        message.append(this.process.diagnostics);
+        throw Error(this.process.status, message);
       }
       if (previous == 1) {
-        this.media = try parse_probe(this.process.text);
+        this.media = parse_probe(this.process.text);
         this.ready = true;
-        this.message = try String("Ready. Choose output settings and Convert.");
+        this.message = String("Ready. Choose output settings and Convert.");
       } else {
-        this.output_size = try std.io.get_file_size(this.temporary);
+        this.output_size = std.io.get_file_size(this.temporary);
         if (this.output_size <= 0) {
-          return SystemResult.Error(Error(1, "FFmpeg produced an empty output"));
+          throw Error(1, "FFmpeg produced an empty output");
         }
-        try this.check_destination();
+        this.check_destination();
         if (this.overwrite) {
-          try std.io.rename_file(this.temporary, this.destination);
+          std.io.rename_file(this.temporary, this.destination);
         } else {
           // A hard link fails atomically if another file appeared at the destination.
-          var publish = try coreutils_command("ln");
-          try publish.add_arg("-T");
-          try publish.add_arg("--");
-          try publish.add_arg(this.temporary);
-          try publish.add_arg(this.destination);
-          try capture(publish);
+          var publish = coreutils_command("ln");
+          publish.add_arg("-T");
+          publish.add_arg("--");
+          publish.add_arg(this.temporary);
+          publish.add_arg(this.destination);
+          capture(publish);
         }
         this.cleanup();
         this.percent = 100;
         var saved = this.media.size - this.output_size;
         if (saved >= 0) {
-          this.message = try `Complete: ${this.output_size} bytes; saved ${saved} bytes.`;
+          this.message = `Complete: ${this.output_size} bytes; saved ${saved} bytes.`;
         } else {
-          this.message = try `Complete: ${this.output_size} bytes; output is ${0 - saved} bytes larger.`;
+          this.message = `Complete: ${this.output_size} bytes; output is ${0 - saved} bytes larger.`;
         }
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Initializes owned storage and reports allocation failure. */
-    init() AllocationResult<void> {
-      this.process = try Process();
-      this.media = try Media();
-      this.loaded = try String("");
-      this.message = try String("Choose a video to begin.");
-      this.destination = try String("");
-      this.directory = try String("");
-      this.temporary = try String("");
+    init() throws {
+      this.process = Process();
+      this.media = Media();
+      this.loaded = String("");
+      this.message = String("Choose a video to begin.");
+      this.destination = String("");
+      this.directory = String("");
+      this.temporary = String("");
     }
   }
 }

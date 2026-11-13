@@ -20,15 +20,15 @@ module presenter {
   }
 
   /** Accepts the legacy protocol or validates all recording-only choices before opening devices. */
-  public function options(args: ref Vec<String>) SystemResult<Options> {
+  public function options(args: ref Vec<String>) Options throws {
     var result = Options();
     if (args.size() == 5) {
-      return SystemResult.Ok(result);
+      return result;
     }
     if (args.size() != 9 or
       (not args[5].equals_literal("camera") and not args[5].equals_literal("no-camera")) or
       (not args[6].equals_literal("microphone") and not args[6].equals_literal("no-microphone"))) {
-      return SystemResult.Error(Error(1, "Invalid presenter settings"));
+      throw Error(1, "Invalid presenter settings");
     }
     result.camera = args[5].equals_literal("camera");
     result.microphone = args[6].equals_literal("microphone");
@@ -42,8 +42,8 @@ module presenter {
     };
     if (result.corner < 0 or result.corner > 3 or result.size < 0 or result.size > 2 or
       (result.enabled() and not args[1].equals_literal("record"))) {
-      return SystemResult.Error(Error(1, "Invalid presenter settings"));
+      throw Error(1, "Invalid presenter settings");
     }
-    return SystemResult.Ok(result);
+    return result;
   }
 }

@@ -7,8 +7,8 @@ module sun_video_editor {
   class State {
     var page: i32 = 0;
     var capture: screencast.Capture;
-    var settings: video.Settings ;
-    var job: video.Job ;
+    var settings: video.Settings;
+    var job: video.Job;
     var open_requested: bool = false;
     var save_requested: bool = false;
     var confirm_export: bool = false;
@@ -19,38 +19,28 @@ module sun_video_editor {
     var next_section: i64 = 1;
 
     /** Initializes owned storage and reports allocation failure. */
-    init() AllocationResult<void> {
-      this.job = try video.Job();
+    init() throws {
+      this.job = video.Job();
 
-      this.settings = try video.Settings();
+      this.settings = video.Settings();
 
-      this.capture = try screencast.Capture();
+      this.capture = screencast.Capture();
 
-      this.capture_save_source = try String("");
+      this.capture_save_source = String("");
     }
   }
 
-  /** Accepts an operation failure without closing the application or abandoning a child. */
-  function report(state: ref State, result: SystemResult<void>) AllocationResult<void> {
-    match result {
-      SystemResult.Ok => {},
-      SystemResult.Error(error) => {
-        std.io.eprintln(try error.message());
-        try state.job.fail(error);
-      },
-        SystemResult.Allocation(error) => { return AllocationResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return AllocationResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return AllocationResult.Overflow(error); }
-};
-
-    return AllocationResult.Ok;
+  /** Reports a handled operation failure without abandoning the active child. */
+  function report(state: ref State, error: const ref Error) void throws {
+    std.io.eprintln(error.message());
+    state.job.fail(error);
   }
 
   /** Selects a source and immediately starts reading its media information. */
-  function open_source(state: ref State, path: const ref String) SystemResult<void> {
+  function open_source(state: ref State, path: const ref String) void throws {
     state.confirm_export = false;
     state.page = 1;
-    state.settings.input = try path.clone(make_heap_allocator());
+    state.settings.input = path.clone(make_heap_allocator());
     state.position = 0;
     state.settings.sections.clear();
     state.active_section = 0;
@@ -58,83 +48,82 @@ module sun_video_editor {
   }
 
   /** Persists the selected section's editable fields without borrowing UI storage. */
-  function store_section(state: ref State) AllocationResult<void> {
+  function store_section(state: ref State) void throws {
     var a = make_heap_allocator();
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
       if (state.settings.sections[i].id == state.active_section) {
-        state.settings.sections[i].start = try state.settings.start.clone(a);
-        state.settings.sections[i].end = try state.settings.end.clone(a);
+        state.settings.sections[i].start = state.settings.start.clone(a);
+        state.settings.sections[i].end = state.settings.end.clone(a);
       }
     }
 
-    return AllocationResult.Ok;
+    return;
   }
 
   /** Selects a kept section for exact field edits and moves the playhead to its start. */
-  function select_section(state: ref State, id: i64) AllocationResult<void> {
+  function select_section(state: ref State, id: i64) void throws {
     var a = make_heap_allocator();
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
       if (state.settings.sections[i].id == id) {
         state.active_section = id;
-        state.settings.start = try state.settings.sections[i].start.clone(a);
-        state.settings.end = try state.settings.sections[i].end.clone(a);
-        state.position = try start_us(state);
+        state.settings.start = state.settings.sections[i].start.clone(a);
+        state.settings.end = state.settings.sections[i].end.clone(a);
+        state.position = start_us(state);
       }
     }
 
-    return AllocationResult.Ok;
+    return;
   }
 
   /** Splits a kept section at the playhead, initially preserving both sides without a gap. */
-  function split_section(state: ref State) SystemResult<void> {
-    if (not try can_split(state)) {
-      return SystemResult.Ok;
+  function split_section(state: ref State) void throws {
+    if (not can_split(state)) {
+      return;
     }
     var a = make_heap_allocator();
-    var end = try state.settings.end.clone(a);
-    var boundary = try timestamp(state.position);
+    var end = state.settings.end.clone(a);
+    var boundary = timestamp(state.position);
     if (state.settings.sections.size() == 0) {
       state.active_section = state.next_section;
       state.next_section += 1;
-      try state.settings.sections.push(
+      state.settings.sections.push(
         video.Section(
           state.active_section,
-          try state.settings.start.clone(a),
-          try end.clone(a)
+          state.settings.start.clone(a),
+          end.clone(a)
         )
       );
     }
-    state.settings.end = try boundary.clone(a);
-    try store_section(state);
+    state.settings.end = boundary.clone(a);
+    store_section(state);
     var id = state.next_section;
     state.next_section += 1;
-    try state.settings.sections.push(video.Section(id, boundary, end));
+    state.settings.sections.push(video.Section(id, boundary, end));
 
-    try select_section(state, id);
-    return SystemResult.Ok;
+    select_section(state, id);
+    return;
   }
 
   /** Deletes the selected kept section while preserving at least one editable interval. */
-  function remove_section(state: ref State) AllocationResult<void> {
+  function remove_section(state: ref State) void throws {
     if (state.settings.sections.size() < 2) {
-      return AllocationResult.Ok;
+      return;
     }
     for (var i: i64 = 0; i < state.settings.sections.size(); i += 1) {
       if (state.settings.sections[i].id == state.active_section) {
-        match state.settings.sections.remove(i) {
-          AccessResult.Ok(_) => {},
-          AccessResult.OutOfBounds(_) => {}
-        };
+        try {
+          state.settings.sections.remove(i);
+        } catch (error: std.IndexOutOfBoundsError) {}
         break;
       }
     }
-    try select_section(state, state.settings.sections[0].id);
+    select_section(state, state.settings.sections[0].id);
     if (state.settings.sections.size() == 1) {
       state.settings.sections.clear();
       state.active_section = 0;
     }
 
-    return AllocationResult.Ok;
+    return;
   }
 
   /** Applies captured events while rejecting edits during probing or conversion. */
@@ -142,27 +131,31 @@ module sun_video_editor {
     state: ref State,
     event: const ref ui.Event,
     queue: ref ui.EventQueue
-  ) SystemResult<void> {
+  ) void throws {
     var a = make_heap_allocator();
     if (event.action != 11 and event.action != 15) {
       state.confirm_export = false;
     }
     if (event.action >= 100) {
       if (event.action == 116) {
-        try state.capture.cancel();
+        state.capture.cancel();
       }
       if (event.action == 115) {
-        try state.capture.finish();
+        state.capture.finish();
       }
       if (state.capture.process.running or state.capture.copy_process.running or
         state.job.mode != 0) {
-        return SystemResult.Ok;
+        return;
       }
       if (event.action == 125 and state.capture.kind == 1 and not state.capture.saved.is_empty()) {
-        var recording = try state.capture.saved.clone(a);
-        state.settings.output = try String("");
+        var recording = state.capture.saved.clone(a);
+        state.settings.output = String("");
         state.settings.overwrite = false;
-        try report(state, open_source(state, recording));
+        try {
+          open_source(state, recording);
+        } catch (error: Error) {
+          report(state, error);
+        }
       }
       if (event.action == 124 and not state.capture.saved.is_empty() and
         not state.capture.copy_process.running) {
@@ -178,7 +171,7 @@ module sun_video_editor {
         state.page = 2;
       }
       if (event.action == 110 and event.value.kind == ui.ValueKind.Text) {
-        state.capture.delay = try event.value.text.clone(a);
+        state.capture.delay = event.value.text.clone(a);
       }
       if (event.action >= 120 and event.action <= 122) {
         state.capture.source = event.action - 120;
@@ -186,7 +179,7 @@ module sun_video_editor {
       if ((event.action == 111 or event.action == 112) and
         state.capture.kind != event.action - 111) {
         state.capture.kind = event.action - 111;
-        state.capture.saved = try String("");
+        state.capture.saved = String("");
       }
       if (event.action == 113 and event.value.kind == ui.ValueKind.Boolean) {
         state.capture.cursor = event.value.boolean;
@@ -200,7 +193,7 @@ module sun_video_editor {
       if ((event.action == 128 or event.action == 129) and
         event.value.kind == ui.ValueKind.Selection) {
         for (var i: i64 = 0; i < (event.action == 128 ? 4 : 3); i += 1) {
-          if (event.value.selection.equals(try ui.Key(i))) {
+          if (event.value.selection.equals(ui.Key(i))) {
             if (event.action == 128) {
               state.capture.corner = i;
             } else {
@@ -210,15 +203,11 @@ module sun_video_editor {
         }
       }
       if (event.action == 114) {
-        match state.capture.start() {
-          SystemResult.Ok => {},
-          SystemResult.Error(error) => {
-            state.capture.message = try (try error.message()).clone(a);
-          },
-        SystemResult.Allocation(error) => { return SystemResult.Allocation(error); },
-        SystemResult.InvalidArgument(error) => { return SystemResult.InvalidArgument(error); },
-        SystemResult.Overflow(error) => { return SystemResult.Overflow(error); }
-};
+        try {
+          state.capture.start();
+        } catch (error: std.Error) {
+          state.capture.message = (error.message()).clone(a);
+        }
       }
       if (event.action == 123 and event.value.kind == ui.ValueKind.Range and
         state.capture.preview.ready) {
@@ -231,14 +220,14 @@ module sun_video_editor {
           state.capture.preview_position = event.value.position;
         }
       }
-      return SystemResult.Ok;
+      return;
     }
     if (event.action == 12) {
-      try state.job.cancel();
-      return SystemResult.Ok;
+      state.job.cancel();
+      return;
     }
     if (state.job.mode != 0) {
-      return SystemResult.Ok;
+      return;
     }
     if (event.value.kind == ui.ValueKind.Range and event.action == 15 and state.job.ready) {
       var duration = duration_us(state);
@@ -250,44 +239,44 @@ module sun_video_editor {
           known = known or state.settings.sections[i].id == event.value.range_id;
         }
         if (not known) {
-          return SystemResult.Ok;
+          return;
         }
-        if (event.value.range_start != try start_us(state) or event.value.range_end != try end_us(state)) {
+        if (event.value.range_start != start_us(state) or event.value.range_end != end_us(state)) {
           state.confirm_export = false;
         }
         state.active_section = event.value.range_id;
-        state.settings.start = try timestamp(event.value.range_start);
-        state.settings.end = try timestamp(event.value.range_end);
+        state.settings.start = timestamp(event.value.range_start);
+        state.settings.end = timestamp(event.value.range_end);
         state.position = event.value.position;
-        try store_section(state);
+        store_section(state);
       }
     } else if (event.value.kind == ui.ValueKind.Text) {
       if (event.action == 2) {
-        state.settings.output = try event.value.text.clone(a);
+        state.settings.output = event.value.text.clone(a);
         state.settings.overwrite = false;
       }
       if (event.action == 3 and event.payload == state.active_section) {
-        state.settings.start = try event.value.text.clone(a);
-        try store_section(state);
+        state.settings.start = event.value.text.clone(a);
+        store_section(state);
       }
       if (event.action == 4 and event.payload == state.active_section) {
-        state.settings.end = try event.value.text.clone(a);
-        try store_section(state);
+        state.settings.end = event.value.text.clone(a);
+        store_section(state);
       }
     } else if (event.value.kind == ui.ValueKind.Selection) {
       var value: i64 = -1;
       for (var i: i64 = 0; i < (event.action == 5 ? 6 : 5); i += 1) {
-        var key = try ui.Key(i);
+        var key = ui.Key(i);
         if (event.value.selection.equals(key)) {
           value = i;
         }
       }
       if (value < 0) {
-        return SystemResult.Ok;
+        return;
       }
       if (event.action == 5) {
         state.settings.format = value;
-        state.settings.output = try video.output_path(state.settings.output, value);
+        state.settings.output = video.output_path(state.settings.output, value);
         state.settings.overwrite = false;
       }
       if (event.action == 6) {
@@ -308,11 +297,15 @@ module sun_video_editor {
         var overwrite = state.settings.overwrite;
         state.settings.overwrite = overwrite or state.confirm_export;
         state.confirm_export = false;
-        try report(state, state.job.convert(state.settings));
+        try {
+          state.job.convert(state.settings);
+        } catch (error: Error) {
+          report(state, error);
+        }
         state.settings.overwrite = overwrite;
         if (state.job.needs_overwrite) {
           state.confirm_export = true;
-          state.job.message = try String(
+          state.job.message = String(
             "Destination exists. Click Replace and export to save your edits there."
           );
         }
@@ -321,25 +314,25 @@ module sun_video_editor {
         state.open_requested = true;
       }
       if (event.action == 17) {
-        try split_section(state);
+        split_section(state);
       }
       if (event.action == 18) {
-        try select_section(state, event.payload);
+        select_section(state, event.payload);
       }
       if (event.action == 19) {
-        try remove_section(state);
+        remove_section(state);
       }
       if (event.action == 16) {
         state.settings.sections.clear();
         state.active_section = 0;
-        state.settings.start = try String("0");
-        state.settings.end = try String("");
+        state.settings.start = String("0");
+        state.settings.end = String("");
         state.position = 0;
       }
       if (event.action == 14) {
         state.save_requested = true;
       }
     }
-    return SystemResult.Ok;
+    return;
   }
 }

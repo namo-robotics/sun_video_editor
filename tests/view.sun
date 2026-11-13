@@ -4,66 +4,66 @@ using std;
 module sun_video_editor {
 
   /** Preserves fractional-frame trim times and passes the source rate to the preview. */
-  test_function frame_precision() std.test.AssertionResult<void> {
+  test_function frame_precision() {
     for (var value: i64 = 0; value < 1000000; value += 33367) {
-      var text = try timestamp(value);
-      try std.test.assert_eq(try time_us(text, -1, 4000000), value);
+      var text = timestamp(value);
+      std.test.assert_eq(time_us(text, -1, 4000000), value);
     }
-    var state = try State();
+    var state = State();
     state.page = 1;
     state.job.ready = true;
     state.job.media.duration = 4.0;
     state.job.media.frame_rate_num = 30000;
     state.job.media.frame_rate_den = 1001;
-    state.settings.start = try timestamp(33367);
-    state.settings.end = try timestamp(3960623);
-    var description = try view(state);
+    state.settings.start = timestamp(33367);
+    state.settings.end = timestamp(3960623);
+    var description = view(state);
     var found = false;
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       var node = description.elements[i];
       if (node.action == 15) {
         found = true;
-        try std.test.assert_eq(node.frame_rate_num, 30000);
-        try std.test.assert_eq(node.frame_rate_den, 1001);
-        try std.test.assert_eq(node.trim_start, 33367);
-        try std.test.assert_eq(node.trim_end, 3960623);
+        std.test.assert_eq(node.frame_rate_num, 30000);
+        std.test.assert_eq(node.frame_rate_den, 1001);
+        std.test.assert_eq(node.trim_start, 33367);
+        std.test.assert_eq(node.trim_end, 3960623);
       }
     }
-    try std.test.assert(found);
+    std.test.assert(found);
   }
 
   /** Preserves action availability and the shared palette across the export lifecycle. */
-  test_function reusable_converter_states() std.test.AssertionResult<void> {
+  test_function reusable_converter_states() {
     for (var stage: i32 = 0; stage < 4; stage += 1) {
-      var state = try State();
+      var state = State();
       state.page = 1;
       state.job.ready = stage > 0;
       state.job.media.duration = 10.0;
-      state.job.loaded = try String("clip.mp4");
+      state.job.loaded = String("clip.mp4");
       state.job.mode = stage == 2 ? 2 : 0;
       state.job.percent = stage == 3 ? 100 : 0;
-      var description = try view(state);
-      try std.test.assert(description.construction_error.is_empty());
-      try description.resources.validate();
-      try std.test.assert_eq(description.theme.normal.foreground, 0xdce6f4);
-      try std.test.assert_eq(description.theme.normal.font_size, 14);
-      var field = try description.resources.style(
+      var description = view(state);
+      std.test.assert(description.construction_error.is_empty());
+      description.resources.validate();
+      std.test.assert_eq(description.theme.normal.foreground, 0xdce6f4);
+      std.test.assert_eq(description.theme.normal.font_size, 14);
+      var field = description.resources.style(
         1,
-        try String("field")
+        String("field")
       );
-      try std.test.assert_eq(field.normal.background, 0x23334b);
-      try std.test.assert_eq(field.normal.padding, 8);
-      try std.test.assert_eq(field.disabled.foreground, 0x6c8098);
-      var primary = try description.resources.style(
+      std.test.assert_eq(field.normal.background, 0x23334b);
+      std.test.assert_eq(field.normal.padding, 8);
+      std.test.assert_eq(field.disabled.foreground, 0x6c8098);
+      var primary = description.resources.style(
         1,
-        try String("primary")
+        String("primary")
       );
-      try std.test.assert_eq(primary.normal.background, 0x73e2cb);
-      try std.test.assert_eq(primary.normal.padding, 10);
+      std.test.assert_eq(primary.normal.background, 0x73e2cb);
+      std.test.assert_eq(primary.normal.padding, 10);
       var controls: i64 = 0;
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
         var node = description.elements[i];
-        try std.test.assert(node.parent < i);
+        std.test.assert(node.parent < i);
         if (node.action == 0) {
           continue;
         }
@@ -77,209 +77,201 @@ module sun_video_editor {
         }
         if (node.action == 12) {
           enabled = state.job.mode != 0;
-          try std.test.assert(node.visible == enabled);
+          std.test.assert(node.visible == enabled);
         }
-        try std.test.assert(node.enabled == enabled);
+        std.test.assert(node.enabled == enabled);
         for (var previous: i64 = 0; previous < i; previous += 1) {
-          try std.test.assert(description.elements[previous].action != node.action);
+          std.test.assert(description.elements[previous].action != node.action);
         }
       }
-      try std.test.assert_eq(controls, 17);
-      var again = try view(state);
-      try std.test.assert_eq(description.elements.size(), again.elements.size());
+      std.test.assert_eq(controls, 17);
+      var again = view(state);
+      std.test.assert_eq(description.elements.size(), again.elements.size());
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
-        try std.test.assert(description.elements[i].key.equals(again.elements[i].key));
+        std.test.assert(description.elements[i].key.equals(again.elements[i].key));
       }
     }
   }
 
   /** Splits and removes kept sections without reusing deleted identities or leaking edits to another file. */
-  test_function section_editing() std.test.AssertionResult<void> {
-    var state = try State();
+  test_function section_editing() {
+    var state = State();
     state.page = 1;
     state.job.ready = true;
     state.job.media.duration = 4.0;
-    state.settings.end = try String("4");
+    state.settings.end = String("4");
     state.position = 2000000;
-    try split_section(state);
-    try std.test.assert_eq(state.settings.sections.size(), 2);
-    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 4.0);
+    split_section(state);
+    std.test.assert_eq(state.settings.sections.size(), 2);
+    std.test.assert_eq(video.trim_length(state.settings, state.job.media), 4.0);
     var id = state.active_section;
-    state.settings.start = try String("3");
-    try store_section(state);
-    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 3.0);
-    var description = try view(state);
-    try std.test.assert(description.construction_error.is_empty());
+    state.settings.start = String("3");
+    store_section(state);
+    std.test.assert_eq(video.trim_length(state.settings, state.job.media), 3.0);
+    var description = view(state);
+    std.test.assert(description.construction_error.is_empty());
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       var node = description.elements[i];
       if (node.action == 17) {
-        try std.test.assert(
+        std.test.assert(
           node.tooltip.equals_literal("Split section at playhead") and
             node.icon.ends_with("cut.svg")
         );
       }
       if (node.action == 15) {
-        try std.test.assert_eq(node.trim_ranges.size(), 2);
+        std.test.assert_eq(node.trim_ranges.size(), 2);
       }
     }
-    try remove_section(state);
-    try std.test.assert_eq(state.settings.sections.size(), 0);
-    try std.test.assert_eq(try video.trim_length(state.settings, state.job.media), 2.0);
+    remove_section(state);
+    std.test.assert_eq(state.settings.sections.size(), 0);
+    std.test.assert_eq(video.trim_length(state.settings, state.job.media), 2.0);
     state.position = 1000000;
-    try split_section(state);
-    try std.test.assert(state.active_section > id);
+    split_section(state);
+    std.test.assert(state.active_section > id);
   }
 
   /** Disables GIF audio without losing the user's video audio preference. */
-  test_function gif_audio_availability() std.test.AssertionResult<void> {
-    var state = try State();
+  test_function gif_audio_availability() {
+    var state = State();
     state.page = 1;
     for (var format: i64 = 5; format >= 0; format -= 5) {
       state.settings.format = format;
-      var description = try view(state);
+      var description = view(state);
       var found = false;
       for (var i: i64 = 0; i < description.elements.size(); i += 1) {
         var node = description.elements[i];
         if (node.action == 8) {
           found = true;
-          try std.test.assert(node.enabled == (format != 5));
-          try std.test.assert(node.checked == (format != 5));
+          std.test.assert(node.enabled == (format != 5));
+          std.test.assert(node.checked == (format != 5));
         }
       }
-      try std.test.assert(found and state.settings.audio);
+      std.test.assert(found and state.settings.audio);
     }
   }
 
   /** Displays abnormal helper exits and keeps multiline device errors instead of blaming permissions. */
-  test_function capture_failure_diagnostics() std.test.AssertionResult<void> {
-    var recovery = try String("Recovery: /recordings/private.mp4\nCapture failed: disk full\n");
+  test_function capture_failure_diagnostics() {
+    var recovery = String("Recovery: /recordings/private.mp4\nCapture failed: disk full\n");
 
-    var preserved = try screencast.helper_failure(
+    var preserved = screencast.helper_failure(
       1,
       recovery,
-      try String("")
+      String("")
     );
-    try std.test.assert(
+    std.test.assert(
       preserved.contains("Recovery: /recordings/private.mp4") and preserved.contains("disk full")
     );
-    var empty = try String("");
-    var crash = try String("pointer being freed was not allocated\n");
+    var empty = String("");
+    var crash = String("pointer being freed was not allocated\n");
 
-    var message = try screencast.helper_failure(134, empty, crash);
-    try std.test.assert(message.contains("134") and message.contains("pointer being freed"));
-    var output = try String("Recording…\nCapture failed: Camera unavailable\nDevice is busy\n");
+    var message = screencast.helper_failure(134, empty, crash);
+    std.test.assert(message.contains("134") and message.contains("pointer being freed"));
+    var output = String("Recording…\nCapture failed: Camera unavailable\nDevice is busy\n");
 
-    message = try screencast.helper_failure(1, output, crash);
-    try std.test.assert(
+    message = screencast.helper_failure(1, output, crash);
+    std.test.assert(
       message.contains("Camera unavailable") and message.contains("Device is busy")
     );
-    try std.test.assert(not message.contains("pointer being freed"));
-    message = try screencast.helper_failure(9, empty, empty);
-    try std.test.assert(message.contains("9") and message.contains("exited unexpectedly"));
-    var verbose = try String("");
+    std.test.assert(not message.contains("pointer being freed"));
+    message = screencast.helper_failure(9, empty, empty);
+    std.test.assert(message.contains("9") and message.contains("exited unexpectedly"));
+    var verbose = String("");
     for (var i: i64 = 0; i < 3000; i += 1) {
-      try verbose.append("x");
+      verbose.append("x");
     }
-    message = try screencast.helper_failure(1, empty, verbose);
-    try std.test.assert(message.length() < 2100);
+    message = screencast.helper_failure(1, empty, verbose);
+    std.test.assert(message.length() < 2100);
   }
 
   /** Allows an interrupted finalization to retain its partial recording instead of trapping the user. */
-  test_function capture_finalization_controls() std.test.AssertionResult<void> {
-    var state = try State();
+  test_function capture_finalization_controls() {
+    var state = State();
     state.page = 2;
     state.capture.process.running = true;
     state.capture.stopping = true;
-    var description = try view(state);
+    var description = view(state);
     state.capture.process.running = false;
     var found = false;
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       var node = description.elements[i];
       if (node.action == 116) {
-        try std.test.assert(node.enabled and node.text.equals_literal("Keep partial and stop"));
+        std.test.assert(node.enabled and node.text.equals_literal("Keep partial and stop"));
         found = true;
       }
     }
-    try std.test.assert(found);
+    std.test.assert(found);
   }
 
   /** Accepts whole-second delays and rejects malformed or unbounded countdowns. */
-  test_function capture_delay_validation() std.test.AssertionResult<void> {
-    try std.test.assert_eq(
-      try screencast.delay_seconds(try String("0")),
+  test_function capture_delay_validation() {
+    std.test.assert_eq(
+      screencast.delay_seconds(String("0")),
       0
     );
-    try std.test.assert_eq(
-      try screencast.delay_seconds(try String("3600")),
+    std.test.assert_eq(
+      screencast.delay_seconds(String("3600")),
       3600
     );
-    var invalid = try (try String("-1 1.5 3601 99999 nope")).split_whitespace(
+    var invalid = (String("-1 1.5 3601 99999 nope")).split_whitespace(
       make_heap_allocator()
     );
-    try invalid.push(try String(""));
+    invalid.push(String(""));
 
     for (var value: ref String in invalid) {
-      match screencast.delay_seconds(value) {
-        SystemResult.Ok(_) => {
-          try std.test.assert(false);
-        },
-        SystemResult.Allocation(error) => {
-          return std.test.AssertionResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return std.test.AssertionResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return std.test.AssertionResult.Overflow(error);
-        },
-        SystemResult.Error(_) => {}
-      };
+      var operation_completed_2 = false;
+      try {
+        screencast.delay_seconds(value);
+        operation_completed_2 = true;
+        std.test.assert(false);
+      } catch (error: std.Error) {
+        if (operation_completed_2) {
+          throw;
+        }
+      }
     }
   }
 
   /** Save as copies both capture types without changing the preview or the original file. */
-  test_function capture_save_copy() std.test.AssertionResult<void> {
-    var fixture = try video_fixtures.Fixture();
+  test_function capture_save_copy() {
+    var fixture = video_fixtures.Fixture();
     var a = make_heap_allocator();
     for (var kind: i64 = 0; kind < 3; kind += 1) {
-      var capture = try screencast.Capture();
-      var source = try fixture.path(
+      var capture = screencast.Capture();
+      var source = fixture.path(
         kind == 0 ? "original.png" : (kind == 1 ? "original.webm" : "original.mp4")
       );
-      var target = try fixture.path(
+      var target = fixture.path(
         kind == 0 ? "copy with spaces.png" : (kind == 1 ? "copy with spaces.webm" : "copy with spaces.mp4")
       );
-      var contents = try String("capture bytes");
-      try std.io.write_string(source, contents);
-      capture.saved = try source.clone(a);
-      try capture.save_copy(source, target);
+      var contents = String("capture bytes");
+      std.io.write_string(source, contents);
+      capture.saved = source.clone(a);
+      capture.save_copy(source, target);
       var deadline = std.time.now();
       while (capture.copy_process.running and deadline.elapsed().as_secs() < 5) {
-        var changed = try capture.tick();
+        var changed = capture.tick();
         std.time.sleep(std.time.create_duration_millis(10));
       }
-      try std.test.assert(not capture.copy_process.running);
-      var saved = try std.io.read_to_string(a, target);
-      try std.test.assert(saved.equals(contents));
-      try std.test.assert(capture.saved.equals(source) and try std.io.is_file(source));
-      try std.test.assert(capture.message.starts_with("Saved copy:"));
-      var invalid = try fixture.path("missing-dir/copy.png");
-      match capture.save_copy(source, invalid) {
-        SystemResult.Ok => {
-          try std.test.assert(false);
-        },
-        SystemResult.Allocation(error) => {
-          return std.test.AssertionResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return std.test.AssertionResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return std.test.AssertionResult.Overflow(error);
-        },
-        SystemResult.Error(_) => {}
-      };
-      try std.test.assert(try std.io.is_file(source));
+      std.test.assert(not capture.copy_process.running);
+      var saved = std.io.read_to_string(a, target);
+      std.test.assert(saved.equals(contents));
+      std.test.assert(capture.saved.equals(source) and std.io.is_file(source));
+      std.test.assert(capture.message.starts_with("Saved copy:"));
+      var invalid = fixture.path("missing-dir/copy.png");
+
+      var operation_completed_1 = false;
+      try {
+        capture.save_copy(source, invalid);
+        operation_completed_1 = true;
+        std.test.assert(false);
+      } catch (error: std.Error) {
+        if (operation_completed_1) {
+          throw;
+        }
+      }
+
+      std.test.assert(std.io.is_file(source));
     }
   }
 }

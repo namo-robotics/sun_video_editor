@@ -4,782 +4,747 @@ using std;
 module video_tests {
 
   /** Enforces the released tool versions required by the distribution packages. */
-  test_function required_tool_versions() std.test.AssertionResult<void> {
-    try std.test.assert(
-      try video.supported_tool_version(
-        try String("ffmpeg version 8.0.1-3ubuntu2 Copyright")
+  test_function required_tool_versions() {
+    std.test.assert(
+      video.supported_tool_version(
+        String("ffmpeg version 8.0.1-3ubuntu2 Copyright")
       )
     );
-    try std.test.assert(
-      try video.supported_tool_version(
-        try String("ffprobe version 9.1 Copyright")
+    std.test.assert(
+      video.supported_tool_version(
+        String("ffprobe version 9.1 Copyright")
       )
     );
-    try std.test.assert(
-      not (try video.supported_tool_version(
-        try String("ffmpeg version 7.1.5 Copyright")
+    std.test.assert(
+      not (video.supported_tool_version(
+        String("ffmpeg version 7.1.5 Copyright")
       ))
     );
-    try std.test.assert(
-      not (try video.supported_tool_version(
-        try String("ffprobe version N-12345-gabcdef")
+    std.test.assert(
+      not (video.supported_tool_version(
+        String("ffprobe version N-12345-gabcdef")
       ))
     );
-    try std.test.assert(
-      not (try video.supported_tool_version(
-        try String("ffmpeg version invalid")
+    std.test.assert(
+      not (video.supported_tool_version(
+        String("ffmpeg version invalid")
       ))
     );
-    try std.test.assert(
-      not (try video.supported_tool_version(
-        try String("unknown version 8.0")
+    std.test.assert(
+      not (video.supported_tool_version(
+        String("unknown version 8.0")
       ))
     );
-    return std.test.AssertionResult.Ok;
+    return;
   }
 
   /** Resolves symlinks and missing output paths while preserving literal filenames. */
-  test_function absolute_paths() std.test.AssertionResult<void> {
+  test_function absolute_paths() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var input = try video.absolute(fixture.input);
-    var alias = try fixture.path("alias.mov");
-    var link = try std.process.Command(a, "ln");
-    try link.add_arg("-s");
-    try link.add_arg(input);
-    try link.add_arg(alias);
-    try video.capture(link);
-    var resolved = try video.absolute(alias);
-    try std.test.assert(resolved.equals(input));
-    var output = try fixture.path("missing/../output $name; 'clip'.mp4");
-    var directory = try video.absolute(fixture.directory);
-    try directory.append("/output $name; 'clip'.mp4");
-    var destination = try video.absolute(output);
-    try std.test.assert(destination.equals(directory));
-    try std.test.assert(not try std.io.is_file(destination));
-    return std.test.AssertionResult.Ok;
+    var fixture = video_fixtures.Fixture();
+    var input = video.absolute(fixture.input);
+    var alias = fixture.path("alias.mov");
+    var link = std.process.Command(a, "ln");
+    link.add_arg("-s");
+    link.add_arg(input);
+    link.add_arg(alias);
+    video.capture(link);
+    var resolved = video.absolute(alias);
+    std.test.assert(resolved.equals(input));
+    var output = fixture.path("missing/../output $name; 'clip'.mp4");
+    var directory = video.absolute(fixture.directory);
+    directory.append("/output $name; 'clip'.mp4");
+    var destination = video.absolute(output);
+    std.test.assert(destination.equals(directory));
+    std.test.assert(not std.io.is_file(destination));
+    return;
   }
 
   /** Checks strict time parsing and rejects invalid trim ranges before encoding. */
-  test_function time_validation() std.test.AssertionResult<void> {
-    var time = try String("01:02:03.5");
-    try std.test.assert_eq(try video.seconds(time), 3723.5);
-    var invalid = try (try String("-1|nan|1:60|1::2|1.2:03|1.2.3|inf")).split(
+  test_function time_validation() {
+    var time = String("01:02:03.5");
+    std.test.assert_eq(video.seconds(time), 3723.5);
+    var invalid = (String("-1|nan|1:60|1::2|1.2:03|1.2.3|inf")).split(
       make_heap_allocator(),
       b'|'
     );
     for (var value: ref String in invalid) {
-      match video.seconds(value) {
-        SystemResult.Allocation(error) => {
-          return std.test.AssertionResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return std.test.AssertionResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return std.test.AssertionResult.Overflow(error);
-        },
-        SystemResult.Error(_) => {},
-        SystemResult.Ok(_) => {
-          try std.test.assert(false, "invalid time accepted");
+      var operation_completed_15 = false;
+      try {
+        video.seconds(value);
+        operation_completed_15 = true;
+        std.test.assert(false, "invalid time accepted");
+      } catch (error: std.Error) {
+        if (operation_completed_15) {
+          throw;
         }
-      };
+      }
     }
-    var settings = try video.Settings();
-    var media = try video.Media();
+    var settings = video.Settings();
+    var media = video.Media();
     media.duration = 4.0;
-    settings.start = try String("3");
-    settings.end = try String("2");
-    match video.trim_length(settings, media) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false);
+    settings.start = String("3");
+    settings.end = String("2");
+
+    var operation_completed_14 = false;
+    try {
+      video.trim_length(settings, media);
+      operation_completed_14 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_14) {
+        throw;
       }
-    };
-    settings.end = try String("5");
-    match video.trim_length(settings, media) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false);
+    }
+
+    settings.end = String("5");
+
+    var operation_completed_13 = false;
+    try {
+      video.trim_length(settings, media);
+      operation_completed_13 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_13) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 
   /** Rejects overlapping kept sections and totals valid sections in source order. */
-  test_function kept_section_validation() std.test.AssertionResult<void> {
-    var settings = try video.Settings();
-    var media = try video.Media();
+  test_function kept_section_validation() {
+    var settings = video.Settings();
+    var media = video.Media();
     media.duration = 4.0;
-    try settings.sections.push(
+    settings.sections.push(
       video.Section(
         2,
-        try String("3"),
-        try String("4")
+        String("3"),
+        String("4")
       )
     );
 
-    try settings.sections.push(
+    settings.sections.push(
       video.Section(
         1,
-        try String("0"),
-        try String("1")
+        String("0"),
+        String("1")
       )
     );
 
-    try std.test.assert_eq(try video.trim_length(settings, media), 2.0);
-    var ordered = try video.kept_intervals(settings, media);
-    try std.test.assert_eq(ordered[0].start, 0.0);
-    try std.test.assert_eq(ordered[1].start, 3.0);
-    settings.sections[1].end = try String("3.5");
-    match video.trim_length(settings, media) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false, "overlapping sections accepted");
+    std.test.assert_eq(video.trim_length(settings, media), 2.0);
+    var ordered = video.kept_intervals(settings, media);
+    std.test.assert_eq(ordered[0].start, 0.0);
+    std.test.assert_eq(ordered[1].start, 3.0);
+    settings.sections[1].end = String("3.5");
+
+    var operation_completed_12 = false;
+    try {
+      video.trim_length(settings, media);
+      operation_completed_12 = true;
+      std.test.assert(false, "overlapping sections accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_12) {
+        throw;
       }
-    };
-    settings.sections[1].end = try String("0");
-    match video.trim_length(settings, media) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false, "empty section accepted");
+    }
+
+    settings.sections[1].end = String("0");
+
+    var operation_completed_11 = false;
+    try {
+      video.trim_length(settings, media);
+      operation_completed_11 = true;
+      std.test.assert(false, "empty section accepted");
+    } catch (error: std.Error) {
+      if (operation_completed_11) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 
   /** Decodes one tiny RGB frame so an export can be checked for the correct source section. */
-  function sample_color(path: const ref String, time: static_ptr<u8>) SystemResult<String> {
-    var command = try std.process.Command(make_heap_allocator(), "ffmpeg");
+  function sample_color(path: const ref String, time: static_ptr<u8>) String throws {
+    var command = std.process.Command(make_heap_allocator(), "ffmpeg");
 
-    var flags = try (try String("-v error -ss")).split_whitespace(
+    var flags = (String("-v error -ss")).split_whitespace(
       make_heap_allocator()
     );
     for (var flag: ref String in flags) {
-      try command.add_arg(flag);
+      command.add_arg(flag);
     }
-    try command.add_arg(time);
-    try command.add_arg("-i");
-    try command.add_arg(path);
-    try command.add_arg("-frames:v");
-    try command.add_arg("1");
-    try command.add_arg("-vf");
-    try command.add_arg("scale=2:2,format=rgb24");
-    try command.add_arg("-threads");
-    try command.add_arg("1");
-    try command.add_arg("-f");
-    try command.add_arg("rawvideo");
-    try command.add_arg("pipe:1");
-    var output = try command.output();
+    command.add_arg(time);
+    command.add_arg("-i");
+    command.add_arg(path);
+    command.add_arg("-frames:v");
+    command.add_arg("1");
+    command.add_arg("-vf");
+    command.add_arg("scale=2:2,format=rgb24");
+    command.add_arg("-threads");
+    command.add_arg("1");
+    command.add_arg("-f");
+    command.add_arg("rawvideo");
+    command.add_arg("pipe:1");
+    var output = command.output();
     if (output.status() != 0) {
-      return SystemResult.Error(Error(1, "Cannot sample exported frame"));
+      throw Error(1, "Cannot sample exported frame");
     }
-    return SystemResult.Ok(
-      try output.stdout().clone(make_heap_allocator())
-    );
+    return output.stdout().clone(make_heap_allocator());
   }
 
   /** Exports nonadjacent colored sections across all formats and checks video order and audio duration. */
-  test_function joined_sections_export() std.test.AssertionResult<void> {
+  test_function joined_sections_export() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var source = try fixture.path("colored.mp4");
-    var generate = try std.process.Command(a, "ffmpeg");
-    var flags = try (try String("-v error -f lavfi -i")).split_whitespace(
+    var fixture = video_fixtures.Fixture();
+    var source = fixture.path("colored.mp4");
+    var generate = std.process.Command(a, "ffmpeg");
+    var flags = (String("-v error -f lavfi -i")).split_whitespace(
       a
     );
     for (var flag: ref String in flags) {
-      try generate.add_arg(flag);
+      generate.add_arg(flag);
     }
-    try generate.add_arg(
+    generate.add_arg(
       "color=red:s=64x64:r=24:d=2[r];color=blue:s=64x64:r=24:d=2[b];[r][b]concat=n=2:v=1:a=0"
     );
-    try generate.add_arg("-f");
-    try generate.add_arg("lavfi");
-    try generate.add_arg("-i");
-    try generate.add_arg("sine=frequency=440:duration=4");
-    try generate.add_arg("-c:v");
-    try generate.add_arg("libx264");
-    try generate.add_arg("-threads");
-    try generate.add_arg("2");
-    try generate.add_arg("-c:a");
-    try generate.add_arg("aac");
-    try generate.add_arg(source);
-    try video.capture(generate);
-    var job = try video.Job();
-    try job.probe(source);
-    try video_fixtures.finish(job);
-    var settings = try video.Settings();
-    settings.input = try source.clone(a);
-    try settings.sections.push(
+    generate.add_arg("-f");
+    generate.add_arg("lavfi");
+    generate.add_arg("-i");
+    generate.add_arg("sine=frequency=440:duration=4");
+    generate.add_arg("-c:v");
+    generate.add_arg("libx264");
+    generate.add_arg("-threads");
+    generate.add_arg("2");
+    generate.add_arg("-c:a");
+    generate.add_arg("aac");
+    generate.add_arg(source);
+    video.capture(generate);
+    var job = video.Job();
+    job.probe(source);
+    video_fixtures.finish(job);
+    var settings = video.Settings();
+    settings.input = source.clone(a);
+    settings.sections.push(
       video.Section(
         2,
-        try String("3"),
-        try String("4")
+        String("3"),
+        String("4")
       )
     );
 
-    try settings.sections.push(
+    settings.sections.push(
       video.Section(
         1,
-        try String("0"),
-        try String("1")
+        String("0"),
+        String("1")
       )
     );
 
     for (var format: i64 = 0; format < 6; format += 1) {
       settings.format = format;
-      settings.output = try `${fixture.directory}/joined${try String(video.extension(format))}`;
-      try job.convert(settings);
-      try video_fixtures.finish(job);
-      try std.test.assert_eq(job.percent, 100);
-      var probe = try video.probe_command(settings.output);
-      var result = try video.parse_probe(try video.capture(probe));
-      try std.test.assert(result.duration >= 1.9 and result.duration <= 2.2);
-      try std.test.assert(result.audio.equals_literal("none") == (format == 5));
-      var first = try sample_color(settings.output, "0.5");
-      var last = try sample_color(settings.output, "1.5");
-      try std.test.assert(first.length() >= 3 and last.length() >= 3);
-      var red = match first.at(0) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => 0
-      };
-      var blue = match last.at(2) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => 0
-      };
-      try std.test.assert(
+      settings.output = `${fixture.directory}/joined${String(video.extension(format))}`;
+      job.convert(settings);
+      video_fixtures.finish(job);
+      std.test.assert_eq(job.percent, 100);
+      var probe = video.probe_command(settings.output);
+      var result = video.parse_probe(video.capture(probe));
+      std.test.assert(result.duration >= 1.9 and result.duration <= 2.2);
+      std.test.assert(result.audio.equals_literal("none") == (format == 5));
+      var first = sample_color(settings.output, "0.5");
+      var last = sample_color(settings.output, "1.5");
+      std.test.assert(first.length() >= 3 and last.length() >= 3);
+      var red: u8 = 0;
+
+      try {
+        var value = first.at(0);
+
+        red = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        red = 0;
+      }
+
+      var blue: u8 = 0;
+
+      try {
+        var value = last.at(2);
+
+        blue = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        blue = 0;
+      }
+
+      std.test.assert(
         red > 200 and blue > 200,
         "export did not join kept source sections in order"
       );
     }
     settings.format = 0;
     settings.audio = false;
-    settings.output = try fixture.path("joined-silent.mp4");
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    var silent = try video.probe_command(settings.output);
-    var result = try video.parse_probe(try video.capture(silent));
-    try std.test.assert(result.audio.equals_literal("none"));
-    return std.test.AssertionResult.Ok;
+    settings.output = fixture.path("joined-silent.mp4");
+    job.convert(settings);
+    video_fixtures.finish(job);
+    var silent = video.probe_command(settings.output);
+    var result = video.parse_probe(video.capture(silent));
+    std.test.assert(result.audio.equals_literal("none"));
+    return;
   }
 
   /** Reads fractional frame rates and falls back safely when metadata is unavailable. */
-  test_function frame_rate_metadata() std.test.AssertionResult<void> {
-    var fractional = try String(
+  test_function frame_rate_metadata() {
+    var fractional = String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"30000/1001\"}]}"
     );
 
-    var media = try video.parse_probe(fractional);
-    try std.test.assert_eq(media.frame_rate_num, 30000);
-    try std.test.assert_eq(media.frame_rate_den, 1001);
-    var fallback = try String(
+    var media = video.parse_probe(fractional);
+    std.test.assert_eq(media.frame_rate_num, 30000);
+    std.test.assert_eq(media.frame_rate_den, 1001);
+    var fallback = String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"0/0\",\"r_frame_rate\":\"24/1\"}]}"
     );
 
-    var nominal = try video.parse_probe(fallback);
-    try std.test.assert_eq(nominal.frame_rate_num, 24);
-    try std.test.assert_eq(nominal.frame_rate_den, 1);
-    var invalid = try String(
+    var nominal = video.parse_probe(fallback);
+    std.test.assert_eq(nominal.frame_rate_num, 24);
+    std.test.assert_eq(nominal.frame_rate_den, 1);
+    var invalid = String(
       "{\"format\":{\"duration\":\"4\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"avg_frame_rate\":\"-1/1\",\"r_frame_rate\":\"999999999999/1\"}]}"
     );
 
-    var unknown = try video.parse_probe(invalid);
-    try std.test.assert_eq(unknown.frame_rate_num, 0);
-    return std.test.AssertionResult.Ok;
+    var unknown = video.parse_probe(invalid);
+    std.test.assert_eq(unknown.frame_rate_num, 0);
+    return;
   }
 
   /** Rejects HDR and missing metadata rather than producing an incorrect SDR conversion. */
-  test_function metadata_validation() std.test.AssertionResult<void> {
-    var hdr = try String(
+  test_function metadata_validation() {
+    var hdr = String(
       "{\"format\":{\"duration\":\"4\",\"size\":\"100\"},\"streams\":[{\"codec_type\":\"video\",\"width\":320,\"height\":240,\"color_transfer\":\"smpte2084\"}]}"
     );
 
-    match video.parse_probe(hdr) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false);
+    var operation_completed_8 = false;
+    try {
+      video.parse_probe(hdr);
+      operation_completed_8 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_8) {
+        throw;
       }
-    };
-    var bad = try String("{}");
-    match video.parse_probe(bad) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok(_) => {
-        try std.test.assert(false);
+    }
+
+    var bad = String("{}");
+
+    var operation_completed_7 = false;
+    try {
+      video.parse_probe(bad);
+      operation_completed_7 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_7) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 
   /** Converts a trimmed MOV to MP4, checks media properties, then exports a silent MOV. */
-  test_function conversion_and_audio() std.test.AssertionResult<void> {
+  test_function conversion_and_audio() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var job = try video.Job();
-    try job.probe(fixture.input);
-    try video_fixtures.finish(job);
-    try std.test.assert(job.ready and job.media.width == 320 and job.media.height == 240);
-    try std.test.assert(job.media.audio.equals_literal("aac"));
-    var settings = try video.Settings();
-    settings.input = try fixture.input.clone(a);
-    settings.output = try fixture.path("trimmed $out; file.mp4");
-    settings.start = try String("0.5");
-    settings.end = try String("2.5");
+    var fixture = video_fixtures.Fixture();
+    var job = video.Job();
+    job.probe(fixture.input);
+    video_fixtures.finish(job);
+    std.test.assert(job.ready and job.media.width == 320 and job.media.height == 240);
+    std.test.assert(job.media.audio.equals_literal("aac"));
+    var settings = video.Settings();
+    settings.input = fixture.input.clone(a);
+    settings.output = fixture.path("trimmed $out; file.mp4");
+    settings.start = String("0.5");
+    settings.end = String("2.5");
     settings.resolution = 3;
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    try std.test.assert_eq(job.percent, 100);
-    try std.test.assert(job.output_size > 0 and job.output_size < job.media.size);
-    var result = try video.Job();
-    try result.probe(settings.output);
-    try video_fixtures.finish(result);
-    try std.test.assert(result.media.duration >= 1.9 and result.media.duration <= 2.1);
-    try std.test.assert_eq(result.media.width, 320);
-    try std.test.assert_eq(result.media.height, 240);
-    try std.test.assert(
+    job.convert(settings);
+    video_fixtures.finish(job);
+    std.test.assert_eq(job.percent, 100);
+    std.test.assert(job.output_size > 0 and job.output_size < job.media.size);
+    var result = video.Job();
+    result.probe(settings.output);
+    video_fixtures.finish(result);
+    std.test.assert(result.media.duration >= 1.9 and result.media.duration <= 2.1);
+    std.test.assert_eq(result.media.width, 320);
+    std.test.assert_eq(result.media.height, 240);
+    std.test.assert(
       result.media.codec.equals_literal("h264") and result.media.audio.equals_literal("aac")
     );
-    settings.input = try settings.output.clone(a);
-    settings.output = try fixture.path("silent.mov");
+    settings.input = settings.output.clone(a);
+    settings.output = fixture.path("silent.mov");
     settings.format = 1;
     settings.audio = false;
-    settings.start = try String("0");
-    settings.end = try String("");
-    try result.convert(settings);
-    try video_fixtures.finish(result);
-    var silent = try video.Job();
-    try silent.probe(settings.output);
-    try video_fixtures.finish(silent);
-    try std.test.assert(silent.media.audio.equals_literal("none"));
-    settings.input = try settings.output.clone(a);
-    settings.output = try fixture.path("silent-to-mp4.mp4");
+    settings.start = String("0");
+    settings.end = String("");
+    result.convert(settings);
+    video_fixtures.finish(result);
+    var silent = video.Job();
+    silent.probe(settings.output);
+    video_fixtures.finish(silent);
+    std.test.assert(silent.media.audio.equals_literal("none"));
+    settings.input = settings.output.clone(a);
+    settings.output = fixture.path("silent-to-mp4.mp4");
     settings.format = 0;
     settings.audio = true;
-    try silent.convert(settings);
-    try video_fixtures.finish(silent);
-    try std.test.assert(try std.io.exists(settings.output));
-    return std.test.AssertionResult.Ok;
+    silent.convert(settings);
+    video_fixtures.finish(silent);
+    std.test.assert(std.io.exists(settings.output));
+    return;
   }
 
   /** Encodes every format and quality level, checking real codecs, audio, and trim duration. */
-  test_function formats_and_quality() std.test.AssertionResult<void> {
+  test_function formats_and_quality() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var job = try video.Job();
-    try job.probe(fixture.input);
-    try video_fixtures.finish(job);
-    var settings = try video.Settings();
-    settings.input = try fixture.input.clone(a);
-    settings.start = try String("0.5");
-    settings.end = try String("1.5");
+    var fixture = video_fixtures.Fixture();
+    var job = video.Job();
+    job.probe(fixture.input);
+    video_fixtures.finish(job);
+    var settings = video.Settings();
+    settings.input = fixture.input.clone(a);
+    settings.start = String("0.5");
+    settings.end = String("1.5");
     for (var format: i64 = 0; format < 6; format += 1) {
       var largest: i64 = 0;
       settings.format = format;
       for (var quality: i64 = 0; quality < 5; quality += 1) {
         settings.quality = quality;
         settings.audio = quality != 4;
-        settings.output = try fixture.path("preset");
-        try settings.output.append(try `-${format}-${quality}`);
+        settings.output = fixture.path("preset");
+        settings.output.append(`-${format}-${quality}`);
 
-        try settings.output.append(video.extension(format));
-        try job.convert(settings);
-        try video_fixtures.finish(job);
-        try std.test.assert_eq(job.percent, 100);
+        settings.output.append(video.extension(format));
+        job.convert(settings);
+        video_fixtures.finish(job);
+        std.test.assert_eq(job.percent, 100);
         if (quality == 0) {
           largest = job.output_size;
         }
         if (quality == 3) {
-          try std.test.assert(
+          std.test.assert(
             job.output_size < largest,
             "compression reduces fixture size with audio retained"
           );
         }
-        var result = try video.Job();
-        try result.probe(settings.output);
-        try video_fixtures.finish(result);
-        try std.test.assert(result.media.duration >= 0.9 and result.media.duration <= 1.3);
-        var codec = try String(
+        var result = video.Job();
+        result.probe(settings.output);
+        video_fixtures.finish(result);
+        std.test.assert(result.media.duration >= 0.9 and result.media.duration <= 1.3);
+        var codec = String(
           format == 5 ? "gif" : (format == 2 ? "vp9" : (format == 4 ? "mpeg4" : "h264"))
         );
 
-        var audio = try String(
+        var audio = String(
           quality == 4 or format == 5 ? "none" : (format == 2 ? "opus" : (format == 4 ? "mp3" : "aac"))
         );
 
-        try std.test.assert(result.media.codec.equals(codec));
-        try std.test.assert(result.media.audio.equals(audio));
-        try std.test.assert_eq(result.media.width, 320);
-        try std.test.assert_eq(result.media.height, 240);
+        std.test.assert(result.media.codec.equals(codec));
+        std.test.assert(result.media.audio.equals(audio));
+        std.test.assert_eq(result.media.width, 320);
+        std.test.assert_eq(result.media.height, 240);
         if (format == 5) {
-          var frames = try std.process.Command(a, "ffprobe");
-          try frames.add_arg("-v");
-          try frames.add_arg("error");
-          try frames.add_arg("-ignore_loop");
-          try frames.add_arg("1");
-          try frames.add_arg("-count_frames");
-          try frames.add_arg("-select_streams");
-          try frames.add_arg("v:0");
-          try frames.add_arg("-show_entries");
-          try frames.add_arg("stream=nb_read_frames");
-          try frames.add_arg("-of");
-          try frames.add_arg("default=noprint_wrappers=1:nokey=1");
-          try frames.add_arg(settings.output);
-          var count = try video.capture(frames);
+          var frames = std.process.Command(a, "ffprobe");
+          frames.add_arg("-v");
+          frames.add_arg("error");
+          frames.add_arg("-ignore_loop");
+          frames.add_arg("1");
+          frames.add_arg("-count_frames");
+          frames.add_arg("-select_streams");
+          frames.add_arg("v:0");
+          frames.add_arg("-show_entries");
+          frames.add_arg("stream=nb_read_frames");
+          frames.add_arg("-of");
+          frames.add_arg("default=noprint_wrappers=1:nokey=1");
+          frames.add_arg(settings.output);
+          var count = video.capture(frames);
           var expected = quality == 0 ? 30 : (quality == 1 ? 24 : (quality == 2 ? 20 : (quality ==
             3 ? 15 : 10)));
           var number = match count.parse_i64() {
             Option.Some(value) => value,
             Option.None => 0
           };
-          try std.test.assert_eq(number, expected);
+          std.test.assert_eq(number, expected);
         }
       }
     }
-    return std.test.AssertionResult.Ok;
+    return;
   }
 
   /** Keeps directory names intact and rejects unsupported preset values before encoding. */
-  test_function format_paths_and_validation() std.test.AssertionResult<void> {
-    var path = try String("/videos.mp4/clip.webm");
-    var changed = try video.output_path(path, 3);
-    try std.test.assert(changed.equals_literal("/videos.mp4/clip.mkv"));
-    path = try String("/videos.mp4/clip");
-    changed = try video.output_path(path, 4);
-    try std.test.assert(changed.equals_literal("/videos.mp4/clip.avi"));
-    changed = try video.output_path(changed, 5);
-    try std.test.assert(changed.equals_literal("/videos.mp4/clip.gif"));
-    changed = try video.output_path(changed, 0);
-    try std.test.assert(changed.equals_literal("/videos.mp4/clip.mp4"));
-    path = try String("");
-    changed = try video.output_path(path, 2);
-    try std.test.assert(changed.is_empty());
-    var settings = try video.Settings();
-    var media = try video.Media();
+  test_function format_paths_and_validation() {
+    var path = String("/videos.mp4/clip.webm");
+    var changed = video.output_path(path, 3);
+    std.test.assert(changed.equals_literal("/videos.mp4/clip.mkv"));
+    path = String("/videos.mp4/clip");
+    changed = video.output_path(path, 4);
+    std.test.assert(changed.equals_literal("/videos.mp4/clip.avi"));
+    changed = video.output_path(changed, 5);
+    std.test.assert(changed.equals_literal("/videos.mp4/clip.gif"));
+    changed = video.output_path(changed, 0);
+    std.test.assert(changed.equals_literal("/videos.mp4/clip.mp4"));
+    path = String("");
+    changed = video.output_path(path, 2);
+    std.test.assert(changed.is_empty());
+    var settings = video.Settings();
+    var media = video.Media();
     media.duration = 4.0;
     for (var i: i64 = 0; i < 3; i += 1) {
       settings.format = i == 0 ? 6 : 0;
       settings.quality = i == 1 ? 5 : 2;
       settings.resolution = i == 2 ? 5 : 0;
-      match video.trim_length(settings, media) {
-        SystemResult.Allocation(error) => {
-          return std.test.AssertionResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return std.test.AssertionResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return std.test.AssertionResult.Overflow(error);
-        },
-        SystemResult.Error(_) => {},
-        SystemResult.Ok(_) => {
-          try std.test.assert(false, "invalid preset accepted");
+
+      var operation_completed_6 = false;
+      try {
+        video.trim_length(settings, media);
+        operation_completed_6 = true;
+        std.test.assert(false, "invalid preset accepted");
+      } catch (error: std.Error) {
+        if (operation_completed_6) {
+          throw;
         }
-      };
+      }
     }
-    return std.test.AssertionResult.Ok;
+    return;
   }
 
   /** Preserves existing files and the source, including an alternative hard-link path. */
-  test_function destination_protection() std.test.AssertionResult<void> {
+  test_function destination_protection() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var job = try video.Job();
-    try job.probe(fixture.input);
-    try video_fixtures.finish(job);
-    var settings = try video.Settings();
-    settings.input = try fixture.input.clone(a);
-    settings.output = try fixture.path("existing.mp4");
-    var sentinel = try String("keep this file");
-    try std.io.write_string(settings.output, sentinel);
-    match job.convert(settings) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok => {
-        try std.test.assert(false);
+    var fixture = video_fixtures.Fixture();
+    var job = video.Job();
+    job.probe(fixture.input);
+    video_fixtures.finish(job);
+    var settings = video.Settings();
+    settings.input = fixture.input.clone(a);
+    settings.output = fixture.path("existing.mp4");
+    var sentinel = String("keep this file");
+    std.io.write_string(settings.output, sentinel);
+
+    var operation_completed_5 = false;
+    try {
+      job.convert(settings);
+      operation_completed_5 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_5) {
+        throw;
       }
-    };
-    var retained = try std.io.read_to_string(a, settings.output);
-    try std.test.assert(retained.equals(sentinel));
+    }
+
+    var retained = std.io.read_to_string(a, settings.output);
+    std.test.assert(retained.equals(sentinel));
     settings.overwrite = true;
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    try std.test.assert(job.output_size > 0);
-    var alias = try fixture.path("alias.mp4");
-    var link = try std.process.Command(a, "ln");
-    try link.add_arg(fixture.input);
-    try link.add_arg(alias);
-    try video.capture(link);
+    job.convert(settings);
+    video_fixtures.finish(job);
+    std.test.assert(job.output_size > 0);
+    var alias = fixture.path("alias.mp4");
+    var link = std.process.Command(a, "ln");
+    link.add_arg(fixture.input);
+    link.add_arg(alias);
+    video.capture(link);
     settings.output = alias;
-    match job.convert(settings) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok => {
-        try std.test.assert(false);
+
+    var operation_completed_4 = false;
+    try {
+      job.convert(settings);
+      operation_completed_4 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_4) {
+        throw;
       }
-    };
-    settings.output = try fixture.input.clone(a);
+    }
+
+    settings.output = fixture.input.clone(a);
     settings.format = 1;
-    match job.convert(settings) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(_) => {},
-      SystemResult.Ok => {
-        try std.test.assert(false);
+
+    var operation_completed_3 = false;
+    try {
+      job.convert(settings);
+      operation_completed_3 = true;
+      std.test.assert(false);
+    } catch (error: std.Error) {
+      if (operation_completed_3) {
+        throw;
       }
-    };
-    return std.test.AssertionResult.Ok;
+    }
+
+    return;
   }
 
   /** Cancels real work and verifies that partial exports and child processes do not survive. */
-  test_function cancellation_and_failure() std.test.AssertionResult<void> {
+  test_function cancellation_and_failure() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var job = try video.Job();
-    try job.probe(fixture.input);
-    try video_fixtures.finish(job);
-    var settings = try video.Settings();
-    settings.input = try fixture.input.clone(a);
-    settings.output = try fixture.path("cancelled.mp4");
-    try job.convert(settings);
-    try job.cancel();
-    try video_fixtures.finish(job);
-    try std.test.assert(
-      job.cancelled and not job.process.running and not try std.io.exists(settings.output)
+    var fixture = video_fixtures.Fixture();
+    var job = video.Job();
+    job.probe(fixture.input);
+    video_fixtures.finish(job);
+    var settings = video.Settings();
+    settings.input = fixture.input.clone(a);
+    settings.output = fixture.path("cancelled.mp4");
+    job.convert(settings);
+    job.cancel();
+    video_fixtures.finish(job);
+    std.test.assert(
+      job.cancelled and not job.process.running and not std.io.exists(settings.output)
     );
-    var before = try std.io.read_dir(a, fixture.directory);
-    try std.test.assert_eq(before.size(), 1);
-    var corrupt = try String("not a video");
-    try std.io.write_string(fixture.input, corrupt);
-    try job.convert(settings);
-    match video_fixtures.finish(job) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(error) => {
-        try job.fail(error);
-      },
-      SystemResult.Ok => {
-        try std.test.assert(false, "corrupt source unexpectedly converted");
+    var before = std.io.read_dir(a, fixture.directory);
+    std.test.assert_eq(before.size(), 1);
+    var corrupt = String("not a video");
+    std.io.write_string(fixture.input, corrupt);
+    job.convert(settings);
+
+    var operation_completed_2 = false;
+    try {
+      video_fixtures.finish(job);
+      operation_completed_2 = true;
+      std.test.assert(false, "corrupt source unexpectedly converted");
+    } catch (error: std.Error) {
+      if (operation_completed_2) {
+        throw;
       }
-    };
-    try std.test.assert(not try std.io.exists(settings.output) and not job.process.running);
-    var after = try std.io.read_dir(a, fixture.directory);
-    try std.test.assert_eq(after.size(), 1);
-    return std.test.AssertionResult.Ok;
+      job.fail(error);
+    }
+
+    std.test.assert(not std.io.exists(settings.output) and not job.process.running);
+    var after = std.io.read_dir(a, fixture.directory);
+    std.test.assert_eq(after.size(), 1);
+    return;
   }
 
   /** Checks display rotation and downscaling against metadata of actual encoded outputs. */
-  test_function rotation_and_resizing() std.test.AssertionResult<void> {
+  test_function rotation_and_resizing() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var rotated = try fixture.path("rotated.mov");
-    var remux = try std.process.Command(a, "ffmpeg");
-    try remux.add_arg("-v");
-    try remux.add_arg("error");
-    try remux.add_arg("-display_rotation");
-    try remux.add_arg("90");
-    try remux.add_arg("-i");
-    try remux.add_arg(fixture.input);
-    try remux.add_arg("-c");
-    try remux.add_arg("copy");
-    try remux.add_arg(rotated);
-    try video.capture(remux);
-    var job = try video.Job();
-    try job.probe(rotated);
-    try video_fixtures.finish(job);
-    var settings = try video.Settings();
+    var fixture = video_fixtures.Fixture();
+    var rotated = fixture.path("rotated.mov");
+    var remux = std.process.Command(a, "ffmpeg");
+    remux.add_arg("-v");
+    remux.add_arg("error");
+    remux.add_arg("-display_rotation");
+    remux.add_arg("90");
+    remux.add_arg("-i");
+    remux.add_arg(fixture.input);
+    remux.add_arg("-c");
+    remux.add_arg("copy");
+    remux.add_arg(rotated);
+    video.capture(remux);
+    var job = video.Job();
+    job.probe(rotated);
+    video_fixtures.finish(job);
+    var settings = video.Settings();
     settings.input = rotated;
-    settings.output = try fixture.path("upright.mp4");
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    var upright = try video.Job();
-    try upright.probe(settings.output);
-    try video_fixtures.finish(upright);
-    try std.test.assert_eq(upright.media.width, 240);
-    try std.test.assert_eq(upright.media.height, 320);
-    var large = try fixture.path("large.mov");
-    var enlarge = try std.process.Command(a, "ffmpeg");
-    try enlarge.add_arg("-v");
-    try enlarge.add_arg("error");
-    try enlarge.add_arg("-i");
-    try enlarge.add_arg(fixture.input);
-    try enlarge.add_arg("-t");
-    try enlarge.add_arg("1");
-    try enlarge.add_arg("-vf");
-    try enlarge.add_arg("scale=1280:960");
-    try enlarge.add_arg("-threads");
-    try enlarge.add_arg("2");
-    try enlarge.add_arg("-filter_threads");
-    try enlarge.add_arg("1");
-    try enlarge.add_arg(large);
-    try video.capture(enlarge);
-    try job.probe(large);
-    try video_fixtures.finish(job);
+    settings.output = fixture.path("upright.mp4");
+    job.convert(settings);
+    video_fixtures.finish(job);
+    var upright = video.Job();
+    upright.probe(settings.output);
+    video_fixtures.finish(upright);
+    std.test.assert_eq(upright.media.width, 240);
+    std.test.assert_eq(upright.media.height, 320);
+    var large = fixture.path("large.mov");
+    var enlarge = std.process.Command(a, "ffmpeg");
+    enlarge.add_arg("-v");
+    enlarge.add_arg("error");
+    enlarge.add_arg("-i");
+    enlarge.add_arg(fixture.input);
+    enlarge.add_arg("-t");
+    enlarge.add_arg("1");
+    enlarge.add_arg("-vf");
+    enlarge.add_arg("scale=1280:960");
+    enlarge.add_arg("-threads");
+    enlarge.add_arg("2");
+    enlarge.add_arg("-filter_threads");
+    enlarge.add_arg("1");
+    enlarge.add_arg(large);
+    video.capture(enlarge);
+    job.probe(large);
+    video_fixtures.finish(job);
     settings.input = large;
-    settings.output = try fixture.path("smaller.mp4");
+    settings.output = fixture.path("smaller.mp4");
     settings.resolution = 3;
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    var smaller = try video.Job();
-    try smaller.probe(settings.output);
-    try video_fixtures.finish(smaller);
-    try std.test.assert_eq(smaller.media.width, 720);
-    try std.test.assert_eq(smaller.media.height, 540);
+    job.convert(settings);
+    video_fixtures.finish(job);
+    var smaller = video.Job();
+    smaller.probe(settings.output);
+    video_fixtures.finish(smaller);
+    std.test.assert_eq(smaller.media.width, 720);
+    std.test.assert_eq(smaller.media.height, 540);
     settings.resolution = 4;
-    settings.output = try fixture.path("480.mp4");
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    try smaller.probe(settings.output);
-    try video_fixtures.finish(smaller);
-    try std.test.assert_eq(smaller.media.width, 480);
-    try std.test.assert_eq(smaller.media.height, 360);
+    settings.output = fixture.path("480.mp4");
+    job.convert(settings);
+    video_fixtures.finish(job);
+    smaller.probe(settings.output);
+    video_fixtures.finish(smaller);
+    std.test.assert_eq(smaller.media.width, 480);
+    std.test.assert_eq(smaller.media.height, 360);
     settings.format = 5;
-    settings.output = try fixture.path("480.gif");
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    try smaller.probe(settings.output);
-    try video_fixtures.finish(smaller);
-    try std.test.assert_eq(smaller.media.width, 480);
-    try std.test.assert_eq(smaller.media.height, 360);
+    settings.output = fixture.path("480.gif");
+    job.convert(settings);
+    video_fixtures.finish(job);
+    smaller.probe(settings.output);
+    video_fixtures.finish(smaller);
+    std.test.assert_eq(smaller.media.width, 480);
+    std.test.assert_eq(smaller.media.height, 360);
     settings.format = 0;
     settings.resolution = 1;
-    settings.output = try fixture.path("2160.mp4");
-    try job.convert(settings);
-    try video_fixtures.finish(job);
-    try smaller.probe(settings.output);
-    try video_fixtures.finish(smaller);
-    try std.test.assert_eq(smaller.media.width, 1280);
-    try std.test.assert_eq(smaller.media.height, 960);
-    return std.test.AssertionResult.Ok;
+    settings.output = fixture.path("2160.mp4");
+    job.convert(settings);
+    video_fixtures.finish(job);
+    smaller.probe(settings.output);
+    video_fixtures.finish(smaller);
+    std.test.assert_eq(smaller.media.width, 1280);
+    std.test.assert_eq(smaller.media.height, 960);
+    return;
   }
 
   /** Stops and reaps an in-flight child and cleans partial files when its owner leaves scope. */
-  test_function shutdown_and_publication_race() std.test.AssertionResult<void> {
+  test_function shutdown_and_publication_race() {
     var a = make_heap_allocator();
-    var fixture = try video_fixtures.Fixture();
-    var settings = try video.Settings();
-    settings.input = try fixture.input.clone(a);
-    settings.output = try fixture.path("shutdown.mp4");
+    var fixture = video_fixtures.Fixture();
+    var settings = video.Settings();
+    settings.input = fixture.input.clone(a);
+    settings.output = fixture.path("shutdown.mp4");
     if (true) {
-      var job = try video.Job();
-      try job.probe(fixture.input);
-      try video_fixtures.finish(job);
-      try job.convert(settings);
+      var job = video.Job();
+      job.probe(fixture.input);
+      video_fixtures.finish(job);
+      job.convert(settings);
     }
-    try std.test.assert(not try std.io.exists(settings.output));
-    var files = try std.io.read_dir(a, fixture.directory);
-    try std.test.assert_eq(files.size(), 1);
-    var job = try video.Job();
-    try job.probe(fixture.input);
-    try video_fixtures.finish(job);
-    try job.convert(settings);
-    var sentinel = try String("created while conversion was running");
+    std.test.assert(not std.io.exists(settings.output));
+    var files = std.io.read_dir(a, fixture.directory);
+    std.test.assert_eq(files.size(), 1);
+    var job = video.Job();
+    job.probe(fixture.input);
+    video_fixtures.finish(job);
+    job.convert(settings);
+    var sentinel = String("created while conversion was running");
 
-    try std.io.write_string(settings.output, sentinel);
-    match video_fixtures.finish(job) {
-      SystemResult.Allocation(error) => {
-        return std.test.AssertionResult.Allocation(error);
-      },
-      SystemResult.InvalidArgument(error) => {
-        return std.test.AssertionResult.InvalidArgument(error);
-      },
-      SystemResult.Overflow(error) => {
-        return std.test.AssertionResult.Overflow(error);
-      },
-      SystemResult.Error(error) => {
-        try job.fail(error);
-      },
-      SystemResult.Ok => {
-        try std.test.assert(false, "existing output was overwritten without consent");
+    std.io.write_string(settings.output, sentinel);
+
+    var operation_completed_1 = false;
+    try {
+      video_fixtures.finish(job);
+      operation_completed_1 = true;
+      std.test.assert(false, "existing output was overwritten without consent");
+    } catch (error: std.Error) {
+      if (operation_completed_1) {
+        throw;
       }
-    };
-    var retained = try std.io.read_to_string(a, settings.output);
-    try std.test.assert(retained.equals(sentinel));
-    var after = try std.io.read_dir(a, fixture.directory);
-    try std.test.assert_eq(after.size(), 2);
-    return std.test.AssertionResult.Ok;
+      job.fail(error);
+    }
+
+    var retained = std.io.read_to_string(a, settings.output);
+    std.test.assert(retained.equals(sentinel));
+    var after = std.io.read_dir(a, fixture.directory);
+    std.test.assert_eq(after.size(), 2);
+    return;
   }
 }

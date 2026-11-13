@@ -4,49 +4,55 @@ using std;
 module screencast {
 
   /** Validates a bounded, whole-second countdown without accepting shell syntax. */
-  public function delay_seconds(text: const ref String) SystemResult<i64> {
+  public function delay_seconds(text: const ref String) i64 throws {
     if (text.is_empty() or text.length() > 4) {
-      return SystemResult.Error(Error(1, "Enter a whole number of seconds from 0 to 3600"));
+      throw Error(1, "Enter a whole number of seconds from 0 to 3600");
     }
     var value: i64 = 0;
     for (var i: i64 = 0; i < text.length(); i += 1) {
-      var digit = match text.at(i) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => b' '
-      };
+      var digit: u8 = 0;
+
+      try {
+        var value = text.at(i);
+
+        digit = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        digit = b' ';
+      }
+
       if (digit < b'0' or digit > b'9') {
-        return SystemResult.Error(Error(1, "Enter a whole number of seconds from 0 to 3600"));
+        throw Error(1, "Enter a whole number of seconds from 0 to 3600");
       }
       value = value * 10 + _convert<i64>(digit - b'0');
     }
     if (value > 3600) {
-      return SystemResult.Error(Error(1, "Delay cannot exceed 3600 seconds"));
+      throw Error(1, "Delay cannot exceed 3600 seconds");
     }
-    return SystemResult.Ok(value);
+    return value;
   }
 
   /** Finds the companion helper beside an explicit executable path or a PATH entry. */
-  public function helper_path(executable: const ref String) AllocationResult<String> {
-    var candidate = try `${executable}_capture`;
-    if (try std.io.is_file(candidate)) {
-      return AllocationResult.Ok(candidate);
+  public function helper_path(executable: const ref String) String throws {
+    var candidate = `${executable}_capture`;
+    if (std.io.is_file(candidate)) {
+      return candidate;
     }
     var a = make_heap_allocator();
-    var env = try std.env.Env(a);
+    var env = std.env.Env(a);
     match env.get("PATH") {
       Option.Some(path) => {
-        var directories = try path.split(a, b':');
+        var directories = path.split(a, b':');
         for (var directory: ref String in directories) {
-          var installed = try `${directory}/${executable}_capture`;
+          var installed = `${directory}/${executable}_capture`;
 
-          if (try std.io.is_file(installed)) {
-            return AllocationResult.Ok(installed);
+          if (std.io.is_file(installed)) {
+            return installed;
           }
         }
       },
       Option.None => {}
     };
-    return AllocationResult.Ok(candidate);
+    return candidate;
   }
 
   /** Preserves bounded helper errors, including crash diagnostics and multiline encoder failures. */
@@ -54,41 +60,44 @@ module screencast {
     status: i32,
     output: const ref String,
     diagnostics: const ref String
-  ) std.Result<String> {
+  ) String throws {
     var a = make_heap_allocator();
-    var message = try String("");
-    var lines = try output.split(a, b'\n');
+    var message = String("");
+    var lines = output.split(a, b'\n');
     for (var line: ref String in lines) {
       if (line.starts_with("Capture failed:")) {
-        message = try line.clone(a);
+        message = line.clone(a);
       } else if (not message.is_empty() and not line.is_empty()) {
-        try message.append("\n");
-        try message.append(line);
+        message.append("\n");
+        message.append(line);
       }
     }
     if (message.is_empty()) {
-      var detail = try diagnostics.clone(a);
+      var detail = diagnostics.clone(a);
       detail.trim();
       if (detail.is_empty()) {
-        message = try `Capture failed: helper exited unexpectedly (status ${status}). Rebuild or reinstall Sun Video Editor.`;
+        message = `Capture failed: helper exited unexpectedly (status ${status}). Rebuild or reinstall Sun Video Editor.`;
       } else {
-        message = try `Capture failed (status ${status}): ${detail}`;
+        message = `Capture failed (status ${status}): ${detail}`;
       }
     }
     if (message.length() > 2048) {
-      message = match try sun_video_editor_results.substring(message, a, 0, 2048) {
-        AccessResult.Ok(value) => value,
-        AccessResult.OutOfBounds(_) => try String("Capture failed")
-      };
-      try message.append("…");
+      try {
+        var value = sun_video_editor_results.substring(message, a, 0, 2048);
+        message = value;
+      } catch (error: std.IndexOutOfBoundsError) {
+        message = String("Capture failed");
+      }
+
+      message.append("…");
     }
     for (var line: ref String in lines) {
       if (line.starts_with("Recovery:") and not message.contains(line)) {
-        try message.append("\n");
-        try message.append(line);
+        message.append("\n");
+        message.append(line);
       }
     }
-    return std.Result.Ok(message);
+    return message;
   }
 
   /** Keeps capture lifetime separate from the editor's conversion jobs. */
@@ -126,7 +135,9 @@ module screencast {
         this.process.cancel();
         var start = std.time.now();
         while (this.process.running and start.elapsed().as_millis() < 1800) {
-          ignore_error(this.process.tick());
+          try {
+            this.process.tick();
+          } catch {}
           std.time.sleep(std.time.create_duration_millis(10));
         }
         this.process.stop();
@@ -136,219 +147,164 @@ module screencast {
     /** Removes only this save operation's private partial file. */
     method cleanup_copy() void {
       if (not this.copy_temporary.is_empty()) {
-        ignore_error(std.io.remove_file(this.copy_temporary));
+        try {
+          std.io.remove_file(this.copy_temporary);
+        } catch {}
         this.copy_temporary.clear();
       }
     }
 
     /** Copies a completed capture asynchronously; the save chooser confirms replacements. */
-    public method save_copy(source: ref String, destination: const ref String) SystemResult<void> {
-      if (this.copy_process.running or source.is_empty() or not try std.io.is_file(source)) {
-        return SystemResult.Error(
-          Error(1, "The captured file is unavailable or a save is already running")
-        );
+    public method save_copy(source: ref String, destination: const ref String) void throws {
+      if (this.copy_process.running or source.is_empty() or not std.io.is_file(source)) {
+        throw Error(1, "The captured file is unavailable or a save is already running");
       }
       var a = make_heap_allocator();
-      this.copy_destination = try destination.clone(a);
+      this.copy_destination = destination.clone(a);
       var suffix = source.ends_with(".png") ? ".png" : (source.ends_with(".mp4") ? ".mp4" : ".webm");
       if (not this.copy_destination.ends_with(suffix)) {
-        return SystemResult.Error(
-          try Error(
-            1,
-            try `Keep the ${suffix} extension when saving this capture`
-          )
+        throw Error(
+          1,
+          `Keep the ${suffix} extension when saving this capture`
         );
       }
       if (this.copy_destination.equals(source)) {
-        this.message = try String("Capture is already saved at that location.");
-        return SystemResult.Ok;
+        this.message = String("Capture is already saved at that location.");
+        return;
       }
-      var reserve = try std.process.Command(a, "mktemp");
-      try reserve.add_arg("--");
-      try reserve.add_arg(
-        try `${this.copy_destination}.sun-save-XXXXXX`
+      var reserve = std.process.Command(a, "mktemp");
+      reserve.add_arg("--");
+      reserve.add_arg(
+        `${this.copy_destination}.sun-save-XXXXXX`
       );
-      this.copy_temporary = try video.capture(reserve);
-      var command = try std.process.Command(a, "cp");
-      try command.add_arg("--");
-      try command.add_arg(source);
-      try command.add_arg(this.copy_temporary);
-      match this.copy_process.start(command) {
-        SystemResult.Ok => {},
-        SystemResult.Error(error) => {
-          this.cleanup_copy();
-          return SystemResult.Error(error);
-        },
-        SystemResult.Allocation(error) => {
-          return SystemResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return SystemResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return SystemResult.Overflow(error);
-        }
-      };
-      this.message = try String("Saving a copy…");
-      return SystemResult.Ok;
+      this.copy_temporary = video.capture(reserve);
+      var command = std.process.Command(a, "cp");
+      command.add_arg("--");
+      command.add_arg(source);
+      command.add_arg(this.copy_temporary);
+      try {
+        this.copy_process.start(command);
+      } catch (error: std.Error) {
+        this.cleanup_copy();
+        throw error;
+      }
+      this.message = String("Saving a copy…");
+      return;
     }
 
     /** Publishes a complete copy atomically, preserving the original capture on failure. */
-    method tick_copy() SystemResult<bool> {
+    method tick_copy() bool throws {
       if (not this.copy_process.running) {
-        return SystemResult.Ok(false);
+        return false;
       }
-      match this.copy_process.tick() {
-        SystemResult.Ok => {},
-        SystemResult.Error(error) => {
-          this.copy_process.stop();
-          this.cleanup_copy();
-          this.message = try (try error.message()).clone(make_heap_allocator());
-          return SystemResult.Ok(true);
-        },
-        SystemResult.Allocation(error) => {
-          return SystemResult.Allocation(error);
-        },
-        SystemResult.InvalidArgument(error) => {
-          return SystemResult.InvalidArgument(error);
-        },
-        SystemResult.Overflow(error) => {
-          return SystemResult.Overflow(error);
-        }
-      };
+      try {
+        this.copy_process.tick();
+      } catch (error: std.Error) {
+        this.copy_process.stop();
+        this.cleanup_copy();
+        this.message = (error.message()).clone(make_heap_allocator());
+        return true;
+      }
       if (not this.copy_process.running) {
         if (this.copy_process.status == 0) {
-          match std.io.rename_file(this.copy_temporary, this.copy_destination) {
-            SystemResult.Ok => {
-              this.message = try `Saved copy: ${this.copy_destination}`;
-            },
-            SystemResult.Error(error) => {
-              this.message = try (try error.message()).clone(make_heap_allocator());
-            },
-            SystemResult.Allocation(error) => {
-              return SystemResult.Allocation(error);
-            },
-            SystemResult.InvalidArgument(error) => {
-              return SystemResult.InvalidArgument(error);
-            },
-            SystemResult.Overflow(error) => {
-              return SystemResult.Overflow(error);
-            }
-          };
+          try {
+            std.io.rename_file(this.copy_temporary, this.copy_destination);
+            this.message = `Saved copy: ${this.copy_destination}`;
+          } catch (error: std.Error) {
+            this.message = (error.message()).clone(make_heap_allocator());
+          }
         } else {
-          this.message = try `Save failed: ${this.copy_process.diagnostics}`;
+          this.message = `Save failed: ${this.copy_process.diagnostics}`;
         }
         this.cleanup_copy();
-        return SystemResult.Ok(true);
+        return true;
       }
-      return SystemResult.Ok(false);
+      return false;
     }
 
     /** Starts native source selection; the helper counts down after selection. */
-    public method start() SystemResult<void> {
-      var seconds = try delay_seconds(this.delay);
-      if (not try std.io.is_file(this.helper)) {
-        return SystemResult.Error(
-          Error(
-            1,
-            "Capture helper is missing. Rebuild or reinstall Sun Video Editor."
-          )
+    public method start() void throws {
+      var seconds = delay_seconds(this.delay);
+      if (not std.io.is_file(this.helper)) {
+        throw Error(
+          1,
+          "Capture helper is missing. Rebuild or reinstall Sun Video Editor."
         );
       }
       var a = make_heap_allocator();
-      var command = try std.process.Command(a, this.helper);
-      try command.add_arg(this.kind == 0 ? "screenshot" : "record");
-      try command.add_arg(this.source == 2 ? "area" : (this.source == 0 ? "screen" : "window"));
-      try command.add_arg(try `${seconds}`);
-      try command.add_arg(this.cursor ? "cursor" : "hidden");
-      try command.add_arg(this.kind == 1 and this.camera ? "camera" : "no-camera");
-      try command.add_arg(this.kind == 1 and this.microphone ? "microphone" : "no-microphone");
-      try command.add_arg(try `${this.corner}`);
-      try command.add_arg(try `${this.camera_size}`);
-      try this.process.start(command);
+      var command = std.process.Command(a, this.helper);
+      command.add_arg(this.kind == 0 ? "screenshot" : "record");
+      command.add_arg(this.source == 2 ? "area" : (this.source == 0 ? "screen" : "window"));
+      command.add_arg(`${seconds}`);
+      command.add_arg(this.cursor ? "cursor" : "hidden");
+      command.add_arg(this.kind == 1 and this.camera ? "camera" : "no-camera");
+      command.add_arg(this.kind == 1 and this.microphone ? "microphone" : "no-microphone");
+      command.add_arg(`${this.corner}`);
+      command.add_arg(`${this.camera_size}`);
+      this.process.start(command);
       this.observed = 0;
       this.recording = false;
       this.stopping = false;
       this.cancelled = false;
-      this.saved = try String("");
-      this.preview = try video.Job();
-      this.preview_path = try String("");
+      this.saved = String("");
+      this.preview = video.Job();
+      this.preview_path = String("");
       this.preview_position = 0;
       this.preview_start = 0;
       this.preview_end = 0;
-      this.message = try String("Choose a source in the desktop permission dialog…");
-      return SystemResult.Ok;
+      this.message = String("Choose a source in the desktop permission dialog…");
+      return;
     }
 
     /** Finalizes a recording without terminating the encoder before its trailer is written. */
-    public method finish() AllocationResult<void> {
+    public method finish() void throws {
       if (this.recording and not this.stopping) {
         this.process.interrupt();
         this.stopping = true;
 
-        this.message = try String("Saving recording…");
+        this.message = String("Saving recording…");
       }
 
-      return AllocationResult.Ok;
+      return;
     }
 
     /** Cancels selection, countdown, or capture and discards unfinished output. */
-    public method cancel() AllocationResult<void> {
+    public method cancel() void throws {
       this.process.cancel();
-      this.message = try String(
+      this.message = String(
         this.stopping ? "Stopping saving; retaining partial recording…" : "Capture cancelled."
       );
       this.stopping = true;
       this.cancelled = true;
 
-      return AllocationResult.Ok;
+      return;
     }
 
     /** Probes a completed recording for inline playback without changing the editor state. */
-    public method tick_preview() SystemResult<bool> {
+    public method tick_preview() bool throws {
       if (this.process.running or this.kind != 1 or this.saved.is_empty()) {
-        return SystemResult.Ok(false);
+        return false;
       }
       var changed = false;
       if (not this.preview_path.equals(this.saved)) {
-        this.preview_path = try this.saved.clone(make_heap_allocator());
+        this.preview_path = this.saved.clone(make_heap_allocator());
         this.preview_position = 0;
         this.preview_start = 0;
         this.preview_end = 0;
-        match this.preview.probe(this.saved) {
-          SystemResult.Ok => {},
-          SystemResult.Error(error) => {
-            try this.preview.fail(error);
-          },
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
-          }
-        };
+        try {
+          this.preview.probe(this.saved);
+        } catch (error: std.Error) {
+          this.preview.fail(error);
+        }
         changed = true;
       }
       var mode = this.preview.mode;
       if (mode != 0) {
-        match this.preview.tick() {
-          SystemResult.Ok => {},
-          SystemResult.Error(error) => {
-            try this.preview.fail(error);
-          },
-          SystemResult.Allocation(error) => {
-            return SystemResult.Allocation(error);
-          },
-          SystemResult.InvalidArgument(error) => {
-            return SystemResult.InvalidArgument(error);
-          },
-          SystemResult.Overflow(error) => {
-            return SystemResult.Overflow(error);
-          }
-        };
+        try {
+          this.preview.tick();
+        } catch (error: std.Error) {
+          this.preview.fail(error);
+        }
         if (this.preview.mode == 0) {
           if (this.preview.ready) {
             this.preview_end = _convert<i64>(this.preview.media.duration * 1000000.0);
@@ -356,38 +312,40 @@ module screencast {
           changed = true;
         }
       }
-      return SystemResult.Ok(changed);
+      return changed;
     }
 
     /** Reads helper progress and completion without blocking GTK event dispatch. */
-    public method tick() std.Result<bool> {
-      var copy_changed = try this.tick_copy();
+    public method tick() bool throws {
+      var copy_changed = this.tick_copy();
       if (not this.process.running) {
-        var preview_changed = try this.tick_preview();
-        return std.Result.Ok(copy_changed or preview_changed);
+        var preview_changed = this.tick_preview();
+        return copy_changed or preview_changed;
       }
-      try this.process.tick();
+      this.process.tick();
       var changed = false;
       if (this.process.text.length() != this.observed and this.process.text.ends_with("\n")) {
         this.observed = this.process.text.length();
-        var lines = try this.process.text.split(make_heap_allocator(), b'\n');
+        var lines = this.process.text.split(make_heap_allocator(), b'\n');
         for (var line: ref String in lines) {
           if (line.equals_literal("Recording…")) {
             this.recording = true;
           }
           if (not line.is_empty()) {
-            this.message = try line.clone(make_heap_allocator());
+            this.message = line.clone(make_heap_allocator());
           }
           if (line.starts_with("Saved: ")) {
-            this.saved = match try sun_video_editor_results.substring(
-              line,
-              make_heap_allocator(),
-              7,
-              line.length() - 7
-            ) {
-              AccessResult.Ok(value) => value,
-              AccessResult.OutOfBounds(_) => try String("")
-            };
+            try {
+              var value = sun_video_editor_results.substring(
+                line,
+                make_heap_allocator(),
+                7,
+                line.length() - 7
+              );
+              this.saved = value;
+            } catch (error: std.IndexOutOfBoundsError) {
+              this.saved = String("");
+            }
           }
         }
         changed = true;
@@ -395,7 +353,7 @@ module screencast {
       if (not this.process.running) {
         this.recording = false;
         if (this.process.status != 0 and not this.cancelled) {
-          this.message = try helper_failure(
+          this.message = helper_failure(
             this.process.status,
             this.process.text,
             this.process.diagnostics
@@ -404,25 +362,25 @@ module screencast {
         }
         changed = true;
       }
-      var preview_changed = try this.tick_preview();
-      return std.Result.Ok(changed or preview_changed);
+      var preview_changed = this.tick_preview();
+      return changed or preview_changed;
     }
 
     /** Initializes owned storage and reports allocation failure. */
-    init() AllocationResult<void> {
-      this.preview = try video.Job();
+    init() throws {
+      this.preview = video.Job();
 
-      this.copy_process = try video.Process();
+      this.copy_process = video.Process();
 
-      this.process = try video.Process();
+      this.process = video.Process();
 
-      this.copy_temporary = try String("");
-      this.copy_destination = try String("");
-      this.helper = try String("build/sun_video_editor_capture");
-      this.delay = try String("0");
-      this.message = try String("Ready to capture.");
-      this.saved = try String("");
-      this.preview_path = try String("");
+      this.copy_temporary = String("");
+      this.copy_destination = String("");
+      this.helper = String("build/sun_video_editor_capture");
+      this.delay = String("0");
+      this.message = String("Ready to capture.");
+      this.saved = String("");
+      this.preview_path = String("");
     }
   }
 }

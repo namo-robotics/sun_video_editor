@@ -4,170 +4,174 @@ using std;
 module editor_build {
 
   /** Runs a noninteractive build command without exposing the controlling terminal. */
-  function run(command: ref std.process.Command) SystemResult<void> {
+  function run(command: ref std.process.Command) void throws {
     command.set_stdin(std.process.Stdio.Null);
-    var status = try command.status();
+    var status = command.status();
     if (status != 0) {
-      return SystemResult.Error(Error(status, "Build command failed"));
+      throw Error(status, "Build command failed");
     }
-    return SystemResult.Ok;
+    return;
   }
 
   /** Reads a dependency override or copies its workspace default. */
-  function setting(name: static_ptr<u8>, fallback: static_ptr<u8>) AllocationResult<String> {
+  function setting(name: static_ptr<u8>, fallback: static_ptr<u8>) String throws {
     var a = make_heap_allocator();
-    var env = try std.env.Env(a);
-    return AllocationResult.Ok(
-      match env.get(name) {
-        Option.Some(value) => try value.clone(a),
-        Option.None => try String(fallback)
-      }
-    );
+    var env = std.env.Env(a);
+    return match env.get(name) {
+      Option.Some(value) => value.clone(a),
+      Option.None => String(fallback)
+    };
   }
 
   /** Builds a named product through the compiler's config scheduler. */
-  function compile(name: static_ptr<u8>, gtk: bool) SystemResult<void> {
-    var command = try std.process.Command(
+  function compile(name: static_ptr<u8>, gtk: bool) void throws {
+    var command = std.process.Command(
       make_heap_allocator(),
-      try setting("SUN_EXECUTABLE", "sun")
+      setting("SUN_EXECUTABLE", "sun")
     );
 
-    try command.add_arg("build");
-    try command.add_arg("--config");
-    try command.add_arg("sun-config.json");
-    try command.add_arg("--package");
-    try command.add_arg("namo-robotics/sun_video_editor");
-    try command.add_arg("--entrypoint");
-    try command.add_arg(name);
+    command.add_arg("build");
+    command.add_arg("--config");
+    command.add_arg("sun-config.json");
+    command.add_arg("--package");
+    command.add_arg("namo-robotics/sun_video_editor");
+    command.add_arg("--entrypoint");
+    command.add_arg(name);
     return run(command);
   }
 
   /** Compiles the Sun capture helper and links its reusable Apple framework bindings. */
-  function macos_capture() SystemResult<void> {
+  function macos_capture() void throws {
     var a = make_heap_allocator();
-    var target = try build_targets.load("sun_video_editor_capture");
-    try compile("sun_video_editor_capture", false);
-    var sign = try std.process.Command(a, "codesign");
-    try sign.add_arg("--force");
-    try sign.add_arg("--sign");
-    try sign.add_arg("-");
-    try sign.add_arg("--identifier");
-    try sign.add_arg("org.namo_robotics.VideoEditor.capture");
-    try sign.add_arg(target.output);
-    try run(sign);
-    var check = try std.process.Command(a, target.output);
-    try check.add_arg("--self-test");
+    var target = build_targets.load("sun_video_editor_capture");
+    compile("sun_video_editor_capture", false);
+    var sign = std.process.Command(a, "codesign");
+    sign.add_arg("--force");
+    sign.add_arg("--sign");
+    sign.add_arg("-");
+    sign.add_arg("--identifier");
+    sign.add_arg("org.namo_robotics.VideoEditor.capture");
+    sign.add_arg(target.output);
+    run(sign);
+    var check = std.process.Command(a, target.output);
+    check.add_arg("--self-test");
     return run(check);
   }
 
   /** Generates the XML screen and builds the app and platform-independent tests. */
-  public function build() SystemResult<void> {
+  public function build() void throws {
     var a = make_heap_allocator();
-    var mkdir = try std.process.Command(a, "mkdir");
-    try mkdir.add_arg("-p");
-    try mkdir.add_arg("build");
-    try mkdir.add_arg("tmp");
-    try run(mkdir);
-    var version = try std.process.Command(a, try setting("SUN_EXECUTABLE", "sun"));
+    var mkdir = std.process.Command(a, "mkdir");
+    mkdir.add_arg("-p");
+    mkdir.add_arg("build");
+    mkdir.add_arg("tmp");
+    run(mkdir);
+    var version = std.process.Command(a, setting("SUN_EXECUTABLE", "sun"));
 
-    try version.add_arg("--version");
-    var version_output = try version.output();
+    version.add_arg("--version");
+    var version_output = version.output();
     if (version_output.status() != 0) {
-      return SystemResult.Error(Error(1, "Cannot identify the Sun compiler"));
+      throw Error(1, "Cannot identify the Sun compiler");
     }
-    var version_text = try version_output.stdout().clone(a);
-    try version_text.append(version_output.stderr());
-    var version_path = try String("build/sun-version.txt");
-    try std.io.write_string(version_path, version_text);
-    var platform = try std.process.Command(a, "uname");
-    try platform.add_arg("-s");
-    var platform_output = try platform.output();
+    var version_text = version_output.stdout().clone(a);
+    version_text.append(version_output.stderr());
+    var version_path = String("build/sun-version.txt");
+    std.io.write_string(version_path, version_text);
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var platform_output = platform.output();
     if (platform_output.stdout().starts_with("Linux")) {
-      try compile("sun_video_editor_capture", false);
-      try compile("capture_tests", false);
+      compile("sun_video_editor_capture", false);
+      compile("capture_tests", false);
     } else if (platform_output.stdout().starts_with("Darwin")) {
-      try macos_capture();
+      macos_capture();
     }
-    try compile("editor_tests", false);
+    compile("editor_tests", false);
     return compile("sun_video_editor", true);
   }
 
   /** Runs media tests and the native acceptance scenario in an isolated desktop session. */
-  public function test() SystemResult<void> {
+  public function test() void throws {
     var a = make_heap_allocator();
-    var tests = try build_targets.load("editor_tests");
-    var check = try std.process.Command(a, tests.tests);
-    try check.add_arg("--test-sequential");
-    try run(check);
-    var app = try build_targets.load("sun_video_editor");
-    var acceptance = try std.process.Command(a, "sh");
-    try acceptance.add_arg("-eu");
-    try acceptance.add_arg("-c");
-    var platform = try std.process.Command(a, "uname");
-    try platform.add_arg("-s");
-    var platform_output = try platform.output();
+    var tests = build_targets.load("editor_tests");
+    var check = std.process.Command(a, tests.tests);
+    check.add_arg("--test-sequential");
+    run(check);
+    var app = build_targets.load("sun_video_editor");
+    var acceptance = std.process.Command(a, "sh");
+    acceptance.add_arg("-eu");
+    acceptance.add_arg("-c");
+    var platform = std.process.Command(a, "uname");
+    platform.add_arg("-s");
+    var platform_output = platform.output();
     if (platform_output.stdout().starts_with("Darwin")) {
-      try acceptance.add_arg(
+      acceptance.add_arg(
         "export G_DEBUG=fatal-criticals GTK_A11Y=none GSK_RENDERER=cairo; gtimeout 60s \"$1\" --self-test"
       );
     } else {
-      var capture_tests = try std.process.Command(a, "dbus-run-session");
+      var capture_tests = std.process.Command(a, "dbus-run-session");
 
-      try capture_tests.add_arg("--");
-      try capture_tests.add_arg("xvfb-run");
-      try capture_tests.add_arg("-a");
-      var capture_target = try build_targets.load("capture_tests");
-      try capture_tests.add_arg(capture_target.tests);
-      try capture_tests.add_arg("--test-sequential");
-      try run(capture_tests);
+      capture_tests.add_arg("--");
+      capture_tests.add_arg("xvfb-run");
+      capture_tests.add_arg("-a");
+      var capture_target = build_targets.load("capture_tests");
+      capture_tests.add_arg(capture_target.tests);
+      capture_tests.add_arg("--test-sequential");
+      run(capture_tests);
       // The virtual desktop has no portal services; keep GTK warnings fatal without activating host portals.
-      try acceptance.add_arg(
+      acceptance.add_arg(
         "export G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test"
       );
     }
-    try acceptance.add_arg("editor-acceptance");
-    try acceptance.add_arg(app.output);
+    acceptance.add_arg("editor-acceptance");
+    acceptance.add_arg(app.output);
     return run(acceptance);
   }
 
   /** Packages only after rebuilding and testing the standalone application. */
-  public function package() SystemResult<void> {
-    try build();
-    try test();
-    try compile("editor_package_tool", false);
-    var target = try build_targets.load("editor_package_tool");
-    var command = try std.process.Command(make_heap_allocator(), target.output);
+  public function package() void throws {
+    build();
+    test();
+    compile("editor_package_tool", false);
+    var target = build_targets.load("editor_package_tool");
+    var command = std.process.Command(make_heap_allocator(), target.output);
 
-    try command.add_arg("deb");
+    command.add_arg("deb");
     return run(command);
   }
 }
 
 /** Dispatches standalone editor build tasks from its workspace root. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
-  var result: SystemResult<void> = SystemResult.Ok;
-  if (args.size() == 2 and args[1].equals_literal("build")) {
-    result = editor_build.build();
-  } else if (args.size() == 2 and args[1].equals_literal("test")) {
-    result = editor_build.test();
-  } else if (args.size() == 2 and args[1].equals_literal("package")) {
-    result = editor_build.package();
-  } else {
-    std.io.eprintln("Usage: sun src/tools/build.sun -- [build|test|package]");
-    return AllocationResult.Ok(1);
-  }
-  return AllocationResult.Ok(
-    match result {
-      SystemResult.Ok => 0,
-      (error: const ref IError) => {
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
-      }
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
+  try {
+    if (args.size() == 2 and args[1].equals_literal("build")) {
+      editor_build.build();
+    } else if (args.size() == 2 and args[1].equals_literal("test")) {
+      editor_build.test();
+    } else if (args.size() == 2 and args[1].equals_literal("package")) {
+      editor_build.package();
+    } else {
+      std.io.eprintln("Usage: sun src/tools/build.sun -- [build|test|package]");
+      return 1;
     }
-  );
+
+    return 0;
+  } catch (error: std.Error) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.AllocationError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.InvalidArgumentError) {
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.OverflowError) {
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   libraries: [

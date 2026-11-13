@@ -1,32 +1,16 @@
-/** Provides checked string copies with explicit allocation failures. */
+/** Provides explicitly allocated, checked string copies. */
 public module sun_video_editor_results {
 
-  /** Copies a byte range, returning bounds errors separately from allocation failures. */
+  /** Copies a byte range or throws on invalid bounds or allocation failure. */
   public function substring(
     text: const ref std.String,
     allocator: const ref std.HeapAllocator,
     start: i64,
     count: i64
-  ) std.AllocationResult<std.AccessResult<std.String>> {
+  ) std.String throws {
     if (start < 0 or count < 0 or start > text.length() or count > text.length() - start) {
-      var invalid: std.AccessResult<std.String> = std.AccessResult.OutOfBounds(
-        std.IndexOutOfBoundsError(start)
-      );
-      return std.AllocationResult.Ok(invalid);
+      throw std.IndexOutOfBoundsError(start);
     }
-    var copy = try std.String(allocator, "");
-    try copy.reserve(count);
-    for (var i: i64 = 0; i < count; i += 1) {
-      var byte = match text.at(start + i) {
-        std.AccessResult.Ok(value) => value,
-        std.AccessResult.OutOfBounds(error) => {
-          var invalid: std.AccessResult<std.String> = std.AccessResult.OutOfBounds(error);
-          return std.AllocationResult.Ok(invalid);
-        }
-      };
-      try copy.append_char(byte);
-    }
-    var result: std.AccessResult<std.String> = std.AccessResult.Ok(copy);
-    return std.AllocationResult.Ok(result);
+    return text.substr(allocator, start, count);
   }
 }

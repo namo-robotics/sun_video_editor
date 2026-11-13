@@ -9,82 +9,84 @@ module video_fixtures {
     public var input: String;
 
     /** Creates a test pattern with audio using bounded encoder threads. */
-    init() SystemResult<void> {
+    init() throws {
       var a = make_heap_allocator();
-      var temporary = try std.process.Command(a, "mktemp");
-      try temporary.add_arg("-d");
-      try temporary.add_arg("tmp/video-test.XXXXXX");
-      this.directory = try video.capture(temporary);
-      this.input = try String("");
-      this.input = try this.path("input $sample; clip.mov");
-      var command = try std.process.Command(a, "ffmpeg");
-      try command.add_arg("-hide_banner");
-      try command.add_arg("-loglevel");
-      try command.add_arg("error");
-      try command.add_arg("-nostdin");
-      try command.add_arg("-f");
-      try command.add_arg("lavfi");
-      try command.add_arg("-i");
-      try command.add_arg("testsrc2=size=320x240:rate=24");
-      try command.add_arg("-f");
-      try command.add_arg("lavfi");
-      try command.add_arg("-i");
-      try command.add_arg("sine=frequency=440:sample_rate=48000");
-      try command.add_arg("-t");
-      try command.add_arg("4");
-      try command.add_arg("-c:v");
-      try command.add_arg("libx264");
-      try command.add_arg("-crf");
-      try command.add_arg("12");
-      try command.add_arg("-threads");
-      try command.add_arg("2");
-      try command.add_arg("-c:a");
-      try command.add_arg("aac");
-      try command.add_arg(this.input);
-      try video.capture(command);
-      return SystemResult.Ok;
+      var temporary = std.process.Command(a, "mktemp");
+      temporary.add_arg("-d");
+      temporary.add_arg("tmp/video-test.XXXXXX");
+      this.directory = video.capture(temporary);
+      this.input = String("");
+      this.input = this.path("input $sample; clip.mov");
+      var command = std.process.Command(a, "ffmpeg");
+      command.add_arg("-hide_banner");
+      command.add_arg("-loglevel");
+      command.add_arg("error");
+      command.add_arg("-nostdin");
+      command.add_arg("-f");
+      command.add_arg("lavfi");
+      command.add_arg("-i");
+      command.add_arg("testsrc2=size=320x240:rate=24");
+      command.add_arg("-f");
+      command.add_arg("lavfi");
+      command.add_arg("-i");
+      command.add_arg("sine=frequency=440:sample_rate=48000");
+      command.add_arg("-t");
+      command.add_arg("4");
+      command.add_arg("-c:v");
+      command.add_arg("libx264");
+      command.add_arg("-crf");
+      command.add_arg("12");
+      command.add_arg("-threads");
+      command.add_arg("2");
+      command.add_arg("-c:a");
+      command.add_arg("aac");
+      command.add_arg(this.input);
+      video.capture(command);
+      return;
     }
 
     /** Deletes only this fixture's exclusive directory and its generated outputs. */
-    method cleanup() SystemResult<void> {
+    method cleanup() void throws {
       if (not this.directory.is_empty()) {
-        var command = try std.process.Command(make_heap_allocator(), "rm");
+        var command = std.process.Command(make_heap_allocator(), "rm");
 
-        try command.add_arg("-rf");
-        try command.add_arg("--");
-        try command.add_arg(this.directory);
-        try command.status();
+        command.add_arg("-rf");
+        command.add_arg("--");
+        command.add_arg(this.directory);
+        command.status();
       }
-      return SystemResult.Ok;
+      return;
     }
 
     /** Attempts to remove disposable test files without throwing during destruction. */
     deinit() {
-      ignore_error(this.cleanup());
+      try {
+        this.cleanup();
+      } catch {}
     }
 
     /** Builds a child path without interpreting its characters. */
-    public const method path(name: static_ptr<u8>) AllocationResult<String> {
-      var result = try this.directory.clone(make_heap_allocator());
+    public const method path(name: static_ptr<u8>) String throws {
+      var result = this.directory.clone(make_heap_allocator());
 
-      try result.append("/");
-      try result.append(name);
-      return AllocationResult.Ok(result);
+      result.append("/");
+      result.append(name);
+      return result;
     }
   }
 
   /** Polls a workflow with a deadline, terminating it if completion fails. */
-  public function finish(job: ref video.Job) SystemResult<void> {
+  public function finish(job: ref video.Job) void throws {
     var start = std.time.now();
     var delay = std.time.create_duration_millis(10);
     while (job.mode != 0) {
-      try job.tick();
+      job.tick();
       if (start.elapsed().as_secs() > 20) {
         job.process.stop();
-        return SystemResult.Error(Error(1, "Media test timed out"));
+        throw Error(1, "Media test timed out");
       }
       std.time.sleep(delay);
     }
-    return SystemResult.Ok;
+    return;
   }
 }

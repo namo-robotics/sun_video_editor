@@ -4,9 +4,9 @@ using std;
 module sun_video_editor {
 
   /** Resolves a control by action (or the image with -1), optionally returning its panel. */
-  function control(session: const ref ui.Session<State>, action: i64, panel: bool) Result<u64> {
+  function control(session: const ref ui.Session<State>, action: i64, panel: bool) u64 throws {
     var a = make_heap_allocator();
-    var description = try view(session.state);
+    var description = view(session.state);
     for (var i: i64 = 0; i < description.elements.size(); i += 1) {
       if ((action != -1 and description.elements[i].action != action) or
         (action == -1 and
@@ -21,35 +21,35 @@ module sun_video_editor {
           index = description.elements[index].parent;
         }
       }
-      var reversed = try Vec<ui.Key>(a, 8);
+      var reversed = Vec<ui.Key>(a, 8);
       while (index >= 0) {
-        try reversed.push(
-          try description.elements[index].key.clone(a)
+        reversed.push(
+          description.elements[index].key.clone(a)
         );
 
         index = description.elements[index].parent;
       }
-      var path = try Vec<ui.Key>(a, reversed.size());
+      var path = Vec<ui.Key>(a, reversed.size());
       for (var n = reversed.size(); n > 0; n -= 1) {
-        try path.push(try reversed[n - 1].clone(a));
+        path.push(reversed[n - 1].clone(a));
       }
-      return Result.Ok(session.tree.identity_path(path));
+      return session.tree.identity_path(path);
     }
-    return Result.Ok(0);
+    return 0;
   }
 
   /** Waits for media work while continuing to dispatch native events and update the view. */
-  function wait_job(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) Result<void> {
+  function wait_job(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) void throws {
     var start = std.time.now();
     var delay = std.time.create_duration_millis(10);
     while (session.state.job.mode != 0) {
-      try turn(renderer, session);
+      turn(renderer, session);
       if (start.elapsed().as_secs() > 20) {
-        return Result.Error(Error(1, "UI media operation timed out"));
+        throw Error(1, "UI media operation timed out");
       }
       std.time.sleep(delay);
     }
-    return Result.Ok;
+    return;
   }
 
   /** Waits for the paused decoder and application to reach a requested preview position. */
@@ -58,24 +58,22 @@ module sun_video_editor {
     session: ref ui.Session<State>,
     preview: u64,
     position: i64
-  ) Result<void> {
+  ) void throws {
     var deadline = std.time.now();
     var delay = std.time.create_duration_millis(10);
     while (deadline.elapsed().as_millis() < 5000) {
-      try turn(renderer, session);
+      turn(renderer, session);
       var decoded = renderer.media_timestamp(preview);
       if (renderer.media_status(preview) == 1 and decoded >= position - 1 and
         decoded <= position + 1 and session.state.position == position) {
-        return Result.Ok;
+        return;
       }
       std.time.sleep(delay);
     }
     var decoded = renderer.media_timestamp(preview);
-    return Result.Error(
-      try Error(
-        1,
-        try `Preview seek timed out: expected ${position}, decoded ${decoded}, state ${session.state.position}`
-      )
+    throw Error(
+      1,
+      `Preview seek timed out: expected ${position}, decoded ${decoded}, state ${session.state.position}`
     );
   }
 
@@ -84,155 +82,151 @@ module sun_video_editor {
     renderer: ref ui_gtk.Renderer,
     session: ref ui.Session<State>,
     preview: u64
-  ) Result<void> {
-    try renderer.drag_media(preview, 0.25, 0.25);
-    try wait_preview_position(renderer, session, preview, 1000000);
-    try renderer.drag_media(preview, 0.0, 0.0);
-    try turn(renderer, session);
-    try renderer.step_media(preview, 1);
-    try turn(renderer, session);
-    if (try start_us(session.state) != 41667 or session.state.position != 1000000) {
-      return Result.Error(Error(1, "Selected start bar did not step independently"));
+  ) void throws {
+    renderer.drag_media(preview, 0.25, 0.25);
+    wait_preview_position(renderer, session, preview, 1000000);
+    renderer.drag_media(preview, 0.0, 0.0);
+    turn(renderer, session);
+    renderer.step_media(preview, 1);
+    turn(renderer, session);
+    if (start_us(session.state) != 41667 or session.state.position != 1000000) {
+      throw Error(1, "Selected start bar did not step independently");
     }
-    try renderer.step_media(preview, -1);
-    try turn(renderer, session);
-    if (try start_us(session.state) != 0 or session.state.position != 1000000) {
-      return Result.Error(Error(1, "Start bar selection did not survive a redraw"));
+    renderer.step_media(preview, -1);
+    turn(renderer, session);
+    if (start_us(session.state) != 0 or session.state.position != 1000000) {
+      throw Error(1, "Start bar selection did not survive a redraw");
     }
-    try renderer.drag_media(preview, 0.5, 0.5);
+    renderer.drag_media(preview, 0.5, 0.5);
     // Frame stepping starts from the decoded playhead after the drag's seek completes.
-    try wait_preview_position(renderer, session, preview, 2000000);
-    try renderer.step_media(preview, 1);
-    try turn(renderer, session);
-    if (session.state.position != 2041667 or try start_us(session.state) != 0) {
-      return Result.Error(
-        try Error(
-          1,
-          try `Unselected playhead did not step by one frame: expected 2041667, got ${session.state.position}, trim start ${try start_us(session.state)}`
-        )
+    wait_preview_position(renderer, session, preview, 2000000);
+    renderer.step_media(preview, 1);
+    turn(renderer, session);
+    if (session.state.position != 2041667 or start_us(session.state) != 0) {
+      throw Error(
+        1,
+        `Unselected playhead did not step by one frame: expected 2041667, got ${session.state.position}, trim start ${start_us(session.state)}`
       );
     }
     // Finish the previous asynchronous seek before requesting a new test position.
-    try wait_preview_position(renderer, session, preview, 2041667);
+    wait_preview_position(renderer, session, preview, 2041667);
     session.state.position = 0;
-    try session.render(renderer);
-    try wait_preview_position(renderer, session, preview, 0);
-    try renderer.drag_media(preview, 0.0, 0.0);
-    try turn(renderer, session);
-    try renderer.step_media(preview, 1);
-    try turn(renderer, session);
-    if (try start_us(session.state) != 41667 or session.state.position != 41667) {
-      return Result.Error(Error(1, "Coincident bar and playhead did not step together"));
+    session.render(renderer);
+    wait_preview_position(renderer, session, preview, 0);
+    renderer.drag_media(preview, 0.0, 0.0);
+    turn(renderer, session);
+    renderer.step_media(preview, 1);
+    turn(renderer, session);
+    if (start_us(session.state) != 41667 or session.state.position != 41667) {
+      throw Error(1, "Coincident bar and playhead did not step together");
     }
-    try wait_preview_position(renderer, session, preview, 41667);
-    session.state.settings.start = try String("0");
+    wait_preview_position(renderer, session, preview, 41667);
+    session.state.settings.start = String("0");
     session.state.position = 0;
-    try session.render(renderer);
-    return Result.Ok;
+    session.render(renderer);
+    return;
   }
 
   /** Checks native form edits, asynchronous completion, cancellation, and subscription cleanup. */
-  function acceptance(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) Result<void> {
-    if (session.state.page != 0 or (try control(session, 101, false)) == 0 or
-      (try control(session, 102, false)) == 0) {
-      return Result.Error(Error(1, "Home screen tiles are missing"));
+  function acceptance(renderer: ref ui_gtk.Renderer, session: ref ui.Session<State>) void throws {
+    if (session.state.page != 0 or (control(session, 101, false)) == 0 or
+      (control(session, 102, false)) == 0) {
+      throw Error(1, "Home screen tiles are missing");
     }
-    renderer.click(try control(session, 102, false));
-    try turn(renderer, session);
-    if (session.state.page != 2 or (try control(session, 114, false)) == 0) {
-      return Result.Error(Error(1, "Screencast tile did not open capture controls"));
+    renderer.click(control(session, 102, false));
+    turn(renderer, session);
+    if (session.state.page != 2 or (control(session, 114, false)) == 0) {
+      throw Error(1, "Screencast tile did not open capture controls");
     }
-    renderer.click(try control(session, 112, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 112, false));
+    turn(renderer, session);
     if (session.state.capture.kind != 1) {
-      return Result.Error(Error(1, "Recording icon did not select WebM capture"));
+      throw Error(1, "Recording icon did not select WebM capture");
     }
-    var presenter_choice = try String("");
-    try renderer.edit(try control(session, 126, false), presenter_choice, 1);
-    try renderer.edit(try control(session, 127, false), presenter_choice, 1);
-    try turn(renderer, session);
-    try renderer.edit(try control(session, 128, false), presenter_choice, 3);
-    try renderer.edit(try control(session, 129, false), presenter_choice, 2);
-    try turn(renderer, session);
+    var presenter_choice = String("");
+    renderer.edit(control(session, 126, false), presenter_choice, 1);
+    renderer.edit(control(session, 127, false), presenter_choice, 1);
+    turn(renderer, session);
+    renderer.edit(control(session, 128, false), presenter_choice, 3);
+    renderer.edit(control(session, 129, false), presenter_choice, 2);
+    turn(renderer, session);
     if (not session.state.capture.camera or not session.state.capture.microphone or
       session.state.capture.corner != 3 or session.state.capture.camera_size != 2) {
-      return Result.Error(Error(1, "Presenter controls did not update capture settings"));
+      throw Error(1, "Presenter controls did not update capture settings");
     }
-    renderer.click(try control(session, 111, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 111, false));
+    turn(renderer, session);
     if (session.state.capture.kind != 0) {
-      return Result.Error(Error(1, "Screenshot icon did not select PNG capture"));
+      throw Error(1, "Screenshot icon did not select PNG capture");
     }
     for (var source: i64 = 0; source < 3; source += 1) {
-      renderer.click(try control(session, 120 + source, false));
-      try turn(renderer, session);
+      renderer.click(control(session, 120 + source, false));
+      turn(renderer, session);
       if (session.state.capture.source != source) {
-        return Result.Error(Error(1, "Source icon did not update capture settings"));
+        throw Error(1, "Source icon did not update capture settings");
       }
     }
-    var invalid_delay = try String("-1");
-    try renderer.edit(try control(session, 110, false), invalid_delay, 0);
-    try turn(renderer, session);
-    renderer.click(try control(session, 114, false));
-    try turn(renderer, session);
+    var invalid_delay = String("-1");
+    renderer.edit(control(session, 110, false), invalid_delay, 0);
+    turn(renderer, session);
+    renderer.click(control(session, 114, false));
+    turn(renderer, session);
     if (session.state.capture.process.running or
       not session.state.capture.message.contains("whole number")) {
-      return Result.Error(Error(1, "Invalid capture delay was not rejected"));
+      throw Error(1, "Invalid capture delay was not rejected");
     }
-    renderer.click(try control(session, 100, false));
-    try turn(renderer, session);
-    renderer.click(try control(session, 101, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 100, false));
+    turn(renderer, session);
+    renderer.click(control(session, 101, false));
+    turn(renderer, session);
     if (session.state.page != 1) {
-      return Result.Error(Error(1, "Video Editor tile did not open editor"));
+      throw Error(1, "Video Editor tile did not open editor");
     }
-    var fixture = try video_fixtures.Fixture();
-    try open_source(session.state, fixture.input);
-    try session.render(renderer);
-    try turn(renderer, session);
-    try wait_job(renderer, session);
+    var fixture = video_fixtures.Fixture();
+    open_source(session.state, fixture.input);
+    session.render(renderer);
+    turn(renderer, session);
+    wait_job(renderer, session);
     if (not session.state.job.ready) {
-      return Result.Error(Error(1, "UI probe failed"));
+      throw Error(1, "UI probe failed");
     }
-    var empty = try String("");
+    var empty = String("");
     for (var format: i32 = 5; format >= 0; format -= 1) {
       session.state.settings.overwrite = true;
-      try renderer.edit(try control(session, 5, false), empty, format);
-      try turn(renderer, session);
+      renderer.edit(control(session, 5, false), empty, format);
+      turn(renderer, session);
       if (session.state.settings.format != format or
         not session.state.settings.output.ends_with(video.extension(format)) or
         session.state.settings.overwrite) {
-        return Result.Error(
-          Error(1, "Format selection did not update the destination safely")
-        );
+        throw Error(1, "Format selection did not update the destination safely");
       }
     }
     for (var quality: i32 = 4; quality >= 0; quality -= 1) {
-      try renderer.edit(try control(session, 6, false), empty, quality);
-      try turn(renderer, session);
+      renderer.edit(control(session, 6, false), empty, quality);
+      turn(renderer, session);
       if (session.state.settings.quality != quality) {
-        return Result.Error(Error(1, "Quality selection did not update settings"));
+        throw Error(1, "Quality selection did not update settings");
       }
     }
     for (var resolution: i32 = 4; resolution >= 0; resolution -= 1) {
-      try renderer.edit(try control(session, 7, false), empty, resolution);
-      try turn(renderer, session);
+      renderer.edit(control(session, 7, false), empty, resolution);
+      turn(renderer, session);
       if (session.state.settings.resolution != resolution) {
-        return Result.Error(Error(1, "Resolution selection did not update settings"));
+        throw Error(1, "Resolution selection did not update settings");
       }
     }
-    var preview = try control(session, 15, false);
+    var preview = control(session, 15, false);
     var deadline = std.time.now();
     var delay = std.time.create_duration_millis(10);
     while ((renderer.media_status(preview) == 0 or renderer.media_status(preview) == 3) and
       deadline.elapsed().as_secs() < 10) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
     if (renderer.media_status(preview) != 1) {
-      return Result.Error(Error(1, "Video preview did not decode"));
+      throw Error(1, "Video preview did not decode");
     }
-    var environment = try std.env.Env(make_heap_allocator());
+    var environment = std.env.Env(make_heap_allocator());
     var resize = match environment.get("SUN_EDITOR_TEST_RESIZE") {
       Option.Some(value) => not value.equals_literal("0"),
       Option.None => true
@@ -244,7 +238,7 @@ module sun_video_editor {
       var stable_since = std.time.now();
       deadline = std.time.now();
       while (deadline.elapsed().as_millis() < 5000) {
-        try turn(renderer, session);
+        turn(renderer, session);
         var height = renderer.extent(preview, false);
         if (height != original_height or height <= 0) {
           original_height = height;
@@ -255,57 +249,57 @@ module sun_video_editor {
         std.time.sleep(delay);
       }
       if (original_height <= 0 or stable_since.elapsed().as_millis() < 300) {
-        return Result.Error(Error(1, "Preview layout did not settle before resizing"));
+        throw Error(1, "Preview layout did not settle before resizing");
       }
-      try renderer.set_default_size(1160, 1200);
+      renderer.set_default_size(1160, 1200);
       deadline = std.time.now();
       while (renderer.extent(preview, false) <= original_height + 100 and
         deadline.elapsed().as_millis() < 5000) {
-        try turn(renderer, session);
+        turn(renderer, session);
         std.time.sleep(delay);
       }
       if (renderer.extent(preview, false) <= original_height + 100) {
-        return Result.Error(Error(1, "Preview did not grow with the window height"));
+        throw Error(1, "Preview did not grow with the window height");
       }
-      if (renderer.extent(try control(session, 15, true), false) !=
-        renderer.extent(try control(session, 11, true), false)) {
-        return Result.Error(Error(1, "Panels did not fill the same grid row height"));
+      if (renderer.extent(control(session, 15, true), false) !=
+        renderer.extent(control(session, 11, true), false)) {
+        throw Error(1, "Panels did not fill the same grid row height");
       }
-      try renderer.set_default_size(1160, 860);
+      renderer.set_default_size(1160, 860);
       deadline = std.time.now();
       while (renderer.extent(preview, false) > original_height + 10 and
         deadline.elapsed().as_millis() < 5000) {
-        try turn(renderer, session);
+        turn(renderer, session);
         std.time.sleep(delay);
       }
       if (renderer.extent(preview, false) > original_height + 10) {
-        return Result.Error(Error(1, "Preview did not shrink with the window height"));
+        throw Error(1, "Preview did not shrink with the window height");
       }
     } else {
       std.io.println("Resize assertions skipped: fixed CI display cannot fit the large window");
     }
-    try frame_stepping(renderer, session, preview);
-    try renderer.drag_media(preview, 0.0, 0.125);
-    try turn(renderer, session);
-    try renderer.drag_media(preview, 1.0, 0.5);
-    try turn(renderer, session);
-    var first = try video.seconds(session.state.settings.start);
-    var last = try video.seconds(session.state.settings.end);
+    frame_stepping(renderer, session, preview);
+    renderer.drag_media(preview, 0.0, 0.125);
+    turn(renderer, session);
+    renderer.drag_media(preview, 1.0, 0.5);
+    turn(renderer, session);
+    var first = video.seconds(session.state.settings.start);
+    var last = video.seconds(session.state.settings.end);
     if (first < 0.49 or first > 0.51 or last < 1.99 or last > 2.01) {
-      return Result.Error(Error(1, "Dragged trim handles did not update export times"));
+      throw Error(1, "Dragged trim handles did not update export times");
     }
-    var edited = try session.state.settings.end.clone(make_heap_allocator());
+    var edited = session.state.settings.end.clone(make_heap_allocator());
 
-    try renderer.drag_media(preview, 0.3, 0.4);
-    try turn(renderer, session);
+    renderer.drag_media(preview, 0.3, 0.4);
+    turn(renderer, session);
     if (not session.state.settings.end.equals(edited)) {
-      return Result.Error(Error(1, "Scrubbing moved a trim handle"));
+      throw Error(1, "Scrubbing moved a trim handle");
     }
     renderer.toggle_media(preview);
     deadline = std.time.now();
     var advanced = false;
     while (deadline.elapsed().as_millis() < 2500) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
       if (renderer.media_timestamp(preview) > 1700000) {
         advanced = true;
@@ -315,265 +309,256 @@ module sun_video_editor {
       }
     }
     if (not advanced or renderer.media_status(preview) != 1) {
-      return Result.Error(Error(1, "Preview did not play and stop at the trim end"));
+      throw Error(1, "Preview did not play and stop at the trim end");
     }
-    var output = try fixture.path("ui-output.mp4");
-    try renderer.edit(try control(session, 2, false), output, 0);
+    var output = fixture.path("ui-output.mp4");
+    renderer.edit(control(session, 2, false), output, 0);
     var wake_start = std.time.now();
-    try renderer.wait_events(session.tree, session.queue, 1000);
+    renderer.wait_events(session.tree, session.queue, 1000);
     if (wake_start.elapsed().as_millis() > 500) {
-      return Result.Error(Error(1, "Queued input waited for the polling timeout"));
+      throw Error(1, "Queued input waited for the polling timeout");
     }
 
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
     if (session.state.job.mode != 2) {
-      return Result.Error(Error(1, "UI conversion did not start"));
+      throw Error(1, "UI conversion did not start");
     }
-    try wait_job(renderer, session);
-    if (session.state.job.percent != 100 or not try std.io.exists(output)) {
-      return Result.Error(Error(1, "UI conversion failed"));
+    wait_job(renderer, session);
+    if (session.state.job.percent != 100 or not std.io.exists(output)) {
+      throw Error(1, "UI conversion failed");
     }
-    var exported = try video.Job();
-    try exported.probe(output);
-    try video_fixtures.finish(exported);
+    var exported = video.Job();
+    exported.probe(output);
+    video_fixtures.finish(exported);
     if (exported.media.duration < 1.4 or exported.media.duration > 1.6) {
-      return Result.Error(Error(1, "Export did not use the dragged trim interval"));
+      throw Error(1, "Export did not use the dragged trim interval");
     }
-    var revised_end = try String("1.5");
-    try renderer.edit(try control(session, 4, false), revised_end, 0);
-    try turn(renderer, session);
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
+    var revised_end = String("1.5");
+    renderer.edit(control(session, 4, false), revised_end, 0);
+    turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
     if (not session.state.confirm_export or session.state.job.mode != 0 or
       session.state.job.percent == 100) {
-      return Result.Error(
-        Error(1, "Existing export did not offer replacement confirmation")
-      );
+      throw Error(1, "Existing export did not offer replacement confirmation");
     }
-    revised_end = try String("1.25");
-    try renderer.edit(try control(session, 4, false), revised_end, 0);
-    try turn(renderer, session);
+    revised_end = String("1.25");
+    renderer.edit(control(session, 4, false), revised_end, 0);
+    turn(renderer, session);
     if (session.state.confirm_export) {
-      return Result.Error(Error(1, "Editing retained an earlier overwrite confirmation"));
+      throw Error(1, "Editing retained an earlier overwrite confirmation");
     }
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
     if (not session.state.confirm_export or session.state.job.mode != 0) {
-      return Result.Error(Error(1, "Edited settings bypassed replacement confirmation"));
+      throw Error(1, "Edited settings bypassed replacement confirmation");
     }
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
     if (session.state.job.mode != 2 or session.state.confirm_export or
       session.state.settings.overwrite) {
-      return Result.Error(
-        Error(1, "Second Export click did not start a one-time replacement")
-      );
+      throw Error(1, "Second Export click did not start a one-time replacement");
     }
-    try wait_job(renderer, session);
-    try exported.probe(output);
-    try video_fixtures.finish(exported);
+    wait_job(renderer, session);
+    exported.probe(output);
+    video_fixtures.finish(exported);
     if (exported.media.duration < 0.65 or exported.media.duration > 0.85) {
-      return Result.Error(Error(1, "Repeated export did not publish the revised trim"));
+      throw Error(1, "Repeated export did not publish the revised trim");
     }
-    var restore_end = try String("2.0");
-    try renderer.edit(try control(session, 4, false), restore_end, 0);
-    try turn(renderer, session);
-    try renderer.edit(try control(session, 5, false), empty, 5);
-    try turn(renderer, session);
-    var gif = try fixture.path("ui-output.gif");
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
-    try wait_job(renderer, session);
-    if (session.state.job.percent != 100 or not try std.io.exists(gif)) {
-      return Result.Error(Error(1, "UI GIF export failed"));
+    var restore_end = String("2.0");
+    renderer.edit(control(session, 4, false), restore_end, 0);
+    turn(renderer, session);
+    renderer.edit(control(session, 5, false), empty, 5);
+    turn(renderer, session);
+    var gif = fixture.path("ui-output.gif");
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
+    wait_job(renderer, session);
+    if (session.state.job.percent != 100 or not std.io.exists(gif)) {
+      throw Error(1, "UI GIF export failed");
     }
-    try exported.probe(gif);
-    try video_fixtures.finish(exported);
+    exported.probe(gif);
+    video_fixtures.finish(exported);
     if (not exported.media.codec.equals_literal("gif") or
       not exported.media.audio.equals_literal("none") or exported.media.duration < 1.4 or
       exported.media.duration > 1.6) {
-      return Result.Error(Error(1, "UI GIF export did not preserve the trim interval"));
+      throw Error(1, "UI GIF export did not preserve the trim interval");
     }
-    try renderer.edit(try control(session, 5, false), empty, 0);
-    try turn(renderer, session);
-    var manual = try String("1.0");
-    try renderer.edit(try control(session, 3, false), manual, 0);
-    try turn(renderer, session);
-    if (try start_us(session.state) != 1000000) {
-      return Result.Error(Error(1, "Manual trim did not update preview"));
+    renderer.edit(control(session, 5, false), empty, 0);
+    turn(renderer, session);
+    var manual = String("1.0");
+    renderer.edit(control(session, 3, false), manual, 0);
+    turn(renderer, session);
+    if (start_us(session.state) != 1000000) {
+      throw Error(1, "Manual trim did not update preview");
     }
-    output = try fixture.path("ui-cancelled.mp4");
-    try renderer.edit(try control(session, 2, false), output, 0);
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
-    renderer.click(try control(session, 12, false));
-    try turn(renderer, session);
-    try wait_job(renderer, session);
-    if (not session.state.job.cancelled or try std.io.exists(output)) {
-      return Result.Error(Error(1, "UI cancel failed"));
+    output = fixture.path("ui-cancelled.mp4");
+    renderer.edit(control(session, 2, false), output, 0);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
+    renderer.click(control(session, 12, false));
+    turn(renderer, session);
+    wait_job(renderer, session);
+    if (not session.state.job.cancelled or std.io.exists(output)) {
+      throw Error(1, "UI cancel failed");
     }
-    var recording = try fixture.path("recording-preview.mp4");
-    var encode = try std.process.Command(make_heap_allocator(), "ffmpeg");
+    var recording = fixture.path("recording-preview.mp4");
+    var encode = std.process.Command(make_heap_allocator(), "ffmpeg");
 
-    var flags = try (try String("-hide_banner -loglevel error -y -i")).split_whitespace(
+    var flags = (String("-hide_banner -loglevel error -y -i")).split_whitespace(
       make_heap_allocator()
     );
     for (var flag: ref String in flags) {
-      try encode.add_arg(flag);
+      encode.add_arg(flag);
     }
-    try encode.add_arg(fixture.input);
-    var output_flags = try (try String("-t 2 -c:v libx264 -preset ultrafast -threads 1 -c:a aac")).split_whitespace(
+    encode.add_arg(fixture.input);
+    var output_flags = (String("-t 2 -c:v libx264 -preset ultrafast -threads 1 -c:a aac")).split_whitespace(
       make_heap_allocator()
     );
     for (var flag: ref String in output_flags) {
-      try encode.add_arg(flag);
+      encode.add_arg(flag);
     }
-    try encode.add_arg(recording);
-    var encoded = try video.capture(encode);
-    var editor_input = try session.state.settings.input.clone(make_heap_allocator());
+    encode.add_arg(recording);
+    var encoded = video.capture(encode);
+    var editor_input = session.state.settings.input.clone(make_heap_allocator());
 
     session.state.page = 2;
     session.state.capture.kind = 1;
     session.state.capture.saved = recording;
-    try turn(renderer, session);
+    turn(renderer, session);
     deadline = std.time.now();
     while (session.state.capture.preview.mode != 0 and deadline.elapsed().as_secs() < 10) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
     if (not session.state.capture.preview.ready or
-      not session.state.settings.input.equals(editor_input) or
-      (try control(session, 117, false)) != 0) {
-      return Result.Error(
-        Error(1, "Recording preview did not load independently of the editor")
-      );
+      not session.state.settings.input.equals(editor_input) or (control(session, 117, false)) != 0) {
+      throw Error(1, "Recording preview did not load independently of the editor");
     }
-    if (try control(session, 124, false) == 0) {
-      return Result.Error(Error(1, "Recording preview is missing Save as"));
+    if (control(session, 124, false) == 0) {
+      throw Error(1, "Recording preview is missing Save as");
     }
-    var recorded_preview = try control(session, 123, false);
+    var recorded_preview = control(session, 123, false);
     deadline = std.time.now();
     while ((renderer.media_status(recorded_preview) == 0 or
       renderer.media_status(recorded_preview) == 3) and deadline.elapsed().as_secs() < 10) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
     if (recorded_preview == 0 or renderer.media_status(recorded_preview) != 1) {
-      return Result.Error(Error(1, "Inline WebM recording preview did not decode"));
+      throw Error(1, "Inline WebM recording preview did not decode");
     }
     renderer.toggle_media(recorded_preview);
     deadline = std.time.now();
     while (renderer.media_timestamp(recorded_preview) < 100000 and
       deadline.elapsed().as_secs() < 5) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
     if (renderer.media_timestamp(recorded_preview) < 100000) {
-      return Result.Error(Error(1, "Inline recording did not play"));
+      throw Error(1, "Inline recording did not play");
     }
     renderer.toggle_media(recorded_preview);
-    try renderer.drag_media(recorded_preview, 0.0, 0.6);
-    try turn(renderer, session);
+    renderer.drag_media(recorded_preview, 0.0, 0.6);
+    turn(renderer, session);
     if (session.state.capture.preview_position <= 0 or session.state.page != 2 or
       session.state.capture.preview_start != 0 or
       session.state.capture.preview_end !=
         _convert<i64>(session.state.capture.preview.media.duration * 1000000.0)) {
-      return Result.Error(
-        Error(1, "Inline recording did not preserve seeking on the capture screen")
-      );
+      throw Error(1, "Inline recording did not preserve seeking on the capture screen");
     }
-    if (try control(session, 125, false) == 0) {
-      return Result.Error(Error(1, "Recording preview is missing Open in Video Editor"));
+    if (control(session, 125, false) == 0) {
+      throw Error(1, "Recording preview is missing Open in Video Editor");
     }
-    var captured_path = try session.state.capture.saved.clone(make_heap_allocator());
+    var captured_path = session.state.capture.saved.clone(make_heap_allocator());
 
-    var captured_absolute = try video.absolute(captured_path);
-    renderer.click(try control(session, 125, false));
-    try turn(renderer, session);
-    try wait_job(renderer, session);
+    var captured_absolute = video.absolute(captured_path);
+    renderer.click(control(session, 125, false));
+    turn(renderer, session);
+    wait_job(renderer, session);
     if (session.state.page != 1 or not session.state.job.ready or
       not session.state.settings.input.equals(captured_path) or
       not session.state.job.loaded.equals(captured_absolute) or
       not session.state.capture.saved.equals(captured_path) or session.state.settings.overwrite or
       session.state.settings.output.equals(output)) {
-      return Result.Error(Error(1, "Recording did not open as a fresh editor input"));
+      throw Error(1, "Recording did not open as a fresh editor input");
     }
     session.state.page = 2;
-    try session.render(renderer);
-    var screenshot = try fixture.path("screenshot-preview.png");
-    var snapshot = try std.process.Command(make_heap_allocator(), "ffmpeg");
+    session.render(renderer);
+    var screenshot = fixture.path("screenshot-preview.png");
+    var snapshot = std.process.Command(make_heap_allocator(), "ffmpeg");
 
     for (var flag: ref String in flags) {
-      try snapshot.add_arg(flag);
+      snapshot.add_arg(flag);
     }
-    try snapshot.add_arg(fixture.input);
-    try snapshot.add_arg("-frames:v");
-    try snapshot.add_arg("1");
-    try snapshot.add_arg("-threads");
-    try snapshot.add_arg("1");
-    try snapshot.add_arg(screenshot);
-    var snapped = try video.capture(snapshot);
+    snapshot.add_arg(fixture.input);
+    snapshot.add_arg("-frames:v");
+    snapshot.add_arg("1");
+    snapshot.add_arg("-threads");
+    snapshot.add_arg("1");
+    snapshot.add_arg(screenshot);
+    var snapped = video.capture(snapshot);
     session.state.capture.kind = 0;
-    session.state.capture.saved = try screenshot.clone(make_heap_allocator());
-    try session.render(renderer);
-    var image_preview = try control(session, -1, false);
-    if (image_preview == 0 or (try control(session, 124, false)) == 0 or
-      renderer.image_status(image_preview) != 1 or (try control(session, 123, false)) != 0 or
-      (try control(session, 125, false)) != 0) {
-      return Result.Error(Error(1, "Screenshot preview did not replace the video player"));
+    session.state.capture.saved = screenshot.clone(make_heap_allocator());
+    session.render(renderer);
+    var image_preview = control(session, -1, false);
+    if (image_preview == 0 or (control(session, 124, false)) == 0 or
+      renderer.image_status(image_preview) != 1 or (control(session, 123, false)) != 0 or
+      (control(session, 125, false)) != 0) {
+      throw Error(1, "Screenshot preview did not replace the video player");
     }
-    session.state.capture.saved = try fixture.path("missing.png");
-    try session.render(renderer);
+    session.state.capture.saved = fixture.path("missing.png");
+    session.render(renderer);
     if (renderer.image_status(image_preview) != -1) {
-      return Result.Error(Error(1, "Missing screenshot did not show an inline failure"));
+      throw Error(1, "Missing screenshot did not show an inline failure");
     }
-    session.state.capture.saved = try screenshot.clone(make_heap_allocator());
-    try session.render(renderer);
+    session.state.capture.saved = screenshot.clone(make_heap_allocator());
+    session.render(renderer);
     if (renderer.image_status(image_preview) != 1) {
-      return Result.Error(Error(1, "Screenshot preview did not recover with a valid image"));
+      throw Error(1, "Screenshot preview did not recover with a valid image");
     }
-    session.state.capture.saved = try String("");
-    try session.render(renderer);
-    if (try control(session, -1, false) != 0 or not try std.io.exists(screenshot)) {
-      return Result.Error(Error(1, "Clearing the preview removed the saved screenshot"));
+    session.state.capture.saved = String("");
+    session.render(renderer);
+    if (control(session, -1, false) != 0 or not std.io.exists(screenshot)) {
+      throw Error(1, "Clearing the preview removed the saved screenshot");
     }
     // Exercise additional handle pairs and gap-skipping through the native timeline.
-    try open_source(session.state, fixture.input);
-    try session.render(renderer);
-    try wait_job(renderer, session);
-    renderer.click(try control(session, 16, false));
-    try turn(renderer, session);
-    preview = try control(session, 15, false);
+    open_source(session.state, fixture.input);
+    session.render(renderer);
+    wait_job(renderer, session);
+    renderer.click(control(session, 16, false));
+    turn(renderer, session);
+    preview = control(session, 15, false);
     for (var i: i64 = 0; i < 100 and renderer.media_status(preview) != 1; i += 1) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
     for (var i: i64 = 0; i < 25; i += 1) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
     }
-    try renderer.drag_media(preview, 0.375, 0.375);
-    try turn(renderer, session);
+    renderer.drag_media(preview, 0.375, 0.375);
+    turn(renderer, session);
 
-    renderer.click(try control(session, 17, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 17, false));
+    turn(renderer, session);
     if (session.state.settings.sections.size() != 2) {
-      return Result.Error(Error(1, "Scissors button did not split the kept section"));
+      throw Error(1, "Scissors button did not split the kept section");
     }
-    try renderer.drag_media(preview, 0.375, 0.625);
-    try turn(renderer, session);
-    var kept = try video.trim_length(session.state.settings, session.state.job.media);
+    renderer.drag_media(preview, 0.375, 0.625);
+    turn(renderer, session);
+    var kept = video.trim_length(session.state.settings, session.state.job.media);
     if (kept < 2.99 or kept > 3.01) {
-      return Result.Error(Error(1, "Inner trim bars did not remove the gap"));
+      throw Error(1, "Inner trim bars did not remove the gap");
     }
-    try renderer.drag_media(preview, 0.2, 0.2);
-    try turn(renderer, session);
+    renderer.drag_media(preview, 0.2, 0.2);
+    turn(renderer, session);
     renderer.toggle_media(preview);
     deadline = std.time.now();
     var skipped = false;
     while (deadline.elapsed().as_millis() < 2000) {
-      try turn(renderer, session);
+      turn(renderer, session);
       std.time.sleep(delay);
       // GTK retains the old decoder timestamp until an asynchronous seek completes.
       if (renderer.media_status(preview) == 3) {
@@ -581,7 +566,7 @@ module sun_video_editor {
       }
       var position = renderer.media_timestamp(preview);
       if (position > 1650000 and position < 2400000) {
-        return Result.Error(Error(1, "Preview played the removed gap"));
+        throw Error(1, "Preview played the removed gap");
       }
       if (position >= 2500000) {
         skipped = true;
@@ -590,34 +575,34 @@ module sun_video_editor {
     }
     renderer.toggle_media(preview);
     if (not skipped) {
-      return Result.Error(Error(1, "Preview did not continue into the next kept section"));
+      throw Error(1, "Preview did not continue into the next kept section");
     }
-    var joined_path = try fixture.path("joined-ui.mp4");
-    try renderer.edit(try control(session, 2, false), joined_path, 0);
-    try turn(renderer, session);
-    renderer.click(try control(session, 11, false));
-    try turn(renderer, session);
-    try wait_job(renderer, session);
-    try exported.probe(joined_path);
-    try video_fixtures.finish(exported);
+    var joined_path = fixture.path("joined-ui.mp4");
+    renderer.edit(control(session, 2, false), joined_path, 0);
+    turn(renderer, session);
+    renderer.click(control(session, 11, false));
+    turn(renderer, session);
+    wait_job(renderer, session);
+    exported.probe(joined_path);
+    video_fixtures.finish(exported);
     if (exported.media.duration < 2.9 or exported.media.duration > 3.1) {
-      return Result.Error(Error(1, "Export did not join the native kept sections"));
+      throw Error(1, "Export did not join the native kept sections");
     }
-    renderer.click(try control(session, 19, false));
-    try turn(renderer, session);
+    renderer.click(control(session, 19, false));
+    turn(renderer, session);
     if (session.state.settings.sections.size() != 0) {
-      return Result.Error(Error(1, "Removing a kept section left stale timeline handles"));
+      throw Error(1, "Removing a kept section left stale timeline handles");
     }
-    renderer.click(try control(session, 16, false));
-    try turn(renderer, session);
-    if (try start_us(session.state) != 0 or try end_us(session.state) != 4000000) {
-      return Result.Error(Error(1, "Reset did not restore the full clip"));
+    renderer.click(control(session, 16, false));
+    turn(renderer, session);
+    if (start_us(session.state) != 0 or end_us(session.state) != 4000000) {
+      throw Error(1, "Reset did not restore the full clip");
     }
     session.tree.shutdown(renderer);
     if (renderer.creates != renderer.removals) {
-      return Result.Error(Error(1, "Video controls survived shutdown"));
+      throw Error(1, "Video controls survived shutdown");
     }
     std.io.println("Sun Video Editor acceptance passed");
-    return Result.Ok;
+    return;
   }
 }

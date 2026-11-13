@@ -1,57 +1,73 @@
 using std;
 
 /** Runs the private capture protocol, preserving the editor's existing progress messages. */
-function run(argc: i32, argv: raw_ptr<raw_ptr<i8>>) SystemResult<void> {
+function run(argc: i32, argv: raw_ptr<raw_ptr<i8>>) void throws {
   var a = make_heap_allocator();
-  var env = try std.env.Env(a);
-  var args = try env.args(argc, argv);
+  var env = std.env.Env(a);
+  var args = env.args(argc, argv);
   if (args.size() != 5 and args.size() != 9) {
-    return SystemResult.Error(Error(1, "Invalid capture arguments"));
+    throw Error(1, "Invalid capture arguments");
   }
   if ((not args[1].equals_literal("screenshot") and not args[1].equals_literal("record")) or
     (not args[2].equals_literal("screen") and not args[2].equals_literal("window") and
       not args[2].equals_literal("area")) or
     (not args[4].equals_literal("cursor") and not args[4].equals_literal("hidden"))) {
-    return SystemResult.Error(Error(1, "Invalid capture arguments"));
+    throw Error(1, "Invalid capture arguments");
   }
-  var delay = try capture_backend.delay_seconds(args[3]);
+  var delay = capture_backend.delay_seconds(args[3]);
   desktop.install_signals();
-  var capture = try capture_backend.Capture(
+  var capture = capture_backend.Capture(
     args[1].equals_literal("record"),
     args[2].equals_literal("area"),
     args[2].equals_literal("window"),
     args[4].equals_literal("cursor"),
     delay
   );
-  capture.presenter = try presenter.options(args);
-  try capture.begin();
+  capture.presenter = presenter.options(args);
+  capture.begin();
   while (not capture.completed and not capture.cancelled) {
     var signal = desktop.signal_request();
     if (signal == 2) {
-      try capture.cancel();
+      capture.cancel();
     } else if (signal == 1) {
-      try capture.stop();
+      capture.stop();
     }
-    try capture.tick();
+    capture.tick();
     std.time.sleep(std.time.create_duration_millis(5));
   }
-  return SystemResult.Ok;
+  return;
 }
 
 /** Reports failures through the helper protocol and returns a nonzero status. */
-function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) AllocationResult<i32> {
-  return AllocationResult.Ok(
-    match run(argc, argv) {
-      SystemResult.Ok => 0,
-      (error: const ref IError) => {
-        std.io.println(
-          try `Capture failed: ${try error.message()}`
-        );
-        std.io.eprintln(try error.message());
-        return AllocationResult.Ok(1);
-      }
-    }
-  );
+function main(argc: i32, argv: raw_ptr<raw_ptr<i8>>) i32 throws {
+  try {
+    run(argc, argv);
+    return 0;
+  } catch (error: std.Error) {
+    std.io.println(
+      `Capture failed: ${error.message()}`
+    );
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.AllocationError) {
+    std.io.println(
+      `Capture failed: ${error.message()}`
+    );
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.InvalidArgumentError) {
+    std.io.println(
+      `Capture failed: ${error.message()}`
+    );
+    std.io.eprintln(error.message());
+    return 1;
+  } catch (error: std.OverflowError) {
+    std.io.println(
+      `Capture failed: ${error.message()}`
+    );
+    std.io.eprintln(error.message());
+    return 1;
+  }
 }
 manifest {
   libraries: [
