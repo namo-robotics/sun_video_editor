@@ -384,6 +384,10 @@ The entrypoint's `resources` in `sun-config.json` also declare them for installa
 and packaging. This keeps direct launches working with compiler versions that
 do not copy declared resources into the build directory.
 
+On macOS the editor build script also selects Homebrew's media-enabled `sun-gtk4`
+when linking, including builds launched through a workspace config. This matches
+the standalone build wrappers and avoids selecting the standard Homebrew GTK by accident.
+
 On Linux, `./build.sh --test` additionally runs synthetic PNG/MP4 encoder,
 countdown, exact cropped dimensions, pixel fidelity, cancellation, and output-cleanup
 tests written in Sun. sun_gobject separately tests mock portal responses and live
