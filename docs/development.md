@@ -89,7 +89,7 @@ The XML compiler is provided by sun_ui; the editor does not maintain a copy.
 
 ## Packages and release
 
-The initial release is version `0.1.0`, maintained by David Brown
+The initial release is version `0.1.0`, maintained by Namo Robotics
 <davidwbrwn@gmail.com>. The executable is `sun_video_editor`; Debian and Snap use
 `sun-video-editor` because package identifiers cannot contain underscores.
 
