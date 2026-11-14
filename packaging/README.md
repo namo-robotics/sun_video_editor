@@ -2,7 +2,7 @@
 
 `sun-video-editor.png` is the application artwork for the desktop launcher,
 Snap package, and macOS app. The transparent square PNG depicts a golden pixel sun
-with a play symbol inside a golden arcade frame, with amber scanlines and status
+with a play symbol inside a golden arcade frame, with amber circuit traces and status
 lights on a dark brown-black screen. Its style is inspired by the
 [C++ Test Explorer icon](https://github.com/namo-robotics/test_explorer_cpp/blob/main/assets/icon.svg).
 
