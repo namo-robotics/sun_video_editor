@@ -1,3 +1,5 @@
+<img src="packaging/sun-video-editor.png" alt="Sun Video Editor icon" width="128" height="128">
+
 # sun_video_editor
 
 ![Sun Video Editor showing video preview, trim controls, and export settings](assets/sun_video_editor.png)
