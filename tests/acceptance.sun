@@ -279,6 +279,7 @@ module sun_video_editor {
     } else {
       std.io.println("Resize assertions skipped: fixed CI display cannot fit the large window");
     }
+    std.io.eprintln("Checking frame stepping and exports");
     frame_stepping(renderer, session, preview);
     renderer.drag_media(preview, 0.0, 0.125);
     turn(renderer, session);
@@ -404,6 +405,7 @@ module sun_video_editor {
     if (not session.state.job.cancelled or std.io.exists(output)) {
       throw Error(1, "UI cancel failed");
     }
+    std.io.eprintln("Checking recording preview");
     var recording = fixture.path("recording-preview.mp4");
     var encode = std.process.Command(make_heap_allocator(), "ffmpeg");
 
@@ -472,6 +474,7 @@ module sun_video_editor {
     if (control(session, 125, false) == 0) {
       throw Error(1, "Recording preview is missing Open in Video Editor");
     }
+    std.io.eprintln("Opening recording in editor");
     var captured_path = session.state.capture.saved.clone(make_heap_allocator());
 
     var captured_absolute = video.absolute(captured_path);
@@ -487,6 +490,7 @@ module sun_video_editor {
     }
     session.state.page = 2;
     session.render(renderer);
+    std.io.eprintln("Checking screenshot preview");
     var screenshot = fixture.path("screenshot-preview.png");
     var snapshot = std.process.Command(make_heap_allocator(), "ffmpeg");
 
@@ -524,6 +528,7 @@ module sun_video_editor {
     if (control(session, -1, false) != 0 or not std.io.exists(screenshot)) {
       throw Error(1, "Clearing the preview removed the saved screenshot");
     }
+    std.io.eprintln("Checking kept-section playback");
     // Exercise additional handle pairs and gap-skipping through the native timeline.
     open_source(session.state, fixture.input);
     session.render(renderer);

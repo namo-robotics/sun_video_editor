@@ -60,8 +60,8 @@ For incremental work:
 ./build.sh --test
 ```
 
-On Linux, the GTK acceptance test runs under Xvfb with a private D-Bus session
-and portal access disabled. This keeps the headless test independent of desktop
+On Linux, the GTK acceptance test explicitly uses Xvfb’s X11 display with a private
+D-Bus session and portal access disabled, even when launched from Wayland. This keeps the headless test independent of desktop
 portal services and their document mounts, while GTK warnings remain fatal.
 
 For local toolkit development, include the editor and dependency checkouts as

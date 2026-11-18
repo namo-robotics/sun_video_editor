@@ -121,7 +121,7 @@ module editor_build {
       run(capture_tests);
       // The virtual desktop has no portal services; keep GTK warnings fatal without activating host portals.
       acceptance.add_arg(
-        "export G_DEBUG=fatal-warnings GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test"
+        "export G_DEBUG=fatal-warnings GDK_BACKEND=x11 GDK_DEBUG=no-portals GTK_A11Y=none GSK_RENDERER=cairo; timeout 40s dbus-run-session -- xvfb-run -a -s \"-screen 0 1600x1600x24\" \"$1\" --self-test"
       );
     }
     acceptance.add_arg("editor-acceptance");
