@@ -4,7 +4,7 @@ public module sun_video_editor_results {
   /** Copies a byte range or throws on invalid bounds or allocation failure. */
   public function substring(
     text: const ref std.String,
-    allocator: const ref std.HeapAllocator,
+    allocator: const ref std.mem.HeapAllocator,
     start: i64,
     count: i64
   ) std.String throws {

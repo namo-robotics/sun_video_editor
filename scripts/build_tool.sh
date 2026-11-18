@@ -1,4 +1,4 @@
 #!/bin/sh
-# Link build tooling against the host libraries without requiring a static toolchain.
+# Use Sun defaults: static musl on Linux and native system linking on macOS.
 set -eu
-"$SUN_EXECUTABLE" build-compile --dynamic
+"$SUN_EXECUTABLE" build-compile

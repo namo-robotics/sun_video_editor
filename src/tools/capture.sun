@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Runs the private capture protocol, preserving the editor's existing progress messages. */
 function run(argc: i32, argv: raw_ptr<raw_ptr<i8>>) void throws {

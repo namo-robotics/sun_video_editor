@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Exercises real synthetic-frame encoding and the Sun capture lifecycle without desktop access. */
 module capture_tests {

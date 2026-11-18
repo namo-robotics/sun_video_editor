@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Checks byte-range copies independently of GTK and media tools. */
 module result_checks {

@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Builds distribution payloads from the configured, already-tested video executable. */
 module editor_package {

@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Generates disposable media locally so tests require no downloaded or personal videos. */
 module video_fixtures {

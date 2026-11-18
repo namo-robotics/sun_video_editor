@@ -1,4 +1,5 @@
 using std;
+using std.mem;
 
 /** Builds the editor against independently managed UI and GTK dependency bundles. */
 module editor_build {
